@@ -2,7 +2,10 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import json
-import re
+import sys      # (这两行是为了让子页面能找到根目录的 auth.py，必须要加)
+import os
+sys.path.append(os.path.abspath('.'))
+import auth     # <--- 引入
 
 # --- 1. 页面基础配置 ---
 st.set_page_config(
@@ -11,7 +14,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
+if not auth.check_password():
+    st.stop()
+    
 # 自定义 CSS：优化间距，让界面更紧凑，代码块字体更清晰
 st.markdown("""
 <style>
