@@ -1,11 +1,14 @@
 import streamlit as st
+import auth
 
 st.set_page_config(
     page_title="亚马逊全能智造台 Hub",
     page_icon="🏠",
     layout="wide"
 )
-
+if not auth.check_password():
+    st.stop()  # 如果密码不对，直接停止运行下面的代码
+    
 st.title("🏠 亚马逊全能智造工作台 (Hub)")
 
 st.markdown("""
@@ -34,4 +37,5 @@ st.markdown("""
 """)
 
 # 显示一张炫酷的背景图或Logo
+
 st.image("https://images.unsplash.com/photo-1523474253046-8cd2748b5fd2?q=80&w=2070&auto=format&fit=crop", caption="Amazon AI Operation Center")
