@@ -59,7 +59,6 @@ except Exception as e:
     st.error(f"API配置出错: {e}")
 
 # --- 初始化 Session State ---
-# 用于存储生成的内容，实现局部重写不丢失其他内容
 if "listing_data" not in st.session_state:
     st.session_state["listing_data"] = {
         "title": "",
@@ -93,7 +92,8 @@ with st.sidebar:
 1. 移动端优先 (Mobile First)：前 60 个字符非常关键！必须包含最核心的卖点，确保用户在手机端第一眼能看到价值。
 2. 长度：建议控制在 80-150 字符。
 3. 格式：
-   - 结构：品牌 + 核心大词 + 核心卖点/属性/颜色/尺寸 + 适用场景/型号。
+   - 结构：品牌 + [数量/包装] + 核心材质/工艺 + 核心大词 + 适用场景/节日/对象。
+   - **关键词限制**：严禁堆砌！最多只允许使用 2-3 个核心关键词。多余的词请放在 Search Terms 中。
    - 单词首字母大写 (Title Case)，介词/连词小写。
    - 使用阿拉伯数字 (2) 而非单词 (Two)。
 4. 禁止：
@@ -119,7 +119,7 @@ with st.sidebar:
     with st.expander("📜 Listing 核心撰写规范", expanded=True):
         amazon_rules = st.text_area("在此输入平台规范：", value=default_amazon_rules, height=400)
 
-    # Search Terms 规则 - 已更新为更务实的逻辑
+    # Search Terms 规则
     default_st_rules = """1. 核心策略：
    - 优先包含高流量的核心词（即使标题里有，如果非常重要也可以重复，确保收录）。
    - 重点补充同义词、近义词、西班牙语/法语变体、特定场景词。
@@ -152,24 +152,15 @@ def parse_gemini_response(text):
     return None
 
 def render_highlighted_text(text):
-    """
-    将 <<keyword>> 转换为 HTML 高亮显示
-    """
     if not text: return ""
     highlighted = re.sub(r"<<(.*?)>>", r"<span class='kw-highlight'>\1</span>", text)
     return highlighted
 
 def clean_text_for_copy(text):
-    """
-    移除 << >> 符号，返回纯净文本供复制
-    """
     if not text: return ""
     return text.replace("<<", "").replace(">>", "")
 
 def rewrite_section(section_key, prompt_instruction, context_data):
-    """
-    调用 AI 重写特定部分
-    """
     try:
         model = genai.GenerativeModel('gemini-3-pro-preview')
         prompt = f"""
@@ -226,7 +217,7 @@ with col2:
     generate_btn = st.button("✨ 立即生成 Listing (全部)", type="primary", use_container_width=True)
     st.caption("💡 提示：生成后，点击每项下方的 **🔄 AI 重写** 按钮可单独修改该部分。")
 
-    # --- 上下文数据包 (用于生成和重写) ---
+    # --- 上下文数据包 ---
     context_data = {
         "product_name": product_name,
         "top_keywords": top_keywords,
@@ -243,7 +234,7 @@ with col2:
         if not uploaded_file or not product_name:
             st.warning("请上传图片并填写名称")
         else:
-            with st.spinner("🧠 Gemini 正在撰写 (移动端优化 & 尺寸独立逻辑)..."):
+            with st.spinner("🧠 Gemini 正在撰写 (已应用：全尺寸描述 & 参考标题风格)..."):
                 try:
                     model = genai.GenerativeModel('gemini-3-pro-preview')
                     
@@ -266,15 +257,17 @@ with col2:
                     ST规则:{st_rules}
                     违禁词:{forbidden_words}
                     
-                    【重要指令：标题生成逻辑 (Mobile First)】
-                    1. **前60字符法则**：标题的前60个字符极其关键（手机端展示）。必须包含最核心的卖点和关键词。
-                    2. **结构**：品牌 + 核心大词 + 核心卖点/属性/颜色/尺寸 + 适用场景/型号。
-                    3. **拒绝堆砌**：标题必须通顺。
+                    【重要指令：标题生成逻辑 (Refined Structure)】
+                    1. **参考风格 (Reference Style)**：请模仿这种高信息密度的描述性风格：
+                       "2 Pack 3D Embroidered Heart Throw Pillow Covers Plush Faux Fur Valentines Day Pillow Covers for Decorations Gifts"
+                    2. **结构要求**：Brand + [Quantity/Pack Count] + Material/Technique/Feature + Core Keywords + Usage/Occasion/Target Audience.
+                    3. **前60字符**：必须展示最核心的卖点（如 Pack Size, Material）。
+                    4. **关键词数量限制**：标题中最多只能包含 2-3 个最核心的关键词，严禁堆砌更多。多余的流量词请安排在 Search Terms 中。
                     
-                    【重要指令：五点描述 (Concise & Clear)】
-                    1. **拒绝废话 (No Fluff)**：直接切入痛点和解决方案。不要写毫无意义的修饰语。
-                    2. **尺寸独立 (Dimension Logic)**：如果用户输入了产品尺寸/重量/容量信息，**必须**单独分配一条五点描述（例如名为 "Perfect Size" 或 "Specification"），不要和包装或其他内容混在一起。
-                    3. **客观性铁律**：严禁出现主观形容词（Premium, Amazing）。
+                    【重要指令：五点描述 (Concise & Complete)】
+                    1. **拒绝废话**：直接切入痛点。
+                    2. **尺寸全覆盖 (Dimension Accuracy)**：【重要】如果用户输入了多个尺寸/变体（例如 12x12, 18x18），**必须**在关于尺寸的五点描述中**全部列出**（例如：Available in 12x12 and 18x18 sizes），严禁只提取其中一个而忽略其他。
+                    3. **客观性**：严禁 Premium/Amazing。
                     4. **格式**：`[Title Case Feature]: [Description]`
                     
                     【重要指令：Search Terms (ST)】
@@ -314,24 +307,19 @@ with col2:
                     st.error(f"错误: {e}")
 
     # === 展示与重写逻辑 ===
-    # 从 Session State 读取数据，确保重写不丢失
     data = st.session_state["listing_data"]
     
-    if data["title"]: # 只有当有数据时才显示
-        
+    if data["title"]:
         # --- 标题 ---
         st.markdown("#### 📝 Title (标题)")
-        # 预览
         st.markdown(render_highlighted_text(data["title"]), unsafe_allow_html=True)
-        # 文本框 (绑定 session_state)
         new_title = st.text_area("Title", value=clean_text_for_copy(data["title"]), height=80, label_visibility="collapsed", key="txt_title")
-        # 重写按钮
         if st.button("🔄 重写标题 (更吸引眼球)", key="btn_rewrite_title"):
             with st.spinner("正在重写标题..."):
-                rewritten = rewrite_section("Title", "优化前60字符的吸引力，确保包含核心大词，结构：品牌+核心词+属性+场景", context_data)
+                rewritten = rewrite_section("Title", "参考风格：2 Pack 3D Embroidered... 结构：Brand+Qty+Material+Keyword+Occasion (注意：仅限2-3个核心词)", context_data)
                 if rewritten:
                     st.session_state["listing_data"]["title"] = rewritten
-                    st.rerun() # 刷新页面显示新内容
+                    st.rerun()
 
         # --- 五点 ---
         st.markdown("#### 📌 Bullet Points (五点描述)")
@@ -348,7 +336,7 @@ with col2:
                 
                 if st.button(f"🔄 重写 BP{i}", key=f"btn_rewrite_{key}"):
                     with st.spinner(f"正在重写 BP{i}..."):
-                        instruction = "更加简洁(Concise)，去除废话，专注于买家利益点。如果是尺寸点，确保数据准确。"
+                        instruction = "更加简洁，去除废话。如果是尺寸点，必须列出所有可用尺寸。"
                         rewritten = rewrite_section(f"Bullet Point {i}", instruction, context_data)
                         if rewritten:
                             st.session_state["listing_data"][key] = rewritten
@@ -357,9 +345,9 @@ with col2:
         # --- ST ---
         st.markdown("#### 🔍 Search Terms")
         st.text_area("Search Terms", value=clean_text_for_copy(data.get("search_terms", "")), height=100, key="txt_st")
-        if st.button("🔄 重写 ST (挖掘更多词)", key="btn_rewrite_st"):
+        if st.button("🔄 重写 ST", key="btn_rewrite_st"):
             with st.spinner("正在挖掘更多长尾词..."):
-                rewritten = rewrite_section("Search Terms", "挖掘更多同义词、场景词、变体，不要标点符号，空格分隔", context_data)
+                rewritten = rewrite_section("Search Terms", "挖掘更多同义词、场景词，不要标点符号", context_data)
                 if rewritten:
                     st.session_state["listing_data"]["search_terms"] = rewritten
                     st.rerun()
@@ -367,9 +355,9 @@ with col2:
         # --- 描述 ---
         st.markdown("#### 📖 Description (HTML Source)")
         st.text_area("Description Code", value=clean_text_for_copy(data.get("description", "")), height=200, key="txt_desc")
-        if st.button("🔄 重写描述 (HTML)", key="btn_rewrite_desc"):
+        if st.button("🔄 重写描述", key="btn_rewrite_desc"):
             with st.spinner("正在重写描述..."):
-                rewritten = rewrite_section("Product Description", "保持 HTML 格式，增加更多参数细节，语言更地道", context_data)
+                rewritten = rewrite_section("Product Description", "保持 HTML 格式，增加参数细节", context_data)
                 if rewritten:
                     st.session_state["listing_data"]["description"] = rewritten
                     st.rerun()
