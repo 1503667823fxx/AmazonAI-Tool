@@ -136,7 +136,7 @@ with st.sidebar:
     with st.expander("🛑 违禁词库", expanded=False):
         forbidden_words = st.text_area(
             "严禁使用的词 (逗号分隔)", 
-            value="Best Seller, No.1, Top rated, Free shipping, Guarantee, Warranty, Satisfaction, FDA approved, Anti-bacterial, Eco-friendly, Lowest Price, Discount, Sale, Cheap, Bonus, Gift, Prime, 100% Quality, High quality, Premium, Ultra, Super, Amazing, Unique, Perfect",
+            value="Best Seller, No.1, Top rated, Free shipping, Guarantee, Warranty, Satisfaction, FDA approved, Anti-bacterial, Eco-friendly, Lowest Price, Discount, Sale, Cheap, Bonus, Gift, Prime, 100% Quality, High quality, Premium, Ultra, Super, Amazing, Unique, Perfect, durable, safe",
             height=150,
             help="包含主观形容词、促销词、医疗宣称、价格诱导词等，确保账户安全。"
         )
