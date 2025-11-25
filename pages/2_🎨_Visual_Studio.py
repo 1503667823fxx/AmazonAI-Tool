@@ -53,8 +53,7 @@ def download_image(url, filename):
     st.markdown(f"### [📥 点击下载 {filename}]({url})")
 
 def get_vision_model():
-    """获取视觉模型，修复为 2.5-flash"""
-    # 【修复点】你的账号只能用 2.5-flash，不能用 1.5
+    """获取视觉模型，使用 2.5-flash (对应你的账号权限)"""
     return genai.GenerativeModel('gemini-2.5-flash')
 
 # --- 5. 顶部导航 ---
@@ -95,10 +94,14 @@ with tabs[0]:
             else:
                 with st.spinner("Gemini 2.5 Flash 正在构思..."):
                     try:
-                        model = get_vision_model() # 使用 2.5 Flash
+                        model = get_vision_model()
                         p = f"你是一个商业插画师。将此描述转换为FLUX模型的英文Prompt，强调光影和质感，直接输出英文，不要解释：{prompt_text}"
                         resp = model.generate_content(p)
+                        
+                        # 【修复点】强制更新文本框的 Key
                         st.session_state["t2i_final_prompt"] = resp.text
+                        st.session_state["t2i_final"] = resp.text  # 强制覆盖 Widget Key
+                        
                         st.success("润色完成！")
                         time.sleep(0.1)
                         st.rerun()
@@ -182,12 +185,16 @@ with tabs[1]:
                     """
                     
                     response = model.generate_content([synthesis_prompt, img_small])
+                    generated_text = response.text
                     
                     status_text.text("✅ 3/3: 完成！正在刷新界面...")
                     progress_bar.progress(100)
                     
-                    # 3. 更新并刷新
-                    st.session_state["i2i_final_prompt"] = response.text
+                    # 3. 更新并刷新 - 【关键修复点】
+                    # 不仅更新 session 变量，还强制更新 widget key
+                    st.session_state["i2i_final_prompt"] = generated_text
+                    st.session_state["i2i_final_text"] = generated_text 
+                    
                     time.sleep(0.2) 
                     st.rerun()
                     
