@@ -83,7 +83,9 @@ with st.sidebar:
    - **卖点短语 (冒号前)**：单词首字母大写，介词/连词小写 (例如: Long Battery Life for Travel)。不要全大写。
    - **具体描述 (冒号后)**：自然段落句式。
    - 结尾不加标点。
-2. 内容：真实、准确、可量化。
+2. 内容：
+   - **严禁主观词**：禁止使用 Premium, Best, Amazing, Top-quality 等自嗨词。必须用数据和事实说话。
+   - 真实、准确、可量化。
 
 【产品描述规则 (Description)】
 1. 格式：HTML 代码 (<b>, <br>, <p>)。
@@ -106,8 +108,14 @@ with st.sidebar:
     with st.expander("🔍 Search Terms (ST) 规则", expanded=False):
         st_rules = st.text_area("后台关键词规则：", value=default_st_rules, height=250)
 
-    with st.expander("🛑 违禁词库", expanded=False):
-        forbidden_words = st.text_area("严禁使用的词", value="Best Seller, No.1, Top rated, Free shipping, Guarantee, Hot item, Amazing, 100% Quality", height=100)
+    # 【修改点3】违禁词库大幅扩充
+    with st.expander("🛑 违禁词库 (已扩充)", expanded=False):
+        forbidden_words = st.text_area(
+            "严禁使用的词 (逗号分隔)", 
+            value="Best Seller, No.1, Top rated, Free shipping, Guarantee, Warranty, Satisfaction, FDA approved, Anti-bacterial, Eco-friendly, Lowest Price, Discount, Sale, Cheap, Bonus, Gift, Prime, 100% Quality, High quality, Premium, Ultra, Super, Amazing, Unique, Perfect",
+            height=150,
+            help="包含主观形容词、促销词、医疗宣称、价格诱导词等，确保账户安全。"
+        )
 
 # --- 4. 辅助函数 ---
 def parse_gemini_response(text):
@@ -164,11 +172,16 @@ with col1:
 
 with col2:
     st.subheader("2. 生成结果")
-    if st.button("✨ 立即生成 Listing", type="primary", use_container_width=True):
+    
+    # 【修改点4】添加停止生成提示
+    generate_btn = st.button("✨ 立即生成 Listing", type="primary", use_container_width=True)
+    st.caption("💡 提示：如需中途停止生成，请点击网页顶部右侧的 **Stop** 或 **X** 按钮。")
+
+    if generate_btn:
         if not uploaded_file or not product_name:
             st.warning("请上传图片并填写名称")
         else:
-            with st.spinner("🧠 Gemini 正在撰写 (已优化标题可读性 & 五点格式)..."):
+            with st.spinner("🧠 Gemini 正在撰写 (正在检查客观性 & 尺寸规则)..."):
                 try:
                     model = genai.GenerativeModel('gemini-3-pro-preview')
                     
@@ -196,10 +209,11 @@ with col2:
                     2. **内容融合**：必须将【核心关键词】与用户的【核心卖点/参数】有机结合。
                     3. **结构**：Brand + Core Keywords + Key Features (e.g. 40H Playtime, IPX7) + Model/Size.
                     
-                    【重要指令：五点描述格式 (Bullet Points)】
-                    1. **格式**：`[Title Case Feature]: [Description]`
-                    2. **首字母规则**：冒号前的“卖点短语”，单词首字母大写 (Title Case)，但介词 (in, on, with, for) 和连词 (and, or) 必须小写。例如：`High Quality Material for Sleep:`
-                    3. **禁止**：不要全大写 (DO NOT USE ALL CAPS)。
+                    【重要指令：五点描述 (Bullet Points) 核心逻辑】
+                    1. **客观性铁律 (Objectivity)**：标题和内容中【严禁】出现主观形容词（如 Premium, Amazing, Best, Top-quality, Unique）。必须使用客观参数、功能描述和用户利益点。
+                    2. **尺寸/规格策略 (Dimension/Size)**：检查用户的【输入信息】。如果包含任何尺寸、重量、容量、适配型号等信息，**必须**专门分配一条五点描述来详细说明（例如标题为 "Compact Size & Fit" 或 "Specifications"）。
+                    3. **格式**：`[Title Case Feature]: [Description]`
+                    4. **首字母规则**：冒号前的“卖点短语”，单词首字母大写 (Title Case)，但介词 (in, on, with, for) 和连词 (and, or) 必须小写。不要全大写。
                     
                     【重要指令：Search Terms (ST)】
                     1. **策略**：优先覆盖高流量词。如果核心词（如产品原本名称）非常重要，**允许**在 ST 中再次包含，以确保索引安全。
@@ -230,7 +244,7 @@ with col2:
                     result = parse_gemini_response(clean_text_resp)
                     
                     if result:
-                        st.success("✅ 生成成功！标题已优化可读性，五点格式已修正。")
+                        st.success("✅ 生成成功！已执行主观词过滤与尺寸适配。")
                         
                         # --- 标题区域 ---
                         st.markdown("#### 📝 Title (标题)")
