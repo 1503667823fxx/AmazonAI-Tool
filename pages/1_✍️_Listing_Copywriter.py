@@ -86,14 +86,14 @@ with st.sidebar:
     st.divider()
     
     # =========================================================
-    # 🔴 【亚马逊 2025 新规库 (已更新)】 🔴
+    # 🔴 【亚马逊 2025 新规库】 🔴
     # =========================================================
     default_amazon_rules = """【标题规则 (Title)】
 1. 移动端优先 (Mobile First)：前 60 个字符非常关键！必须包含最核心的卖点，确保用户在手机端第一眼能看到价值。
 2. 长度：建议控制在 80-150 字符。
 3. 格式：
    - 结构：品牌 + [数量/包装] + 核心材质/工艺 + 核心大词 + 适用场景/节日/对象。
-   - **关键词限制**：严禁堆砌！最多只允许使用 2-3 个核心关键词。多余的词请放在 Search Terms 中。
+   - **关键词限制**：【严禁堆砌】最多只允许使用 2-3 个核心关键词。多余的流量词请安排在 Search Terms 中。
    - 单词首字母大写 (Title Case)，介词/连词小写。
    - 使用阿拉伯数字 (2) 而非单词 (Two)。
 4. 禁止：
@@ -102,12 +102,13 @@ with st.sidebar:
 
 【五点描述规则 (Bullet Points)】
 1. 核心原则：简洁清晰 (Concise & Clear)。不要说废话，直接切入痛点和解决方案。
-2. 格式：
+2. **去重策略 (No Repetition)**：五点内容必须相互独立（MECE原则）。例如：第1点讲材质，第2点讲功能，第3点讲场景。**严禁**在不同的点中重复描述同一个意思。
+3. 格式：
    - 采用 [Title Case Feature]: [Description] 结构。
    - **卖点短语 (冒号前)**：单词首字母大写，介词/连词小写 (例如: Long Battery Life for Travel)。不要全大写。
    - **具体描述 (冒号后)**：自然段落句式。
-   - 结尾不加标点。
-3. 内容：
+   - **标点禁令**：结尾【绝对不要】加句号、叹号等任何标点符号。
+4. 内容：
    - **严禁主观词**：禁止使用 Premium, Best, Amazing, Top-quality 等自嗨词。必须用数据和事实说话。
    - 真实、准确、可量化。
 
@@ -132,10 +133,10 @@ with st.sidebar:
     with st.expander("🔍 Search Terms (ST) 规则", expanded=False):
         st_rules = st.text_area("后台关键词规则：", value=default_st_rules, height=250)
 
-    with st.expander("🛑 违禁词库 (已扩充)", expanded=False):
+    with st.expander("🛑 违禁词库", expanded=False):
         forbidden_words = st.text_area(
             "严禁使用的词 (逗号分隔)", 
-            value="Best Seller, No.1, Top rated, Free shipping, Guarantee, Warranty, Satisfaction, FDA approved, Anti-bacterial, Eco-friendly, Lowest Price, Discount, Sale, Cheap, Bonus, Gift, Prime, 100% Quality, High quality, Premium, Ultra, Super, Amazing, Unique, Perfect，durable, safe",
+            value="Best Seller, No.1, Top rated, Free shipping, Guarantee, Warranty, Satisfaction, FDA approved, Anti-bacterial, Eco-friendly, Lowest Price, Discount, Sale, Cheap, Bonus, Gift, Prime, 100% Quality, High quality, Premium, Ultra, Super, Amazing, Unique, Perfect",
             height=150,
             help="包含主观形容词、促销词、医疗宣称、价格诱导词等，确保账户安全。"
         )
@@ -158,15 +159,30 @@ def render_highlighted_text(text):
 
 def clean_text_for_copy(text):
     if not text: return ""
-    return text.replace("<<", "").replace(">>", "")
+    # 移除高亮符号
+    text = text.replace("<<", "").replace(">>", "")
+    # 【新增】强制移除末尾标点（针对五点描述的最后清洗）
+    # 如果文本看起来像是一句话，且以句号结尾，去掉它。
+    # 但为了防止误伤（比如 Description 是需要句号的），这个函数通常用于显示。
+    # 我们只在 Bullet Point 的逻辑里做特殊处理。
+    return text
 
-def rewrite_section(section_key, prompt_instruction, context_data):
+def rewrite_section(section_key, prompt_instruction, context_data, rules_context):
+    """
+    AI 重写函数 - 升级版：注入规则库
+    """
     try:
         model = genai.GenerativeModel('gemini-3-pro-preview')
         prompt = f"""
         你是一个亚马逊Listing优化专家。请仅重写 Listing 中的以下部分：【{section_key}】。
         
-        【修改要求】
+        【必须严格遵守的底层规则】
+        {rules_context['amazon_rules']}
+        
+        【严禁使用的违禁词】
+        {rules_context['forbidden_words']}
+        
+        【本次重写的具体要求】
         {prompt_instruction}
         
         【产品背景信息】
@@ -174,10 +190,11 @@ def rewrite_section(section_key, prompt_instruction, context_data):
         关键词:{context_data['top_keywords']}
         卖点:{context_data['core_selling_point']}
         
-        【重要规则】
+        【重要输出规则】
         1. 直接输出重写后的内容，不要加任何解释，不要 Markdown 代码块。
         2. 保持关键词高亮标记：使用 <<keyword>> 包裹核心词。
-        3. 遵守之前的所有格式规则（如 Title Case, 冒号格式等）。
+        3. 遵守所有格式规则（如 Title Case, 冒号格式）。
+        4. **标点注意**：如果是 Bullet Point，结尾绝对不要加标点。
         """
         response = model.generate_content(prompt)
         return response.text.strip()
@@ -193,7 +210,7 @@ col1, col2 = st.columns([4, 6])
 
 with col1:
     st.subheader("1. 产品档案")
-    uploaded_file = st.file_uploader("上传产品主图", type=["jpg", "png", "jpeg", "webp"])
+    uploaded_file = st.file_uploader("上传产品主图 (仅供预览，不参与生成)", type=["jpg", "png", "jpeg", "webp"])
     if uploaded_file:
         st.image(uploaded_file, width=150)
         
@@ -228,17 +245,25 @@ with col2:
         "language": language,
         "tone": "亚马逊通用高转化风格"
     }
+    
+    # --- 规则数据包 (传递给重写函数) ---
+    rules_context = {
+        "amazon_rules": amazon_rules,
+        "st_rules": st_rules,
+        "forbidden_words": forbidden_words
+    }
 
     # === 生成逻辑 ===
     if generate_btn:
-        if not uploaded_file or not product_name:
-            st.warning("请上传图片并填写名称")
+        if not product_name:
+            st.warning("请填写产品名称！")
         else:
-            with st.spinner("🧠 Gemini 正在撰写 (已应用：全尺寸描述 & 参考标题风格)..."):
+            with st.spinner("🧠 Gemini 正在撰写 (如果想停止输出请点击界面右上角stop)..."):
                 try:
                     model = genai.GenerativeModel('gemini-3-pro-preview')
                     
                     # === Prompt 升级 ===
+                    # 【修改点1】不再传入 image_obj，只基于文本生成，避免视觉幻觉
                     prompt = f"""
                     你是一个亚马逊Listing顶级专家。请严格基于以下信息和规则生成JSON格式Listing。
                     
@@ -257,21 +282,21 @@ with col2:
                     ST规则:{st_rules}
                     违禁词:{forbidden_words}
                     
-                    【重要指令：标题生成逻辑 (Refined Structure)】
-                    1. **参考风格 (Reference Style)**：请模仿这种高信息密度的描述性风格：
-                       "2 Pack 3D Embroidered Heart Throw Pillow Covers Plush Faux Fur Valentines Day Pillow Covers for Decorations Gifts"
-                    2. **结构要求**：Brand + [Quantity/Pack Count] + Material/Technique/Feature + Core Keywords + Usage/Occasion/Target Audience.
-                    3. **前60字符**：必须展示最核心的卖点（如 Pack Size, Material）。
-                    4. **关键词数量限制**：标题中最多只能包含 2-3 个最核心的关键词，严禁堆砌更多。多余的流量词请安排在 Search Terms 中。
+                    【重要指令：标题生成逻辑】
+                    1. **参考风格**：模仿高信息密度风格："2 Pack 3D Embroidered Heart Throw Pillow Covers..."
+                    2. **结构**：Brand + [Quantity/Pack Count] + Material/Technique/Feature + Core Keywords + Usage/Occasion.
+                    3. **前60字符**：必须展示最核心的卖点。
+                    4. **关键词数量限制**：【严禁堆砌】标题中最多包含 2-3 个最核心的大词。
                     
-                    【重要指令：五点描述 (Concise & Complete)】
-                    1. **拒绝废话**：直接切入痛点。
-                    2. **尺寸全覆盖 (Dimension Accuracy)**：【重要】如果用户输入了多个尺寸/变体（例如 12x12, 18x18），**必须**在关于尺寸的五点描述中**全部列出**（例如：Available in 12x12 and 18x18 sizes），严禁只提取其中一个而忽略其他。
-                    3. **客观性**：严禁 Premium/Amazing。
-                    4. **格式**：`[Title Case Feature]: [Description]`
+                    【重要指令：五点描述 (No Fluff & MECE)】
+                    1. **去重原则 (MECE)**：确保这5点分别侧重于产品的不同维度（例如：尺寸、材质、功能、场景、售后）。严禁两点说同一件事。
+                    2. **拒绝废话**：直接切入痛点。
+                    3. **尺寸全覆盖**：如果用户输入了多个尺寸/变体，必须在关于尺寸的那一点中全部列出。
+                    4. **标点禁令**：内容结尾【绝对不要】加句号。
+                    5. **格式**：`[Title Case Feature]: [Description]`
                     
                     【重要指令：Search Terms (ST)】
-                    1. **策略**：优先覆盖高流量词。允许重复核心大词。
+                    1. **策略**：优先覆盖高流量词。
                     
                     【重要指令：关键词标记】
                     请将所有埋入的【核心关键词】用双尖括号 << >> 包裹起来。
@@ -281,18 +306,18 @@ with col2:
                     仅输出 JSON：
                     {{ 
                         "title": "...", 
-                        "bullet_point_1": "Feature: Description...", 
-                        "bullet_point_2": "Feature: Description...", 
-                        "bullet_point_3": "Feature: Description...", 
-                        "bullet_point_4": "Feature: Description...", 
-                        "bullet_point_5": "Feature: Description...", 
+                        "bullet_point_1": "Feature: Description", 
+                        "bullet_point_2": "Feature: Description", 
+                        "bullet_point_3": "Feature: Description", 
+                        "bullet_point_4": "Feature: Description", 
+                        "bullet_point_5": "Feature: Description", 
                         "description": "HTML Code...", 
                         "search_terms": "..." 
                     }}
                     """
                     
-                    image_obj = Image.open(uploaded_file)
-                    response = model.generate_content([prompt, image_obj])
+                    # 纯文本生成
+                    response = model.generate_content(prompt)
                     
                     clean_text_resp = response.text.replace("```json", "").replace("```", "")
                     result = parse_gemini_response(clean_text_resp)
@@ -314,9 +339,11 @@ with col2:
         st.markdown("#### 📝 Title (标题)")
         st.markdown(render_highlighted_text(data["title"]), unsafe_allow_html=True)
         new_title = st.text_area("Title", value=clean_text_for_copy(data["title"]), height=80, label_visibility="collapsed", key="txt_title")
-        if st.button("🔄 重写标题 (更吸引眼球)", key="btn_rewrite_title"):
+        if st.button("🔄 重写标题 (不合适？)", key="btn_rewrite_title"):
             with st.spinner("正在重写标题..."):
-                rewritten = rewrite_section("Title", "参考风格：2 Pack 3D Embroidered... 结构：Brand+Qty+Material+Keyword+Occasion (注意：仅限2-3个核心词)", context_data)
+                # 【修改点2】重写时传入具体限制
+                instruction = "参考风格：2 Pack 3D Embroidered... 结构：Brand+Qty+Material+Keyword+Occasion。**注意：仅限2-3个核心关键词，不要堆砌。**"
+                rewritten = rewrite_section("Title", instruction, context_data, rules_context)
                 if rewritten:
                     st.session_state["listing_data"]["title"] = rewritten
                     st.rerun()
@@ -327,6 +354,10 @@ with col2:
             key = f"bullet_point_{i}"
             val = data.get(key, "")
             
+            # 【修改点3】代码层面的强制清洗：如果结尾有句号，去掉
+            if val and val.strip().endswith("."):
+                val = val.strip()[:-1]
+            
             col_b1, col_b2 = st.columns([0.1, 0.9])
             with col_b1:
                 st.markdown(f"**BP{i}**")
@@ -336,8 +367,9 @@ with col2:
                 
                 if st.button(f"🔄 重写 BP{i}", key=f"btn_rewrite_{key}"):
                     with st.spinner(f"正在重写 BP{i}..."):
-                        instruction = "更加简洁，去除废话。如果是尺寸点，必须列出所有可用尺寸。"
-                        rewritten = rewrite_section(f"Bullet Point {i}", instruction, context_data)
+                        # 【修改点4】重写指令强调去重和标点
+                        instruction = "更加简洁，去除废话。与其他五点保持内容独立，不要重复其他点的意思。**结尾不要加句号**。"
+                        rewritten = rewrite_section(f"Bullet Point {i}", instruction, context_data, rules_context)
                         if rewritten:
                             st.session_state["listing_data"][key] = rewritten
                             st.rerun()
@@ -347,7 +379,8 @@ with col2:
         st.text_area("Search Terms", value=clean_text_for_copy(data.get("search_terms", "")), height=100, key="txt_st")
         if st.button("🔄 重写 ST", key="btn_rewrite_st"):
             with st.spinner("正在挖掘更多长尾词..."):
-                rewritten = rewrite_section("Search Terms", "挖掘更多同义词、场景词，不要标点符号", context_data)
+                instruction = "挖掘更多同义词、场景词，不要标点符号，不要包含品牌名。"
+                rewritten = rewrite_section("Search Terms", instruction, context_data, rules_context)
                 if rewritten:
                     st.session_state["listing_data"]["search_terms"] = rewritten
                     st.rerun()
@@ -357,7 +390,7 @@ with col2:
         st.text_area("Description Code", value=clean_text_for_copy(data.get("description", "")), height=200, key="txt_desc")
         if st.button("🔄 重写描述", key="btn_rewrite_desc"):
             with st.spinner("正在重写描述..."):
-                rewritten = rewrite_section("Product Description", "保持 HTML 格式，增加参数细节", context_data)
+                rewritten = rewrite_section("Product Description", "保持 HTML 格式，增加参数细节，语言更地道", context_data, rules_context)
                 if rewritten:
                     st.session_state["listing_data"]["description"] = rewritten
                     st.rerun()
@@ -365,15 +398,22 @@ with col2:
         # --- 总预览 ---
         st.markdown("---")
         with st.expander("📋 全局文案总览 (All-in-One Preview)", expanded=True):
+            # 再次清洗一下总览里的标点
+            bp1 = clean_text_for_copy(data.get('bullet_point_1', '')).rstrip('.')
+            bp2 = clean_text_for_copy(data.get('bullet_point_2', '')).rstrip('.')
+            bp3 = clean_text_for_copy(data.get('bullet_point_3', '')).rstrip('.')
+            bp4 = clean_text_for_copy(data.get('bullet_point_4', '')).rstrip('.')
+            bp5 = clean_text_for_copy(data.get('bullet_point_5', '')).rstrip('.')
+
             all_content = f"""【Title】
 {clean_text_for_copy(data['title'])}
 
 【Bullet Points】
-1. {clean_text_for_copy(data.get('bullet_point_1', ''))}
-2. {clean_text_for_copy(data.get('bullet_point_2', ''))}
-3. {clean_text_for_copy(data.get('bullet_point_3', ''))}
-4. {clean_text_for_copy(data.get('bullet_point_4', ''))}
-5. {clean_text_for_copy(data.get('bullet_point_5', ''))}
+1. {bp1}
+2. {bp2}
+3. {bp3}
+4. {bp4}
+5. {bp5}
 
 【Search Terms】
 {clean_text_for_copy(data.get('search_terms', ''))}
