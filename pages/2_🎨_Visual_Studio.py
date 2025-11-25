@@ -53,8 +53,9 @@ def download_image(url, filename):
     st.markdown(f"### [📥 点击下载 {filename}]({url})")
 
 def get_vision_model():
-    """获取视觉模型，强制使用快速版 1.5-flash 以防止卡顿"""
-    return genai.GenerativeModel('gemini-1.5-flash')
+    """获取视觉模型，修复为 2.5-flash"""
+    # 【修复点】你的账号只能用 2.5-flash，不能用 1.5
+    return genai.GenerativeModel('gemini-2.5-flash')
 
 # --- 5. 顶部导航 ---
 st.title("🎨 亚马逊 AI 视觉工场 (All-in-One)")
@@ -92,9 +93,9 @@ with tabs[0]:
             if not prompt_text:
                 st.warning("请先输入描述")
             else:
-                with st.spinner("Gemini Flash 正在构思..."):
+                with st.spinner("Gemini 2.5 Flash 正在构思..."):
                     try:
-                        model = get_vision_model() # 使用 Flash
+                        model = get_vision_model() # 使用 2.5 Flash
                         p = f"你是一个商业插画师。将此描述转换为FLUX模型的英文Prompt，强调光影和质感，直接输出英文，不要解释：{prompt_text}"
                         resp = model.generate_content(p)
                         st.session_state["t2i_final_prompt"] = resp.text
@@ -129,7 +130,7 @@ with tabs[0]:
 # ==================================================
 with tabs[1]:
     st.header("🖼️ 图生图 (Image-to-Image 3.0)")
-    st.caption("Gemini 1.5 Flash (极速版) + FLUX 绘图引擎")
+    st.caption("Gemini 2.5 Flash (极速版) + FLUX 绘图引擎")
     
     col1, col2 = st.columns([5, 5])
     
@@ -149,7 +150,7 @@ with tabs[1]:
 
         strength = st.slider("重绘幅度 (Image Strength)", 0.1, 1.0, 0.75, help="数值越大，AI发挥空间越大（越不像原图）。")
 
-        # 智能合成按钮 - 注意这里的 Key 和 Label 都改了，确保你看到的是新按钮
+        # 智能合成按钮
         if st.button("✨ 生成 Prompt (快速响应)", type="secondary", key="i2i_magic_new"):
             if not ref_img:
                 st.warning("请先上传参考图！")
@@ -162,14 +163,14 @@ with tabs[1]:
                     status_text.text("⏳ 1/3: 正在压缩图片以加速传输...")
                     progress_bar.progress(30)
                     
-                    # 1. 强力压缩图片 (关键修复：防止大图卡死)
+                    # 1. 强力压缩图片 (防止大图卡死)
                     img_small = img_obj.copy()
                     img_small.thumbnail((512, 512)) 
                     
-                    status_text.text("⏳ 2/3: Gemini Flash 正在极速分析...")
+                    status_text.text("⏳ 2/3: Gemini 2.5 Flash 正在极速分析...")
                     progress_bar.progress(60)
                     
-                    # 2. 调用 Gemini Flash (秒回)
+                    # 2. 调用 Gemini 2.5 Flash
                     model = get_vision_model()
                     
                     synthesis_prompt = f"""
@@ -187,7 +188,7 @@ with tabs[1]:
                     
                     # 3. 更新并刷新
                     st.session_state["i2i_final_prompt"] = response.text
-                    time.sleep(0.2) # 稍微停顿让用户看到进度条完成
+                    time.sleep(0.2) 
                     st.rerun()
                     
                 except Exception as e:
