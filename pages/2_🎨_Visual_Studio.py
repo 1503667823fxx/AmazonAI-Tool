@@ -2,113 +2,133 @@ import streamlit as st
 import replicate
 import google.generativeai as genai
 from PIL import Image
-import sys
-import os
-
-# --- 0. 引入门禁系统 ---
-sys.path.append(os.path.abspath('.'))
-try:
-    import auth
-except ImportError:
-    pass 
+import io
 
 # --- 1. 页面配置 ---
-st.set_page_config(page_title="图片工场", page_icon="🎨", layout="wide")
+st.set_page_config(page_title="视觉工场", page_icon="🎨", layout="wide")
 
-# 安全检查
-if 'auth' in sys.modules:
-    if not auth.check_password():
-        st.stop()
-
-# --- 自定义 CSS ---
+# 自定义样式
 st.markdown("""
 <style>
-    .stButton button {width: 100%; border-radius: 8px;}
-    .stImage {border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);}
+    .stButton button {width: 100%;}
+    .stImage {border-radius: 10px;}
 </style>
 """, unsafe_allow_html=True)
 
 # --- 2. 验证 Keys ---
 if "REPLICATE_API_TOKEN" not in st.secrets:
-    st.error("❌ 未找到 Replicate API Token，请在 .streamlit/secrets.toml 中配置！")
+    st.error("❌ 未找到 Replicate API Token，请在 Secrets 中配置！")
     st.stop()
-
-if "GOOGLE_API_KEY" in st.secrets:
+if "GOOGLE_API_KEY" not in st.secrets:
+    st.warning("⚠️ 未找到 Google API Key，智能优化提示词功能将不可用。")
+else:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# --- 3. 侧边栏：绘图参数 ---
+# --- 3. 侧边栏配置 ---
 with st.sidebar:
-    st.title("📸 图片参数设置")
-    st.info("当前模式：FLUX.1 Pro (顶级商业画质)")
+    st.title("🎨 绘图参数设置")
     
-    aspect_ratio_label = st.selectbox(
-        "画幅比例",
-        ["1:1 (主图/正方形)", "16:9 (Banner/电脑壁纸)", "9:16 (手机竖屏/海报)", "4:5 (Ins/小红书)", "3:2 (常规摄影)"]
+    # 模型选择 (FLUX 1.1 Pro 是目前最强最快的)
+    model_version = "black-forest-labs/flux-1.1-pro"
+    
+    aspect_ratio = st.selectbox(
+        "图片比例 (Aspect Ratio)",
+        ["1:1 (电商主图)", "16:9 (Banner/海报)", "9:16 (TikTok/Reels)", "4:3", "3:2"]
     )
-    target_ratio = aspect_ratio_label.split(" ")[0]
     
-    output_format = st.radio("输出格式", ["jpg", "png"], horizontal=True)
-    safety_tolerance = st.slider("安全过滤等级", 1, 5, 2)
+    output_format = st.selectbox("输出格式", ["webp", "jpg", "png"])
+    safety_tolerance = st.slider("安全过滤等级 (越低越严)", 1, 5, 2)
 
-# --- 4. 主界面 ---
-st.title("🎨 亚马逊 AI 图片工场")
-st.caption("Powered by FLUX.1 Pro | 专注高转化场景图")
+# --- 4. 核心逻辑 ---
+st.title("🎨 AI 视觉工场 (Visual Studio)")
+st.caption("Powered by FLUX.1 Pro + Gemini 3.0 Brain")
 
 col1, col2 = st.columns([4, 6])
 
 with col1:
-    st.subheader("1. 构思与指令")
+    st.subheader("1. 创意输入")
     
-    uploaded_file = st.file_uploader("上传参考图 (Gemini将提取产品特征)", type=["jpg", "png", "webp"])
-    if uploaded_file:
-        img = Image.open(uploaded_file)
-        st.image(img, width=200)
-        
-    scene_desc = st.text_area("场景描述 (例如: 放在大理石台面上，晨光，旁边有咖啡)", height=100)
+    # A. 基础输入
+    raw_prompt = st.text_area(
+        "描述你想要的画面 (支持中文)", 
+        placeholder="例如：一个白色的陶瓷咖啡杯放在木质桌面上，旁边有咖啡豆，清晨阳光，高分辨率...",
+        height=100
+    )
     
-    if st.button("✨ Gemini 编写专业指令 (Magic Prompt)", type="secondary"):
-        if not uploaded_file:
-            st.warning("请先上传产品参考图！")
+    # B. 智能优化按钮 (Gemini)
+    if st.button("✨ 用 Gemini 优化提示词 (变专业)", type="secondary"):
+        if not raw_prompt:
+            st.warning("请先输入一些简单的描述！")
         else:
-            with st.spinner("Gemini 正在观察产品并构思光影..."):
+            with st.spinner("Gemini 正在构思光影和构图..."):
                 try:
-                    model = genai.GenerativeModel('gemini-3-pro-preview')
-                    prompt = f"""
-                    你是一个商业摄影师。请根据这张产品图和用户描述: "{scene_desc}"，写一个英文绘画Prompt。
+                    # 调用 Gemini 润色
+                    g_model = genai.GenerativeModel('gemini-3-pro-preview') # 或者 gemini-1.5-pro
+                    g_prompt = f"""
+                    你是一个专业的AI绘图提示词工程师 (Prompt Engineer)。
+                    请把用户的这个简单描述："{raw_prompt}"
+                    改写成一个 FLUX 模型能听懂的、高质量的英文 Prompt。
+                    
                     要求：
-                    1. 极其详细地描述产品外观（颜色、材质、形状）。
-                    2. 设定高级的商业摄影光影 (Soft studio lighting, cinematic)。
-                    3. 包含画质词: 8k, photorealistic, ultra-detailed.
-                    4. 直接输出英文Prompt，不要解释。
+                    1. 增加光影、材质、镜头参数（如 8k, photorealistic, cinematic lighting）。
+                    2. 如果用户提到了产品上的文字，请用双引号明确标注，例如 text "COFFEE"。
+                    3. 直接输出英文 Prompt，不要任何解释。
                     """
-                    response = model.generate_content([prompt, img])
-                    st.session_state["flux_prompt"] = response.text
-                    st.success("指令已生成！")
+                    response = g_model.generate_content(g_prompt)
+                    optimized_prompt = response.text
+                    
+                    # 存入 Session State 以便显示
+                    st.session_state['final_prompt'] = optimized_prompt
+                    st.success("优化完成！已自动填入下方。")
                 except Exception as e:
-                    st.error(f"Gemini 错误: {e}")
+                    st.error(f"Gemini 优化失败: {e}")
 
-    final_prompt = st.text_area("最终生成指令 (英文)", value=st.session_state.get("flux_prompt", ""), height=150)
+    # C. 最终提示词 (发送给 FLUX 的)
+    # 如果 Session 中有优化过的词，就用优化过的，否则用原本的
+    default_prompt = st.session_state.get('final_prompt', raw_prompt)
+    final_prompt = st.text_area(
+        "最终英文 Prompt (可手动微调)", 
+        value=default_prompt,
+        height=150,
+        help="这是实际发送给绘图模型的指令，必须是英文。"
+    )
 
 with col2:
-    st.subheader("2. 渲染结果")
-    if st.button("🚀 开始生成图片 (Run FLUX)", type="primary"):
+    st.subheader("2. 生成结果")
+    
+    generate_btn = st.button("🚀 开始绘图 (Run FLUX)", type="primary")
+    
+    if generate_btn:
         if not final_prompt:
-            st.warning("指令不能为空")
+            st.warning("提示词不能为空！")
         else:
-            with st.spinner("🎨 FLUX 正在渲染... (约10-15秒)"):
+            with st.spinner("🎨 FLUX 正在渲染像素... (约需 5-10秒)"):
                 try:
+                    # 调用 Replicate
                     output = replicate.run(
-                        "black-forest-labs/flux-1.1-pro",
+                        model_version,
                         input={
                             "prompt": final_prompt,
-                            "aspect_ratio": target_ratio,
+                            "aspect_ratio": aspect_ratio.split(" ")[0], # 提取 1:1
                             "output_format": output_format,
+                            "output_quality": 90,
                             "safety_tolerance": safety_tolerance
                         }
                     )
+                    
+                    # FLUX 1.1 Pro 返回的是一个文件流对象或 URL
+                    # 通常 output 就是一个 image url
                     image_url = str(output)
-                    st.image(image_url, use_column_width=True)
-                    st.success("✅ 生成成功")
-                    st.markdown(f"[📥 下载高清原图]({image_url})")
+                    
+                    st.image(image_url, caption="Generated by FLUX.1 Pro", use_column_width=True)
+                    st.success("✅ 生成成功！右键可另存为图片。")
+                    
+                    # 显示下载链接
+                    st.markdown(f"[📥 点击下载原图]({image_url})")
+                    
                 except Exception as e:
-                    st.error(f"生成失败: {e}")
+                    st.error(f"绘图失败: {e}")
+                    st.info("💡 提示：请检查 Replicate 余额或 API Token 是否正确。")
+
+st.markdown("---")
+st.info("💡 小技巧：如果你想在产品上印字，请在提示词里写：text \"YOUR TEXT\"")
