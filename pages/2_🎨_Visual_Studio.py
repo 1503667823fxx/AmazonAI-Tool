@@ -7,6 +7,7 @@ import sys
 import os
 import requests
 import time
+import base64 # 新增：用于处理 Gemini 生成的图片数据
 
 # --- 0. 引入门禁系统 ---
 sys.path.append(os.path.abspath('.'))
@@ -57,16 +58,27 @@ if "GOOGLE_API_KEY" in st.secrets:
 UNIVERSAL_QUALITY_PROMPT = ", commercial photography, 8k resolution, photorealistic, highly detailed, cinematic lighting, depth of field, masterpiece, sharp focus"
 
 # --- 4. 辅助函数 ---
-def download_image(url, filename):
-    """提供下载链接"""
-    st.markdown(f"### [📥 点击下载 {filename}]({url})")
+def download_image(url_or_data, filename, is_bytes=False):
+    """提供下载链接 (支持 URL 和 Bytes)"""
+    if is_bytes:
+        b64 = base64.b64encode(url_or_data).decode()
+        href = f'<a href="data:image/jpeg;base64,{b64}" download="{filename}">📥 点击下载 {filename}</a>'
+        st.markdown(href, unsafe_allow_html=True)
+    else:
+        st.markdown(f"### [📥 点击下载 {filename}]({url_or_data})")
 
 def get_vision_model():
-    """获取视觉模型 (2.5-flash)"""
+    """获取视觉模型 (用于读图)"""
+    # 用于分析图片的普通视觉模型，保持速度
     return genai.GenerativeModel('gemini-2.5-flash')
 
+def get_image_gen_model():
+    """获取图像生成/编辑模型 (用于Step 1)"""
+    # 【核心修改】切换至您指定的最高级 Pro 模型
+    return genai.GenerativeModel('gemini-3-pro-image-preview')
+
 def process_rembg_mask(image_file):
-    """Rembg 抠图并生成反向蒙版 (用于Flux Fill)"""
+    """Rembg 抠图并生成反向蒙版"""
     try:
         output_url = replicate.run("cjwbw/rembg:1.4", input={"image": image_file})
         response = requests.get(str(output_url))
@@ -77,9 +89,6 @@ def process_rembg_mask(image_file):
         else:
             alpha = Image.new("L", no_bg_image.size, 255)
             
-        # Flux Fill 需要: 白色=重绘(背景), 黑色=保留(主体)
-        # Rembg Alpha: 白色=主体, 黑色=背景
-        # 所以要反转
         mask = ImageOps.invert(alpha)
         return no_bg_image, mask
     except Exception as e:
@@ -88,17 +97,19 @@ def process_rembg_mask(image_file):
 
 # --- 5. 顶部导航 ---
 st.title("🎨 亚马逊 AI 视觉工场 (Pro)")
-st.caption("集成 FLUX.1 Pro, IDM-VTON, FaceSwap, Real-ESRGAN 等顶级模型")
+st.caption("集成 FLUX.1 Pro, Gemini 3.0 Pro Image, FaceSwap 等顶级模型")
 
 # 初始化 Session State
 if "t2i_final_prompt" not in st.session_state:
     st.session_state["t2i_final_prompt"] = ""
 if "scene_gen_prompt" not in st.session_state:
     st.session_state["scene_gen_prompt"] = ""
+if "step1_image" not in st.session_state:
+    st.session_state["step1_image"] = None # 存储第一步生成的图片对象
 
 # 创建功能分区
 tabs = st.tabs([
-    "💃 模特/产品工场 (核心)", 
+    "🖼️ 双模图生图 (混合)", # 原 模特/产品工场
     "✨ 文生图 (海报)", 
     "🖌️ 局部重绘", 
     "↔️ 画幅扩展", 
@@ -107,150 +118,113 @@ tabs = st.tabs([
 ])
 
 # ==================================================
-# Tab 1: 模特/产品工场 (重构核心)
+# Tab 1: 双模图生图 (Gemini -> Flux)
 # ==================================================
 with tabs[0]:
-    st.header("💃 模特与服饰工场 (Model Studio)")
+    st.header("🖼️ 双模混合图生图 (Hybrid Workflow)")
     st.markdown("""
-    针对竞品图换模特、换动作、换场景的复杂需求，我们提供三种精准模式：
+    **工作原理**：
+    1. **Step 1 (大脑)**：使用 **Gemini 3.0 Pro Image** 进行“逻辑编辑”（如：换个动作、增加道具），它听得懂人话。
+    2. **Step 2 (双手)**：将 Gemini 生成的“草图”传给 Flux 进行“光影精修”，实现商业级画质。
     """)
     
-    # 子模式选择
-    mode = st.radio(
-        "请选择操作模式：",
-        ["🎭 智能换脸 (最保真/换人)", "👗 虚拟试穿 (换动作/换人)", "🌆 场景置换 (保留人/换背景)"],
-        horizontal=True
-    )
+    col1, col2 = st.columns([5, 5])
     
-    st.divider()
-
-    # --- 模式 A: 智能换脸 ---
-    if "智能换脸" in mode:
-        col1, col2 = st.columns([5, 5])
-        with col1:
-            st.info("📝 **逻辑**：保留竞品图的**姿势、衣服、光影**，只替换面部。\n**适用**：竞品图拍得很好，但模特是外国人想换成亚洲人，或者避免肖像侵权。")
-            target_img = st.file_uploader("1. 上传底图 (竞品图/原图)", type=["jpg", "png", "webp"], key="face_target")
-            source_img = st.file_uploader("2. 上传目标人脸 (你想换上去的脸)", type=["jpg", "png", "webp"], key="face_source", help="只需一张清晰的脸部照片即可。")
-            
-        with col2:
-            if st.button("🚀 开始换脸", type="primary"):
-                if not target_img or not source_img:
-                    st.warning("请上传两张图片！")
-                else:
-                    with st.spinner("🎭 正在进行面部融合..."):
+    # === 左侧：输入与 Step 1 ===
+    with col1:
+        st.subheader("1. 逻辑编辑 (Gemini 驱动)")
+        ref_img = st.file_uploader("上传原图", type=["jpg", "png", "webp"], key="hybrid_up")
+        if ref_img:
+            st.image(ref_img, width=200, caption="原图")
+        
+        edit_instruction = st.text_area(
+            "编辑指令 (告诉 Gemini 怎么改)", 
+            height=100, 
+            placeholder="例如：把背景改成温馨的圣诞节客厅，给模特戴上一顶红色帽子，保持产品不变。"
+        )
+        
+        if st.button("✨ Step 1: Gemini 生成草图", type="primary"):
+            if not ref_img or not edit_instruction:
+                st.warning("请上传图片并输入指令！")
+            else:
+                with st.spinner("🧠 Gemini 3.0 Pro 正在进行深度逻辑修改..."):
+                    try:
+                        # 准备图片
+                        img_obj = Image.open(ref_img)
+                        
+                        # 调用 Gemini 图像编辑模型
+                        model = get_image_gen_model()
+                        
+                        # 构造 Prompt
+                        prompt = f"Edit this image: {edit_instruction}. Make it look realistic."
+                        
+                        response = model.generate_content(
+                            [prompt, img_obj],
+                            generation_config={"response_modalities": ["IMAGE"]}
+                        )
+                        
+                        # 解析返回的图片数据
                         try:
-                            output = replicate.run(
-                                "lucataco/faceswap:9a4298548422074c3f57258c5d544497314ae4112df80d116f0d2109bd65a8e2",
-                                input={
-                                    "target_image": target_img,
-                                    "swap_image": source_img
-                                }
-                            )
-                            st.image(str(output), caption="换脸结果", use_column_width=True)
-                            download_image(str(output), "faceswap_result.jpg")
-                        except Exception as e:
-                            st.error(f"换脸失败: {e}")
-
-    # --- 模式 B: 虚拟试穿 (VTON) ---
-    elif "虚拟试穿" in mode:
-        col1, col2 = st.columns([5, 5])
-        with col1:
-            st.info("📝 **逻辑**：将衣服从原图中提取出来，穿到另一个模特身上。\n**适用**：**彻底改变动作**。你需要先生成一张想要动作的模特图（可以用文生图生成），然后把衣服穿上去。")
-            
-            human_img = st.file_uploader("1. 上传模特图 (目标动作/人)", type=["jpg", "png", "webp"], key="vton_human", help="你想让衣服穿在谁身上？可以是AI生成的模特图。")
-            garm_img = st.file_uploader("2. 上传衣服图 (平铺/挂拍/竞品裁切)", type=["jpg", "png", "webp"], key="vton_garm", help="只包含衣服的图片效果最好。")
-            category = st.selectbox("衣服类型", ["upper_body (上衣)", "lower_body (下装)", "dresses (连衣裙)"])
-            
-        with col2:
-            if st.button("🚀 开始试穿", type="primary"):
-                if not human_img or not garm_img:
-                    st.warning("请上传模特和衣服！")
-                else:
-                    with st.spinner("👗 AI 正在进行虚拟试穿... (耗时约 30-60s)"):
-                        try:
-                            # IDM-VTON 模型
-                            output = replicate.run(
-                                "cuuupid/idm-vton:c871bb9b0466074280c2a9a73e196398b0865801cd6825bc88f20713653c5afc",
-                                input={
-                                    "garm_img": garm_img,
-                                    "human_img": human_img,
-                                    "garment_des": category.split(" ")[0],
-                                    "crop": False, # 保持原图构图
-                                    "steps": 30
-                                }
-                            )
-                            st.image(str(output), caption="试穿结果", use_column_width=True)
-                            download_image(str(output), "tryon_result.jpg")
-                        except Exception as e:
-                            st.error(f"试穿失败: {e}")
-                            st.info("💡 提示：如果效果不好，请尝试裁剪衣服图片，只保留衣服主体。")
-
-    # --- 模式 C: 场景置换 ---
-    elif "场景置换" in mode:
-        col1, col2 = st.columns([5, 5])
-        with col1:
-            st.info("📝 **逻辑**：**像素级保留**模特和衣服，只重绘背景。\n**适用**：模特图很完美，但想换个圣诞节/户外/家居背景。")
-            
-            scene_img = st.file_uploader("1. 上传原图", type=["jpg", "png", "webp"], key="scene_up")
-            scene_desc = st.text_area("2. 新场景描述", height=100, placeholder="例如：Luxury living room, warm lighting...")
-            
-            if st.button("✨ 帮我写场景 Prompt", type="secondary"):
-                if not scene_img:
-                    st.warning("请先上传图片")
-                else:
-                    with st.spinner("Gemini 正在构思..."):
-                        try:
-                            img_small = Image.open(scene_img).copy()
-                            img_small.thumbnail((512, 512))
-                            model = get_vision_model()
-                            prompt = f"基于这张图的主体，设计一个'{scene_desc}'的背景Prompt，强调光影融合，直接输出英文。"
-                            resp = model.generate_content([prompt, img_small])
-                            st.session_state["scene_gen_prompt"] = resp.text
-                            st.success("生成成功！")
-                            time.sleep(0.1)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Gemini 错误: {e}")
-
-        with col2:
-            final_scene_prompt = st.text_area("最终指令", value=st.session_state["scene_gen_prompt"], height=100)
-            
-            if st.button("🚀 替换背景 (Flux Fill)", type="primary"):
-                if not scene_img or not final_scene_prompt:
-                    st.warning("请完善信息")
-                else:
-                    with st.spinner("✂️ 自动抠图 + 🎨 背景重绘..."):
-                        try:
-                            # 1. 自动抠图流程
-                            scene_img.seek(0)
-                            _, mask = process_rembg_mask(scene_img)
+                            image_data = response.candidates[0].content.parts[0].inline_data.data
+                            image_bytes = base64.b64decode(image_data)
                             
-                            if mask:
-                                # 准备上传数据
-                                img_bytes = io.BytesIO()
-                                scene_img.seek(0)
-                                Image.open(scene_img).convert("RGB").save(img_bytes, format="PNG")
-                                
-                                mask_bytes = io.BytesIO()
-                                mask.save(mask_bytes, format="PNG")
-                                
-                                # 2. Flux Fill
-                                output = replicate.run(
-                                    "black-forest-labs/flux-fill-pro",
-                                    input={
-                                        "image": img_bytes,
-                                        "mask": mask_bytes,
-                                        "prompt": final_scene_prompt + UNIVERSAL_QUALITY_PROMPT,
-                                        "output_format": "jpg",
-                                        "output_quality": 100
-                                    }
-                                )
-                                st.image(str(output), caption="场景置换结果", use_column_width=True)
-                                download_image(str(output), "scene_swap.jpg")
-                            else:
-                                st.error("抠图失败")
-                        except Exception as e:
-                            st.error(f"生成失败: {e}")
+                            # 存入 Session State
+                            st.session_state["step1_image"] = image_bytes
+                            st.success("✅ 第一步完成！请在下方预览，满意后进行第二步精修。")
+                            
+                        except Exception as parse_err:
+                            st.error("无法解析 Gemini 返回的图片，可能触发了安全拦截或模型未返回图片。")
+                            st.text(str(parse_err))
+                            
+                    except Exception as e:
+                        st.error(f"Gemini 生成失败: {e}")
+
+        # 显示第一步结果
+        if st.session_state["step1_image"]:
+            st.markdown("---")
+            st.image(st.session_state["step1_image"], caption="Step 1: Gemini 生成结果 (逻辑已修改)", use_column_width=True)
+            download_image(st.session_state["step1_image"], "step1_draft.jpg", is_bytes=True)
+
+    # === 右侧：Step 2 ===
+    with col2:
+        st.subheader("2. 光影精修 (Flux 驱动)")
+        st.info("将左侧生成的图片作为底图，通过 Flux 提升画质和细节。")
+        
+        flux_prompt = st.text_area(
+            "风格指令 (告诉 Flux 怎么渲染)", 
+            value="Cinematic lighting, 8k resolution, photorealistic, commercial photography, highly detailed product shot",
+            height=100
+        )
+        
+        strength = st.slider("重绘幅度 (Denoising Strength)", 0.1, 1.0, 0.35, help="数值越小越像左侧的草图，数值越大画质越好但可能改变形状。建议 0.3-0.5。")
+        
+        if st.button("🚀 Step 2: Flux 极致精修", type="primary"):
+            if not st.session_state["step1_image"]:
+                st.warning("请先完成第一步生成！")
+            else:
+                with st.spinner("🎨 Flux 正在进行像素级精修..."):
+                    try:
+                        # 将 bytes 转为 file-like object
+                        step1_file = io.BytesIO(st.session_state["step1_image"])
+                        
+                        output = replicate.run(
+                            "black-forest-labs/flux-dev", 
+                            input={
+                                "prompt": flux_prompt + UNIVERSAL_QUALITY_PROMPT,
+                                "image": step1_file,
+                                "prompt_strength": 1 - strength, # Replicate 逻辑: strength 越高保留越多，这里转换一下逻辑方便理解
+                                "go_fast": False, # 追求质量，关掉快速模式
+                                "output_quality": 100,
+                                "num_inference_steps": 30
+                            }
+                        )
+                        # Flux dev 返回 list
+                        final_url = str(output[0])
+                        st.image(final_url, caption="Step 2: Flux 精修结果 (最终成品)", use_column_width=True)
+                        download_image(final_url, "final_product.jpg")
+                        
+                    except Exception as e:
+                        st.error(f"Flux 精修失败: {e}")
 
 # ==================================================
 # Tab 2: 文生图 (Text-to-Image)
@@ -350,7 +324,7 @@ with tabs[3]:
 # Tab 5: 高清放大
 # ==================================================
 with tabs[4]:
-    st.header("🔍 高清放大")
+    st.header("🔍 图片高清放大")
     col1, col2 = st.columns([4, 6])
     with col1:
         upscale_img = st.file_uploader("低清图", type=["jpg", "png"], key="up_up")
@@ -378,3 +352,7 @@ with tabs[5]:
     if files:
         for f in files:
             st.image(Image.open(f), use_column_width=True)
+    if files:
+        for f in files:
+            st.image(Image.open(f), use_column_width=True)
+
