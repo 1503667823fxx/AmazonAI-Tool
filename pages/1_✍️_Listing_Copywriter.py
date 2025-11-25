@@ -59,7 +59,6 @@ with st.sidebar:
     with col_s2:
         language = st.selectbox("语言", ["English (US)", "English (UK)", "Deutsch (DE)", "Français (FR)", "日本語 (JP)", "Español (ES)"])
 
-    # 【修改点1】移除“文案风格”选择框，后台默认使用通用高转化风格
     st.info("💡 当前已启用：亚马逊通用高转化风格 (专业、地道、SEO优化)")
     
     st.divider()
@@ -68,48 +67,41 @@ with st.sidebar:
     # 🔴 【亚马逊 2025 新规库】 🔴
     # =========================================================
     default_amazon_rules = """【标题规则 (Title)】
-1. 长度：大部分分类不得超过 200 字符。**强烈建议控制在 80 字符以内**以优化移动端显示。
-2. 格式：
-   - 推荐结构：品牌 + 核心关键词 + 关键属性 + 颜色 + 尺寸 + 型号。
-   - 每个单词首字母大写（介词/连词/冠词 <5 字母除外）。
+1. 可读性优先：标题必须通顺、有逻辑，严禁单纯堆砌关键词。必须结合产品参数和卖点。
+2. 长度：大部分分类不得超过 200 字符。建议控制在 80-150 字符。
+3. 格式：
+   - 结构：品牌 + 核心大词 + 核心卖点/属性 + 适用场景/型号 + 颜色/尺寸。
+   - 单词首字母大写 (Title Case)，介词/连词小写。
    - 使用阿拉伯数字 (2) 而非单词 (Two)。
-   - 禁止全大写。
-3. 禁止：
-   - 特殊符号 (! $ ? _ {} ^ ~ # < > *) 及作为装饰的符号。
-   - 单词重复超过 2 次（单复数算重复）。
-   - 促销语 (Free shipping, 100% Quality, Sale)。
-   - 主观评价 (Best Seller, Hot Item, Amazing)。
-   - 卖家名称。
+4. 禁止：
+   - 特殊符号 (! $ ? _ {} ^ ~ # < > *)。
+   - 促销语 (Free shipping, Sale) 和主观评价 (Best Seller)。
 
 【五点描述规则 (Bullet Points)】
-1. 长度：单条建议控制在 200 字符以内（上限 500）。
-2. 格式：
-   - 采用 [大写卖点] + [冒号] + [具体描述] 结构。
-   - 开头首字母大写。
-   - **结尾不要加标点符号**。
-3. 内容：真实、准确、可量化（尺寸/材质/原产地）。保持顺序一致。
-4. 禁止：含糊其辞、促销信息、运送信息、主观评论。
+1. 格式：
+   - 采用 [Title Case Feature]: [Description] 结构。
+   - **卖点短语 (冒号前)**：单词首字母大写，介词/连词小写 (例如: Long Battery Life for Travel)。不要全大写。
+   - **具体描述 (冒号后)**：自然段落句式。
+   - 结尾不加标点。
+2. 内容：真实、准确、可量化。
 
 【产品描述规则 (Description)】
-1. 长度：不超过 2000 字符。
-2. 内容：语法正确，完整句子。包含尺寸、保养、保修。
-3. 禁止：卖家联系方式、外链、促销信息。"""
+1. 格式：HTML 代码 (<b>, <br>, <p>)。
+2. 内容：完整句子，包含详细参数。"""
     # =========================================================
 
     with st.expander("📜 Listing 核心撰写规范", expanded=True):
         amazon_rules = st.text_area("在此输入平台规范：", value=default_amazon_rules, height=400)
 
-    # Search Terms 规则 - 已更新为基于词根提取的逻辑
-    default_st_rules = """1. 来源限制：必须深度挖掘用户输入的【核心关键词】，提取其词根(Roots)和变体进行重组。
-2. 内容策略：
-   - 提取输入词的词根 (Stemming) 进行组合。
-   - **禁止**瞎编与输入关键词无关的无效词。
-   - **禁止**直接复制标题和五点中已出现的完整短语（浪费空间）。
-   - 禁止品牌名、ASIN、UPC、主观形容词。
-3. 格式：
+    # Search Terms 规则 - 已更新为更务实的逻辑
+    default_st_rules = """1. 核心策略：
+   - 优先包含高流量的核心词（即使标题里有，如果非常重要也可以重复，确保收录）。
+   - 重点补充同义词、近义词、西班牙语/法语变体、特定场景词。
+2. 格式：
    - 总字节数 < 250 bytes。
-   - 词与词之间用**半角空格**隔开。
-   - **严禁使用标点符号**。"""
+   - 词与词之间用半角空格隔开。
+   - 严禁标点符号。
+   - 严禁品牌名。"""
 
     with st.expander("🔍 Search Terms (ST) 规则", expanded=False):
         st_rules = st.text_area("后台关键词规则：", value=default_st_rules, height=250)
@@ -176,7 +168,7 @@ with col2:
         if not uploaded_file or not product_name:
             st.warning("请上传图片并填写名称")
         else:
-            with st.spinner("🧠 Gemini 正在根据新规撰写 (已启用大小写修正 & HTML 模式)..."):
+            with st.spinner("🧠 Gemini 正在撰写 (已优化标题可读性 & 五点格式)..."):
                 try:
                     model = genai.GenerativeModel('gemini-3-pro-preview')
                     
@@ -195,33 +187,37 @@ with col2:
                     品类:{category}
                     
                     【🔴 必须严格遵守的规则库 (Based on 2025 Rules)】
-                    通用规则(标题/五点/描述):{amazon_rules}
-                    ST规则(Search Terms):{st_rules}
+                    通用规则:{amazon_rules}
+                    ST规则:{st_rules}
                     违禁词:{forbidden_words}
                     
-                    【重要指令：关键词逻辑】
-                    1. **权重排序**：输入越靠前的词权重越高，优先安排在标题和五点前部。
-                    2. **格式规范**：【重要】所有埋入的关键词，必须自动转换为 **首字母大写 (Title Case)** 格式（例如 "wireless earbuds" -> "Wireless Earbuds"），以符合亚马逊规范。
-                    3. **标记**：用双尖括号 << >> 包裹。例如：This <<Wireless Earbuds>> features...
-
-                    【重要指令：Search Terms (ST) 生成算法】
-                    1. **绝对来源**：ST的内容必须且只能基于用户输入的【核心关键词】进行生成。
-                    2. **词根重组 (Root Recombination)**：不要瞎编无效词。请对核心关键词进行拆解，提取有效词根（Word Stems），并将这些词根重新组合成高搜索量的长尾词。
-                    3. **去重策略**：不要简单复制标题中已有的完整短语。提取那些“未被充分利用”的词根或变体。
+                    【重要指令：标题生成逻辑 (Readability)】
+                    1. **拒绝堆砌**：严禁把关键词简单罗列！标题必须是一个通顺、有逻辑的句子。
+                    2. **内容融合**：必须将【核心关键词】与用户的【核心卖点/参数】有机结合。
+                    3. **结构**：Brand + Core Keywords + Key Features (e.g. 40H Playtime, IPX7) + Model/Size.
                     
-                    【重要指令：格式细节】
-                    1. **五点描述**：必须严格保留“大写卖点”后的英文冒号 : 。格式如：BIG FEATURE: The description...
-                    2. **产品描述**：必须输出 **HTML 源代码**。使用 <b> 加粗关键点，使用 <br> 换行，使用 <p> 分段。不要输出纯文本。
+                    【重要指令：五点描述格式 (Bullet Points)】
+                    1. **格式**：`[Title Case Feature]: [Description]`
+                    2. **首字母规则**：冒号前的“卖点短语”，单词首字母大写 (Title Case)，但介词 (in, on, with, for) 和连词 (and, or) 必须小写。例如：`High Quality Material for Sleep:`
+                    3. **禁止**：不要全大写 (DO NOT USE ALL CAPS)。
+                    
+                    【重要指令：Search Terms (ST)】
+                    1. **策略**：优先覆盖高流量词。如果核心词（如产品原本名称）非常重要，**允许**在 ST 中再次包含，以确保索引安全。
+                    2. **补充**：挖掘同义词、场景词。
+                    
+                    【重要指令：关键词标记】
+                    请将所有埋入的【核心关键词】用双尖括号 << >> 包裹起来。
+                    例如：This <<Wireless Earbuds>> features...
                     
                     【输出格式】
                     仅输出 JSON：
                     {{ 
                         "title": "...", 
-                        "bullet_point_1": "FEATURE: Description...", 
-                        "bullet_point_2": "FEATURE: Description...", 
-                        "bullet_point_3": "FEATURE: Description...", 
-                        "bullet_point_4": "FEATURE: Description...", 
-                        "bullet_point_5": "FEATURE: Description...", 
+                        "bullet_point_1": "Feature Name: Description...", 
+                        "bullet_point_2": "Feature Name: Description...", 
+                        "bullet_point_3": "Feature Name: Description...", 
+                        "bullet_point_4": "Feature Name: Description...", 
+                        "bullet_point_5": "Feature Name: Description...", 
                         "description": "HTML Code...", 
                         "search_terms": "..." 
                     }}
@@ -234,7 +230,7 @@ with col2:
                     result = parse_gemini_response(clean_text_resp)
                     
                     if result:
-                        st.success("✅ 生成成功！已修复大小写、冒号及HTML格式。")
+                        st.success("✅ 生成成功！标题已优化可读性，五点格式已修正。")
                         
                         # --- 标题区域 ---
                         st.markdown("#### 📝 Title (标题)")
@@ -259,10 +255,9 @@ with col2:
                         
                         # --- 描述区域 (HTML) ---
                         st.markdown("#### 📖 Description (HTML Source)")
-                        # 【修改点4】直接显示 HTML 源码供复制
                         st.text_area("Description Code", value=clean_text_for_copy(result.get("description", "")), height=200)
                         
-                        # --- 【修改点5】总预览页面 (All-in-One) ---
+                        # --- 总预览页面 ---
                         st.markdown("---")
                         with st.expander("📋 全局文案总览 (All-in-One Preview)", expanded=True):
                             st.info("💡 提示：这里汇总了所有生成内容（纯净版），方便一次性查看或复制。")
