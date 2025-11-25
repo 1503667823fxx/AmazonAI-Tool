@@ -1,6 +1,5 @@
 import streamlit as st
 import google.generativeai as genai
-from PIL import Image
 import json
 import sys
 import os
@@ -133,12 +132,13 @@ with st.sidebar:
     with st.expander("🔍 Search Terms (ST) 规则", expanded=False):
         st_rules = st.text_area("后台关键词规则：", value=default_st_rules, height=250)
 
-    with st.expander("🛑 违禁词库", expanded=False):
+    # 【修改点2】扩充违禁词库 (增加 Durable, Safe 等)
+    with st.expander("🛑 违禁词库 (已扩充)", expanded=False):
         forbidden_words = st.text_area(
             "严禁使用的词 (逗号分隔)", 
-            value="Best Seller, No.1, Top rated, Free shipping, Guarantee, Warranty, Satisfaction, FDA approved, Anti-bacterial, Eco-friendly, Lowest Price, Discount, Sale, Cheap, Bonus, Gift, Prime, 100% Quality, High quality, Premium, Ultra, Super, Amazing, Unique, Perfect, durable, safe",
+            value="Best Seller, No.1, Top rated, Free shipping, Guarantee, Warranty, Satisfaction, FDA approved, Anti-bacterial, Eco-friendly, Lowest Price, Discount, Sale, Cheap, Bonus, Gift, Prime, 100% Quality, High quality, Premium, Ultra, Super, Amazing, Unique, Perfect, Durable, Safe, Long-lasting, Reliable, Efficient",
             height=150,
-            help="包含主观形容词、促销词、医疗宣称、价格诱导词等，确保账户安全。"
+            help="包含主观形容词、促销词、医疗宣称、绝对化描述（Durable/Safe在某些类目易触发审核），确保账户安全。"
         )
 
 # --- 4. 辅助函数 ---
@@ -161,15 +161,14 @@ def clean_text_for_copy(text):
     if not text: return ""
     # 移除高亮符号
     text = text.replace("<<", "").replace(">>", "")
-    # 【新增】强制移除末尾标点（针对五点描述的最后清洗）
-    # 如果文本看起来像是一句话，且以句号结尾，去掉它。
-    # 但为了防止误伤（比如 Description 是需要句号的），这个函数通常用于显示。
-    # 我们只在 Bullet Point 的逻辑里做特殊处理。
+    # 强制移除末尾标点
+    if text and text.strip().endswith("."):
+        text = text.strip()[:-1]
     return text
 
 def rewrite_section(section_key, prompt_instruction, context_data, rules_context):
     """
-    AI 重写函数 - 升级版：注入规则库
+    AI 重写函数 - 包含自我审查机制
     """
     try:
         model = genai.GenerativeModel('gemini-3-pro-preview')
@@ -179,7 +178,7 @@ def rewrite_section(section_key, prompt_instruction, context_data, rules_context
         【必须严格遵守的底层规则】
         {rules_context['amazon_rules']}
         
-        【严禁使用的违禁词】
+        【严禁使用的违禁词 (Red Lines)】
         {rules_context['forbidden_words']}
         
         【本次重写的具体要求】
@@ -190,11 +189,13 @@ def rewrite_section(section_key, prompt_instruction, context_data, rules_context
         关键词:{context_data['top_keywords']}
         卖点:{context_data['core_selling_point']}
         
-        【重要输出规则】
-        1. 直接输出重写后的内容，不要加任何解释，不要 Markdown 代码块。
-        2. 保持关键词高亮标记：使用 <<keyword>> 包裹核心词。
-        3. 遵守所有格式规则（如 Title Case, 冒号格式）。
-        4. **标点注意**：如果是 Bullet Point，结尾绝对不要加标点。
+        【自我审查要求 (Self-Correction)】
+        在输出前，请自我检查：
+        1. 是否包含 Durable, Safe, Best 等违禁词？如有，请替换为客观事实（如具体材质、结构）。
+        2. 是否包含主观形容词？如有，请删除。
+        
+        【输出格式】
+        直接输出重写后的纯文本内容，不要Markdown块。保持关键词用 << >> 包裹。
         """
         response = model.generate_content(prompt)
         return response.text.strip()
@@ -210,10 +211,10 @@ col1, col2 = st.columns([4, 6])
 
 with col1:
     st.subheader("1. 产品档案")
-    uploaded_file = st.file_uploader("上传产品主图 (仅供预览，不参与生成)", type=["jpg", "png", "jpeg", "webp"])
-    if uploaded_file:
-        st.image(uploaded_file, width=150)
-        
+    
+    # 【修改点1】彻底移除图片上传功能
+    # uploaded_file = st.file_uploader(...) <--- 已删除
+    
     product_name = st.text_input("产品名称 *", placeholder="例如：Active Noise Cancelling Headphones")
     
     top_keywords = st.text_area(
@@ -246,7 +247,7 @@ with col2:
         "tone": "亚马逊通用高转化风格"
     }
     
-    # --- 规则数据包 (传递给重写函数) ---
+    # --- 规则数据包 ---
     rules_context = {
         "amazon_rules": amazon_rules,
         "st_rules": st_rules,
@@ -258,12 +259,11 @@ with col2:
         if not product_name:
             st.warning("请填写产品名称！")
         else:
-            with st.spinner("🧠 Gemini 正在撰写 (如果想停止输出请点击界面右上角stop)..."):
+            with st.spinner("🧠 Gemini 正在撰写 (想停止输出请点击界面右上角stop按钮)..."):
                 try:
                     model = genai.GenerativeModel('gemini-3-pro-preview')
                     
                     # === Prompt 升级 ===
-                    # 【修改点1】不再传入 image_obj，只基于文本生成，避免视觉幻觉
                     prompt = f"""
                     你是一个亚马逊Listing顶级专家。请严格基于以下信息和规则生成JSON格式Listing。
                     
@@ -280,7 +280,16 @@ with col2:
                     【🔴 必须严格遵守的规则库 (Based on 2025 Rules)】
                     通用规则:{amazon_rules}
                     ST规则:{st_rules}
-                    违禁词:{forbidden_words}
+                    
+                    【🛑 违禁词库 (High Alert)】
+                    {forbidden_words}
+                    
+                    【重要指令：自我审查机制 (Self-Correction Protocol)】
+                    在生成最终JSON之前，请进行严格的自我审查：
+                    1. 扫描所有内容，查找是否包含【违禁词库】中的词汇（如 Durable, Safe, Best, Premium 等）。
+                    2. 查找是否包含主观形容词。
+                    3. 如果发现，立即替换为客观的事实描述（例如将 "Durable" 改为具体的使用寿命或材质强度数据）。
+                    4. 确保最终输出绝对干净、合规。
                     
                     【重要指令：标题生成逻辑】
                     1. **参考风格**：模仿高信息密度风格："2 Pack 3D Embroidered Heart Throw Pillow Covers..."
@@ -316,7 +325,7 @@ with col2:
                     }}
                     """
                     
-                    # 纯文本生成
+                    # 纯文本生成，不传 image
                     response = model.generate_content(prompt)
                     
                     clean_text_resp = response.text.replace("```json", "").replace("```", "")
@@ -324,7 +333,7 @@ with col2:
                     
                     if result:
                         st.session_state["listing_data"] = result
-                        st.success("✅ 生成成功！")
+                        st.success("✅ 生成成功！(已通过自我合规审查)")
                     else:
                         st.error("解析失败")
                         st.text(response.text)
@@ -341,7 +350,6 @@ with col2:
         new_title = st.text_area("Title", value=clean_text_for_copy(data["title"]), height=80, label_visibility="collapsed", key="txt_title")
         if st.button("🔄 重写标题 (不合适？)", key="btn_rewrite_title"):
             with st.spinner("正在重写标题..."):
-                # 【修改点2】重写时传入具体限制
                 instruction = "参考风格：2 Pack 3D Embroidered... 结构：Brand+Qty+Material+Keyword+Occasion。**注意：仅限2-3个核心关键词，不要堆砌。**"
                 rewritten = rewrite_section("Title", instruction, context_data, rules_context)
                 if rewritten:
@@ -354,7 +362,7 @@ with col2:
             key = f"bullet_point_{i}"
             val = data.get(key, "")
             
-            # 【修改点3】代码层面的强制清洗：如果结尾有句号，去掉
+            # 强制清洗末尾句号
             if val and val.strip().endswith("."):
                 val = val.strip()[:-1]
             
@@ -367,8 +375,7 @@ with col2:
                 
                 if st.button(f"🔄 重写 BP{i}", key=f"btn_rewrite_{key}"):
                     with st.spinner(f"正在重写 BP{i}..."):
-                        # 【修改点4】重写指令强调去重和标点
-                        instruction = "更加简洁，去除废话。与其他五点保持内容独立，不要重复其他点的意思。**结尾不要加句号**。"
+                        instruction = "更加简洁，去除废话。与其他五点保持内容独立。**结尾不要加句号**。"
                         rewritten = rewrite_section(f"Bullet Point {i}", instruction, context_data, rules_context)
                         if rewritten:
                             st.session_state["listing_data"][key] = rewritten
