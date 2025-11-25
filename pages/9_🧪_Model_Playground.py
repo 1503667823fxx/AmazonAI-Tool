@@ -5,189 +5,139 @@ import io
 import sys
 import os
 import base64
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-# --- 0. 引入门禁系统 ---
+# --- 0. 引入门禁 ---
 sys.path.append(os.path.abspath('.'))
 try:
     import auth
+    if not auth.check_password(): st.stop()
 except ImportError:
     pass 
 
-# --- 1. 页面配置 ---
-st.set_page_config(page_title="模型试驾场", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="API 深度实验室", page_icon="🧪", layout="wide")
 
-# 安全检查
-if 'auth' in sys.modules:
-    if not auth.check_password():
-        st.stop()
+st.title("🧪 Gemini API 深度实验室 (Debug Mode)")
+st.info("本页面用于强制测试 '图生图' 能力，并查看 API 返回的原始 JSON 数据。")
 
-st.title("🧪 Gemini 模型试驾场 (Model Playground)")
-st.caption("这里是纯净的测试环境，用于排查 API 权限和模型能力。")
-
-# --- 2. 验证 API Key ---
+# --- 1. 配置 ---
 if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("❌ 未找到 Google API Key，请在 secrets.toml 中配置。")
+    st.error("请配置 GOOGLE_API_KEY")
     st.stop()
 
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# --- 3. 侧边栏：模型探测器 ---
-with st.sidebar:
-    st.header("📡 模型探测雷达")
-    
-    if st.button("🔄 扫描可用模型"):
-        try:
-            with st.spinner("正在连接 Google 服务器..."):
-                all_models = []
-                # 列出所有模型
-                for m in genai.list_models():
-                    all_models.append(m)
-                
-                st.session_state["all_models_list"] = all_models
-                st.success(f"扫描成功！共发现 {len(all_models)} 个模型。")
-        except Exception as e:
-            st.error(f"扫描失败: {e}")
+col1, col2 = st.columns([4, 6])
 
-    # 筛选逻辑
-    all_models = st.session_state.get("all_models_list", [])
+with col1:
+    st.subheader("1. 参数配置")
     
-    # 提取支持 generateContent 的模型 (用于对话/识图)
-    chat_models = [m.name for m in all_models if 'generateContent' in m.supported_generation_methods]
-    # 提取可能支持生图的模型 (通过名字猜测，通常包含 image)
-    image_models = [m.name for m in all_models if 'image' in m.name.lower() or 'vision' in m.name.lower()]
-    
-    st.markdown("---")
-    st.markdown(f"**🔍 发现 {len(chat_models)} 个生成模型**")
-    
-    # 选择当前测试的模型
-    selected_model_name = st.selectbox(
-        "选择要测试的模型:", 
-        options=chat_models if chat_models else ["models/gemini-1.5-flash"], # 默认值
-        index=0 if chat_models else 0
+    # 手动输入模型名称，防止列表扫描不到隐藏模型
+    model_name = st.text_input(
+        "模型名称 (手动输入)", 
+        value="models/gemini-3-pro-image-preview", 
+        help="你可以试试 models/nano-banana-pro-preview 或 models/gemini-1.5-pro-latest"
     )
-
-# --- 4. 主界面：多功能测试台 ---
-tab1, tab2, tab3 = st.tabs(["💬 纯文本对话", "👁️ 多模态识图", "🎨 图像生成测试"])
-
-# === Tab 1: 纯文本对话 ===
-with tab1:
-    st.subheader(f"正在测试: `{selected_model_name}`")
-    user_input = st.text_input("输入测试文本", "Hello, who are you?")
     
-    if st.button("发送 (Text Chat)", key="btn_chat"):
-        try:
-            model = genai.GenerativeModel(selected_model_name)
-            response = model.generate_content(user_input)
-            st.success("✅ 响应成功:")
-            st.write(response.text)
-        except Exception as e:
-            st.error(f"❌ 失败: {e}")
+    uploaded_file = st.file_uploader("上传测试图片", type=["jpg", "png", "webp"])
+    
+    prompt = st.text_area(
+        "提示词 (Prompt)", 
+        value="Edit this image: Change the background to a snowy mountain. High quality.",
+        height=100
+    )
+    
+    # 关键参数控制
+    st.markdown("#### 高级控制")
+    force_image_modality = st.checkbox("强制指定 response_modalities=['IMAGE']", value=True)
+    disable_safety = st.checkbox("关闭所有安全拦截 (BLOCK_NONE)", value=True)
 
-# === Tab 2: 多模态识图 ===
-with tab2:
-    st.subheader(f"正在测试: `{selected_model_name}`")
-    st.info("测试该模型是否具备 Vision (视觉) 能力。")
+with col2:
+    st.subheader("2. 测试结果")
     
-    uploaded_img = st.file_uploader("上传测试图片", type=["jpg", "png", "webp"], key="vision_up")
-    vision_prompt = st.text_input("输入指令", "Describe this image in detail.")
-    
-    if uploaded_img and st.button("发送 (Vision)", key="btn_vision"):
-        try:
-            image = Image.open(uploaded_img)
-            st.image(image, width=200)
+    if st.button("🚀 发送原始请求 (Raw Request)", type="primary"):
+        if not uploaded_file:
+            st.warning("请先上传图片")
+        else:
+            status = st.empty()
+            debug_area = st.expander("🔍 查看 API 原始响应 (Raw Response)", expanded=True)
             
-            model = genai.GenerativeModel(selected_model_name)
-            response = model.generate_content([vision_prompt, image])
-            st.success("✅ 响应成功:")
-            st.write(response.text)
-        except Exception as e:
-            st.error(f"❌ 失败: {e}")
-            st.warning("提示：如果报错，说明该模型可能不支持多模态输入（只能读字，不能看图）。")
-
-# === Tab 3: 图像生成测试 (关键战场) ===
-with tab3:
-    st.subheader(f"正在测试: `{selected_model_name}`")
-    st.warning("⚠️ 注意：只有特定模型（如 imagen 或 gemini-image）才支持生图。用普通模型测试必然报错。")
-    
-    col_gen1, col_gen2 = st.columns(2)
-    
-    with col_gen1:
-        st.markdown("#### A. 文生图 (Text to Image)")
-        t2i_prompt = st.text_input("生图提示词", "A cute robot holding a Streamlit logo, 3d render")
-        
-        if st.button("🎨 测试文生图", key="btn_t2i"):
             try:
-                model = genai.GenerativeModel(selected_model_name)
-                # 强制要求返回图片
+                status.info("正在构建请求...")
+                
+                # 1. 图片预处理 (转为最标准的 RGB JPEG)
+                img = Image.open(uploaded_file).convert("RGB")
+                
+                # 2. 配置模型
+                generation_config = {}
+                if force_image_modality:
+                    generation_config["response_modalities"] = ["IMAGE"]
+                
+                safety_settings = {}
+                if disable_safety:
+                    safety_settings = {
+                        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                    }
+
+                model = genai.GenerativeModel(model_name)
+                
+                status.info(f"正在调用 {model_name}...")
+                
+                # 3. 发送请求
+                # 注意：我们将图片放在 Prompt 后面，这是官方推荐的多模态顺序
                 response = model.generate_content(
-                    t2i_prompt,
-                    generation_config={"response_modalities": ["IMAGE"]}
+                    [prompt, img],
+                    generation_config=generation_config,
+                    safety_settings=safety_settings
                 )
                 
-                # 解析
-                try:
-                    if not response.parts:
-                        st.error("未返回 Parts。")
-                    else:
-                        part = response.parts[0]
-                        if part.text:
-                            st.warning(f"AI 返回了文本而不是图片: {part.text}")
-                        elif part.inline_data:
-                            img_data = base64.b64decode(part.inline_data.data)
-                            st.image(img_data, caption="生成结果")
-                            st.success("🎉 成功！该模型支持文生图！")
-                except Exception as parse_err:
-                    st.error(f"解析失败: {parse_err}")
+                # 4. 深度解析响应 (打印所有细节)
+                status.success("请求完成！开始解析...")
+                
+                # --- 在 Debug 区域显示原始数据 ---
+                with debug_area:
+                    st.markdown("### 🩺 诊断报告")
                     
-            except Exception as e:
-                st.error(f"❌ 请求失败: {e}")
-
-    with col_gen2:
-        st.markdown("#### B. 图生图 (Image to Image)")
-        ref_img_gen = st.file_uploader("上传参考图", type=["jpg", "png"], key="gen_up")
-        i2i_prompt = st.text_input("编辑指令", "Change the background to a beach")
-        
-        if ref_img_gen and st.button("🎨 测试图生图", key="btn_i2i"):
-            try:
-                img_obj = Image.open(ref_img_gen)
-                st.image(img_obj, width=150, caption="输入图")
-                
-                model = genai.GenerativeModel(selected_model_name)
-                
-                # 尝试发送 [prompt, image]
-                response = model.generate_content(
-                    [i2i_prompt, img_obj],
-                    generation_config={"response_modalities": ["IMAGE"]}
-                )
-                
-                # 解析
-                try:
-                    if not response.parts:
-                        st.error("未返回 Parts。")
-                    else:
-                        part = response.parts[0]
-                        if part.text:
-                            st.warning(f"AI 返回了文本: {part.text}")
-                        elif part.inline_data:
-                            img_data = base64.b64decode(part.inline_data.data)
-                            st.image(img_data, caption="生成结果")
-                            st.success("🎉 成功！该模型支持图生图！")
-                except Exception as parse_err:
-                    st.error(f"解析失败: {parse_err}")
+                    # A. 检查 Prompt Feedback (是否被秒拦)
+                    if response.prompt_feedback:
+                        st.write("**Prompt Feedback:**")
+                        st.json(str(response.prompt_feedback))
                     
-            except Exception as e:
-                st.error(f"❌ 请求失败: {e}")
-                st.info("如果报错 '400 Bad Request' 或 'multimodal input not supported'，说明该模型不支持接收图片作为输入来生成新图片。")
+                    # B. 检查 Candidates
+                    if not response.candidates:
+                        st.error("❌ 没有返回任何 Candidates (生成彻底失败)")
+                    else:
+                        candidate = response.candidates[0]
+                        st.write(f"**Finish Reason:** {candidate.finish_reason}")
+                        
+                        # C. 遍历 Parts (关键！)
+                        st.write(f"**Parts Count:** {len(candidate.content.parts)}")
+                        
+                        for i, part in enumerate(candidate.content.parts):
+                            st.markdown(f"--- **Part {i}** ---")
+                            
+                            # 检查是否有文本
+                            if part.text:
+                                st.warning(f"📄 **发现文本内容:** \n\n{part.text}")
+                                st.caption("如果 AI 返回了文本，说明它可能拒绝了生图，或者正在解释为什么不能生图。")
+                            
+                            # 检查是否有图片
+                            if part.inline_data:
+                                st.success(f"🖼️ **发现图片数据!** (MimeType: {part.inline_data.mime_type})")
+                                try:
+                                    img_data = base64.b64decode(part.inline_data.data)
+                                    # 尝试显示
+                                    st.image(img_data, caption=f"Part {i} 解码图片")
+                                except Exception as e:
+                                    st.error(f"图片解码失败: {e}")
+                            
+                            # 检查是否有函数调用 (Function Call)
+                            if part.function_call:
+                                st.info(f"🔧 **发现函数调用:** {part.function_call}")
 
-# --- 底部：原始数据查看 ---
-with st.expander("🔍 查看所有模型原始数据 (JSON)"):
-    if st.button("获取 Raw Data"):
-        raw_info = []
-        for m in genai.list_models():
-            raw_info.append({
-                "name": m.name,
-                "methods": m.supported_generation_methods,
-                "input_limit": m.input_token_limit,
-                "output_limit": m.output_token_limit
-            })
-        st.json(raw_info)
+            except Exception as e:
+                status.error(f"💥 系统级报错: {str(e)}")
+                st.exception(e)
