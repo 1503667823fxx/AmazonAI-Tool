@@ -59,13 +59,13 @@ with st.sidebar:
     with col_s2:
         language = st.selectbox("语言", ["English (US)", "English (UK)", "Deutsch (DE)", "Français (FR)", "日本語 (JP)", "Español (ES)"])
 
-    tone = st.selectbox("文案风格", ["专业权威 (Professional)", "极具感染力 (Persuasive)", "简洁清晰 (Concise)", "生活化 (Lifestyle)"])
+    # 【修改点1】移除“文案风格”选择框，后台默认使用通用高转化风格
+    st.info("💡 当前已启用：亚马逊通用高转化风格 (专业、地道、SEO优化)")
     
     st.divider()
     
     # =========================================================
     # 🔴 【亚马逊 2025 新规库】 🔴
-    # 基于你上传的《规则.docx》整理，涵盖标题、五点、描述的核心要求
     # =========================================================
     default_amazon_rules = """【标题规则 (Title)】
 1. 长度：大部分分类不得超过 200 字符。**强烈建议控制在 80 字符以内**以优化移动端显示。
@@ -84,7 +84,7 @@ with st.sidebar:
 【五点描述规则 (Bullet Points)】
 1. 长度：单条建议控制在 200 字符以内（上限 500）。
 2. 格式：
-   - 采用 [大写卖点] + [具体描述] 结构。
+   - 采用 [大写卖点] + [冒号] + [具体描述] 结构。
    - 开头首字母大写。
    - **结尾不要加标点符号**。
 3. 内容：真实、准确、可量化（尺寸/材质/原产地）。保持顺序一致。
@@ -99,14 +99,13 @@ with st.sidebar:
     with st.expander("📜 Listing 核心撰写规范", expanded=True):
         amazon_rules = st.text_area("在此输入平台规范：", value=default_amazon_rules, height=400)
 
-    # Search Terms 规则 (基于文档更新)
+    # Search Terms 规则
     default_st_rules = """1. 长度：总字节数控制在 250 bytes 以内。
 2. 内容策略：
    - 仅输入同义词、近义词、缩写、场景词。
    - **禁止重复**标题、五点、品牌中已有的词（不增加权重）。
    - 禁止品牌名、ASIN、UPC。
    - 禁止主观词 (Amazing, Best) 和临时词 (New, Sale)。
-   - 禁止错别字变体（亚马逊会自动修正）。
 3. 格式：
    - 词与词之间用**半角空格**隔开。
    - **严禁使用标点符号**（逗号、冒号、分号等）。
@@ -147,7 +146,7 @@ def clean_text_for_copy(text):
 
 # --- 5. 主界面 ---
 st.title("✍️ Listing 文案工作室")
-st.caption(f"Engine: Gemini 3.0 Pro | {category} | {language}")
+st.caption(f"Engine: Gemini 3.0 Pro | {category} | {language} | 通用高转化风格")
 
 col1, col2 = st.columns([4, 6])
 
@@ -177,11 +176,11 @@ with col2:
         if not uploaded_file or not product_name:
             st.warning("请上传图片并填写名称")
         else:
-            with st.spinner("🧠 Gemini 正在根据《2025新规》撰写 (已启用权重排序)..."):
+            with st.spinner("🧠 Gemini 正在根据新规撰写 (已启用大小写修正 & HTML 模式)..."):
                 try:
                     model = genai.GenerativeModel('gemini-3-pro-preview')
                     
-                    # === Prompt 升级：加入权重排序指令 ===
+                    # === Prompt 升级 ===
                     prompt = f"""
                     你是一个亚马逊Listing顶级专家。请严格基于以下信息和规则生成JSON格式Listing。
                     
@@ -191,27 +190,36 @@ with col2:
                     卖点:{core_selling_point}
                     适用:{usage_scope}
                     补充:{bullet_supplements}
-                    语言:{language} 风格:{tone} 品类:{category}
+                    语言:{language} 
+                    风格: 亚马逊通用高转化风格 (专业、地道、SEO友好、简洁有力)
+                    品类:{category}
                     
                     【🔴 必须严格遵守的规则库 (Based on 2025 Rules)】
                     通用规则(标题/五点/描述):{amazon_rules}
                     ST规则(Search Terms):{st_rules}
                     违禁词:{forbidden_words}
                     
-                    【重要指令：关键词权重排序】
-                    用户输入的【核心关键词】严格遵循“顺序即权重”的原则：
-                    1. 输入越靠前的关键词权重最高（High Weight），必须优先安排在 Listing 的高权重位置（如标题前部、五点描述的第一、二条）。
-                    2. 输入越靠后的关键词权重越低（Low Weight），可以安排在五点描述的后部或产品描述中。
-                    3. 请勿打乱这一权重逻辑。
+                    【重要指令：关键词逻辑】
+                    1. **权重排序**：输入越靠前的词权重越高，优先安排在标题和五点前部。
+                    2. **格式规范**：【重要】所有埋入的关键词，必须自动转换为 **首字母大写 (Title Case)** 格式（例如 "wireless earbuds" -> "Wireless Earbuds"），以符合亚马逊规范。
+                    3. **标记**：用双尖括号 << >> 包裹。例如：This <<Wireless Earbuds>> features...
                     
-                    【重要指令：关键词标记】
-                    请将所有埋入的【核心关键词】用双尖括号 << >> 包裹起来。
-                    例如：This <<wireless earbuds>> features...
-                    不要使用 markdown 的 **，只用 << >>。
+                    【重要指令：格式细节】
+                    1. **五点描述**：必须严格保留“大写卖点”后的英文冒号 : 。格式如：BIG FEATURE: The description...
+                    2. **产品描述**：必须输出 **HTML 源代码**。使用 <b> 加粗关键点，使用 <br> 换行，使用 <p> 分段。不要输出纯文本。
                     
                     【输出格式】
                     仅输出 JSON：
-                    {{ "title": "...", "bullet_point_1": "...", "bullet_point_2": "...", "bullet_point_3": "...", "bullet_point_4": "...", "bullet_point_5": "...", "description": "...", "search_terms": "..." }}
+                    {{ 
+                        "title": "...", 
+                        "bullet_point_1": "FEATURE: Description...", 
+                        "bullet_point_2": "FEATURE: Description...", 
+                        "bullet_point_3": "FEATURE: Description...", 
+                        "bullet_point_4": "FEATURE: Description...", 
+                        "bullet_point_5": "FEATURE: Description...", 
+                        "description": "HTML Code...", 
+                        "search_terms": "..." 
+                    }}
                     """
                     
                     image_obj = Image.open(uploaded_file)
@@ -221,16 +229,15 @@ with col2:
                     result = parse_gemini_response(clean_text_resp)
                     
                     if result:
-                        st.success("✅ 生成成功！已根据新规和权重优化。")
+                        st.success("✅ 生成成功！已修复大小写、冒号及HTML格式。")
                         
                         # --- 标题区域 ---
                         st.markdown("#### 📝 Title (标题)")
                         raw_title = result.get("title", "")
-                        # 1. 显示高亮预览 (HTML)
                         st.markdown(render_highlighted_text(raw_title), unsafe_allow_html=True)
-                        # 2. 显示纯净编辑框
                         st.text_area("Title (Copy here)", value=clean_text_for_copy(raw_title), height=80, label_visibility="collapsed")
                         
+                        # --- 五点区域 ---
                         st.markdown("#### 📌 Bullet Points (五点描述)")
                         for i in range(1, 6):
                             raw_bullet = result.get(f"bullet_point_{i}", "")
@@ -238,18 +245,45 @@ with col2:
                             with col_b1:
                                 st.markdown(f"**BP{i}**")
                             with col_b2:
-                                # 预览
                                 st.markdown(render_highlighted_text(raw_bullet), unsafe_allow_html=True)
-                                # 复制框
                                 st.text_area(f"Bullet {i}", value=clean_text_for_copy(raw_bullet), height=100, label_visibility="collapsed")
                         
+                        # --- ST 区域 ---
                         st.markdown("#### 🔍 Search Terms")
                         st.text_area("Search Terms", value=clean_text_for_copy(result.get("search_terms", "")), height=100)
                         
-                        st.markdown("#### 📖 Description")
-                        st.text_area("Description", value=clean_text_for_copy(result.get("description", "")), height=200)
+                        # --- 描述区域 (HTML) ---
+                        st.markdown("#### 📖 Description (HTML Source)")
+                        # 【修改点4】直接显示 HTML 源码供复制
+                        st.text_area("Description Code", value=clean_text_for_copy(result.get("description", "")), height=200)
+                        
+                        # --- 【修改点5】总预览页面 (All-in-One) ---
+                        st.markdown("---")
+                        with st.expander("📋 全局文案总览 (All-in-One Preview)", expanded=True):
+                            st.info("💡 提示：这里汇总了所有生成内容（纯净版），方便一次性查看或复制。")
+                            
+                            all_content = f"""【Title】
+{clean_text_for_copy(raw_title)}
+
+【Bullet Points】
+1. {clean_text_for_copy(result.get('bullet_point_1', ''))}
+2. {clean_text_for_copy(result.get('bullet_point_2', ''))}
+3. {clean_text_for_copy(result.get('bullet_point_3', ''))}
+4. {clean_text_for_copy(result.get('bullet_point_4', ''))}
+5. {clean_text_for_copy(result.get('bullet_point_5', ''))}
+
+【Search Terms】
+{clean_text_for_copy(result.get('search_terms', ''))}
+
+【Description (HTML)】
+{clean_text_for_copy(result.get('description', ''))}
+"""
+                            st.text_area("Full Listing Content", value=all_content, height=600)
+                            
                     else:
                         st.error("解析失败")
                         st.text(response.text)
+                except Exception as e:
+                    st.error(f"错误: {e}")
                 except Exception as e:
                     st.error(f"错误: {e}")
