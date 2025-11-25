@@ -117,12 +117,12 @@ def invert_mask_image(mask_img: Image.Image) -> Image.Image:
 
 def generate_image(
     original_img: Image.Image,
-    prompt: string,
+    prompt: str, # Changed string to str
     mode: str,
     image_count: int = 1,
     secondary_img: Image.Image = None,
     inpainting_region: str = 'inside',
-    negative_prompt: string = ''
+    negative_prompt: str = '' # Changed string to str
 ):
     """
     复刻 TS: editImage 核心逻辑
