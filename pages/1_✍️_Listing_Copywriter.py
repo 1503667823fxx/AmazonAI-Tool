@@ -99,17 +99,17 @@ with st.sidebar:
     with st.expander("📜 Listing 核心撰写规范", expanded=True):
         amazon_rules = st.text_area("在此输入平台规范：", value=default_amazon_rules, height=400)
 
-    # Search Terms 规则
-    default_st_rules = """1. 长度：总字节数控制在 250 bytes 以内。
+    # Search Terms 规则 - 已更新为基于词根提取的逻辑
+    default_st_rules = """1. 来源限制：必须深度挖掘用户输入的【核心关键词】，提取其词根(Roots)和变体进行重组。
 2. 内容策略：
-   - 仅输入同义词、近义词、缩写、场景词。
-   - **禁止重复**标题、五点、品牌中已有的词（不增加权重）。
-   - 禁止品牌名、ASIN、UPC。
-   - 禁止主观词 (Amazing, Best) 和临时词 (New, Sale)。
+   - 提取输入词的词根 (Stemming) 进行组合。
+   - **禁止**瞎编与输入关键词无关的无效词。
+   - **禁止**直接复制标题和五点中已出现的完整短语（浪费空间）。
+   - 禁止品牌名、ASIN、UPC、主观形容词。
 3. 格式：
+   - 总字节数 < 250 bytes。
    - 词与词之间用**半角空格**隔开。
-   - **严禁使用标点符号**（逗号、冒号、分号等）。
-4. 逻辑：按逻辑顺序排列。"""
+   - **严禁使用标点符号**。"""
 
     with st.expander("🔍 Search Terms (ST) 规则", expanded=False):
         st_rules = st.text_area("后台关键词规则：", value=default_st_rules, height=250)
@@ -203,6 +203,11 @@ with col2:
                     1. **权重排序**：输入越靠前的词权重越高，优先安排在标题和五点前部。
                     2. **格式规范**：【重要】所有埋入的关键词，必须自动转换为 **首字母大写 (Title Case)** 格式（例如 "wireless earbuds" -> "Wireless Earbuds"），以符合亚马逊规范。
                     3. **标记**：用双尖括号 << >> 包裹。例如：This <<Wireless Earbuds>> features...
+
+                    【重要指令：Search Terms (ST) 生成算法】
+                    1. **绝对来源**：ST的内容必须且只能基于用户输入的【核心关键词】进行生成。
+                    2. **词根重组 (Root Recombination)**：不要瞎编无效词。请对核心关键词进行拆解，提取有效词根（Word Stems），并将这些词根重新组合成高搜索量的长尾词。
+                    3. **去重策略**：不要简单复制标题中已有的完整短语。提取那些“未被充分利用”的词根或变体。
                     
                     【重要指令：格式细节】
                     1. **五点描述**：必须严格保留“大写卖点”后的英文冒号 : 。格式如：BIG FEATURE: The description...
@@ -283,7 +288,5 @@ with col2:
                     else:
                         st.error("解析失败")
                         st.text(response.text)
-                except Exception as e:
-                    st.error(f"错误: {e}")
                 except Exception as e:
                     st.error(f"错误: {e}")
