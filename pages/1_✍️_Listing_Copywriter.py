@@ -2,49 +2,57 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import json
-import sys      # (这两行是为了让子页面能找到根目录的 auth.py，必须要加)
+import sys
 import os
-sys.path.append(os.path.abspath('.'))
-import auth     # <--- 引入
+import re
 
-# --- 1. 页面基础配置 ---
-st.set_page_config(
-    page_title="亚马逊全能智造台 V2.1",
-    page_icon="🛒",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-if not auth.check_password():
-    st.stop()
-    
-# 自定义 CSS：优化间距，让界面更紧凑，代码块字体更清晰
+# 为了引入根目录的 auth.py
+sys.path.append(os.path.abspath('.'))
+try:
+    import auth
+except ImportError:
+    pass 
+
+# --- 1. 页面配置 ---
+st.set_page_config(page_title="文案工作室", page_icon="✍️", layout="wide")
+
+# 自定义 CSS
 st.markdown("""
 <style>
     .stTextArea textarea {font-size: 14px; font-family: 'Microsoft YaHei', sans-serif;}
-    .reportview-container .main .block-container {padding-top: 2rem;}
-    /* 优化侧边栏字体 */
-    section[data-testid="stSidebar"] {
-        width: 400px !important; # 尝试加宽侧边栏
+    section[data-testid="stSidebar"] {width: 400px !important;}
+    
+    /* 关键词高亮样式 */
+    .kw-highlight {
+        background-color: #fff3cd;
+        color: #856404;
+        font-weight: bold;
+        padding: 2px 4px;
+        border-radius: 4px;
+        border: 1px solid #ffeeba;
     }
 </style>
 """, unsafe_allow_html=True)
+
+# 安全检查
+if 'auth' in sys.modules:
+    if not auth.check_password():
+        st.stop()
 
 # --- 2. 验证 API Key ---
 try:
     if "GOOGLE_API_KEY" in st.secrets:
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     else:
-        st.error("❌ 未找到 Google API Key。请检查 .streamlit/secrets.toml")
+        st.error("❌ 未找到 Google API Key")
         st.stop()
 except Exception as e:
     st.error(f"API配置出错: {e}")
 
-# --- 3. 侧边栏：规则与红线 (Rule Engine) ---
+# --- 3. 侧边栏 ---
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg", width=120)
-    st.title("⚙️ 全局规则配置")
+    st.title("⚙️ 文案规则配置")
     
-    # Layer 2: 品类与风格
     col_s1, col_s2 = st.columns(2)
     with col_s1:
         category = st.selectbox("品类", ["3C电子", "家居生活", "时尚服饰", "户外运动", "母婴用品", "美妆个护", "宠物用品", "汽配"])
@@ -55,44 +63,63 @@ with st.sidebar:
     
     st.divider()
     
-    # Layer 3: 亚马逊撰写规则 (已放大)
-    default_amazon_rules = """1. 标题：品牌名开头，核心词前置，首字母大写(介词除外)，无特殊符号。
-2. 五点：采用 [大写卖点] + [具体描述] 结构。每点不超过200字符。
-3. 严禁：夸大宣传(Best/No.1)，保修承诺(Warranty)，引导好评。
-4. 格式：数字请用阿拉伯数字(1, 2)而非单词(one, two)。"""
-    
-    with st.expander("📜 Listing 通用撰写规则 (点击展开)", expanded=True):
-        amazon_rules = st.text_area(
-            "在此输入平台规范，框体已加大：",
-            value=default_amazon_rules,
-            height=300, # 大幅增加高度
-            help="在这里编辑所有通用的撰写逻辑，AI会严格遵守。"
-        )
+    # =========================================================
+    # 🔴 【亚马逊 2025 新规库】 🔴
+    # 基于你上传的《规则.docx》整理，涵盖标题、五点、描述的核心要求
+    # =========================================================
+    default_amazon_rules = """【标题规则 (Title)】
+1. 长度：大部分分类不得超过 200 字符。**强烈建议控制在 80 字符以内**以优化移动端显示。
+2. 格式：
+   - 推荐结构：品牌 + 核心关键词 + 关键属性 + 颜色 + 尺寸 + 型号。
+   - 每个单词首字母大写（介词/连词/冠词 <5 字母除外）。
+   - 使用阿拉伯数字 (2) 而非单词 (Two)。
+   - 禁止全大写。
+3. 禁止：
+   - 特殊符号 (! $ ? _ {} ^ ~ # < > *) 及作为装饰的符号。
+   - 单词重复超过 2 次（单复数算重复）。
+   - 促销语 (Free shipping, 100% Quality, Sale)。
+   - 主观评价 (Best Seller, Hot Item, Amazing)。
+   - 卖家名称。
 
-    # Search Terms 规则 (单独新增)
-    default_st_rules = """1. 仅包含关键词，用空格分隔。
-2. 不要重复标题和五点中已出现的词。
-3. 不要使用品牌名或竞品名。
-4. 总字节数控制在 249 bytes 以内。"""
+【五点描述规则 (Bullet Points)】
+1. 长度：单条建议控制在 200 字符以内（上限 500）。
+2. 格式：
+   - 采用 [大写卖点] + [具体描述] 结构。
+   - 开头首字母大写。
+   - **结尾不要加标点符号**。
+3. 内容：真实、准确、可量化（尺寸/材质/原产地）。保持顺序一致。
+4. 禁止：含糊其辞、促销信息、运送信息、主观评论。
+
+【产品描述规则 (Description)】
+1. 长度：不超过 2000 字符。
+2. 内容：语法正确，完整句子。包含尺寸、保养、保修。
+3. 禁止：卖家联系方式、外链、促销信息。"""
+    # =========================================================
+
+    with st.expander("📜 Listing 核心撰写规范", expanded=True):
+        amazon_rules = st.text_area("在此输入平台规范：", value=default_amazon_rules, height=400)
+
+    # Search Terms 规则 (基于文档更新)
+    default_st_rules = """1. 长度：总字节数控制在 250 bytes 以内。
+2. 内容策略：
+   - 仅输入同义词、近义词、缩写、场景词。
+   - **禁止重复**标题、五点、品牌中已有的词（不增加权重）。
+   - 禁止品牌名、ASIN、UPC。
+   - 禁止主观词 (Amazing, Best) 和临时词 (New, Sale)。
+   - 禁止错别字变体（亚马逊会自动修正）。
+3. 格式：
+   - 词与词之间用**半角空格**隔开。
+   - **严禁使用标点符号**（逗号、冒号、分号等）。
+4. 逻辑：按逻辑顺序排列。"""
 
     with st.expander("🔍 Search Terms (ST) 规则", expanded=False):
-        st_rules = st.text_area(
-            "后台关键词规则：",
-            value=default_st_rules,
-            height=150
-        )
+        st_rules = st.text_area("后台关键词规则：", value=default_st_rules, height=250)
 
-    # 违禁词库
-    with st.expander("🛑 违禁词库 (Blacklist)", expanded=False):
-        forbidden_words = st.text_area(
-            "严禁使用的词 (逗号分隔)",
-            value="Best Seller, No.1, Top rated, Free shipping, Guarantee, 100%, Satisfaction, FDA approved",
-            height=100
-        )
+    with st.expander("🛑 违禁词库", expanded=False):
+        forbidden_words = st.text_area("严禁使用的词", value="Best Seller, No.1, Top rated, Free shipping, Guarantee, Hot item, Amazing, 100% Quality", height=100)
 
 # --- 4. 辅助函数 ---
 def parse_gemini_response(text):
-    """尝试从 Gemini 的回复中提取 JSON"""
     try:
         start = text.find('{')
         end = text.rfind('}') + 1
@@ -102,121 +129,127 @@ def parse_gemini_response(text):
         pass
     return None
 
-# --- 5. 主界面布局 ---
-st.title("🛒 亚马逊 Listing 生成器 V2.1")
-st.caption(f"当前引擎：Gemini 3.0 Pro | 模式：{category} + {language} | 优化的宽屏编辑模式")
+def render_highlighted_text(text):
+    """
+    将 <<keyword>> 转换为 HTML 高亮显示
+    """
+    if not text: return ""
+    # 将 <<内容>> 替换为 <span class='kw-highlight'>内容</span>
+    highlighted = re.sub(r"<<(.*?)>>", r"<span class='kw-highlight'>\1</span>", text)
+    return highlighted
 
-# 调整列比例，给右侧输出区更多空间 [4, 6]
+def clean_text_for_copy(text):
+    """
+    移除 << >> 符号，返回纯净文本供复制
+    """
+    if not text: return ""
+    return text.replace("<<", "").replace(">>", "")
+
+# --- 5. 主界面 ---
+st.title("✍️ Listing 文案工作室")
+st.caption(f"Engine: Gemini 3.0 Pro | {category} | {language}")
+
 col1, col2 = st.columns([4, 6])
 
-# === 左侧：深度信息输入 ===
 with col1:
-    st.subheader("1. 产品档案 (Product DNA)")
-    
-    # 基础信息
+    st.subheader("1. 产品档案")
     uploaded_file = st.file_uploader("上传产品主图", type=["jpg", "png", "jpeg", "webp"])
     if uploaded_file:
         st.image(uploaded_file, width=150)
         
-    product_name = st.text_input("产品名称 (Core Name) *", placeholder="例如：Active Noise Cancelling Headphones")
+    product_name = st.text_input("产品名称 *", placeholder="例如：Active Noise Cancelling Headphones")
     
-    # 核心SEO
-    top_keywords = st.text_area("🔍 核心关键词 Top 10 (SEO Keywords) *", 
-                                placeholder="流量词，AI会强制埋入标题和五点中。\n例如：wireless earbuds, bluetooth headphones...",
-                                height=100)
+    top_keywords = st.text_area(
+        "🔍 核心关键词 Top 10 *", 
+        placeholder="⚠️ 注意顺序：请按重要性从高到低输入！\n越靠前的词，AI会优先埋入标题和五点前部。\n例如：wireless earbuds, bluetooth headphones", 
+        height=100,
+        help="底层规则：AI会严格遵循“顺序即权重”原则。输入框中最靠前的词权重最高。"
+    )
     
-    # 深度细节 (已删除 What's in the box)
     with st.expander("📝 详细卖点与参数", expanded=True):
-        core_selling_point = st.text_area("💎 核心卖点描述", placeholder="例如：行业领先的42dB降噪深度，瞬间静音。", height=100)
-        usage_scope = st.text_area("🎯 适用范围/人群", placeholder="例如：通勤、健身房、飞机出行。兼容iPhone和Android。", height=100)
-        bullet_supplements = st.text_area("➕ 五点描述补充内容", placeholder="还有什么必须写进五点的？例如：IPX7防水等级。", height=100)
+        core_selling_point = st.text_area("💎 核心卖点描述", height=100)
+        usage_scope = st.text_area("🎯 适用范围", height=100)
+        bullet_supplements = st.text_area("➕ 补充内容", height=100)
 
-# === 右侧：生成结果 ===
 with col2:
-    st.subheader("2. 智能生成结果 (Review & Edit)")
-    
-    generate_btn = st.button("✨ 立即生成 Listing", type="primary", use_container_width=True)
-
-    if generate_btn:
+    st.subheader("2. 生成结果")
+    if st.button("✨ 立即生成 Listing", type="primary", use_container_width=True):
         if not uploaded_file or not product_name:
-            st.warning("⚠️ 请至少上传图片并填写产品名称！")
+            st.warning("请上传图片并填写名称")
         else:
-            with st.spinner("🧠 深度分析中... \n(AI正在阅读您的规则库...)"):
+            with st.spinner("🧠 Gemini 正在根据《2025新规》撰写 (已启用权重排序)..."):
                 try:
-                    # 使用 3.0 Pro Preview
                     model = genai.GenerativeModel('gemini-3-pro-preview')
                     
-                    # 构建 Prompt (移除装箱清单，加入ST规则)
+                    # === Prompt 升级：加入权重排序指令 ===
                     prompt = f"""
-                    你是一个亚马逊Listing顶级撰写专家。请严格基于以下信息生成Listing。
-
-                    【产品档案】
-                    - 产品名称: {product_name}
-                    - 核心关键词(必须埋入): {top_keywords}
-                    - 核心卖点: {core_selling_point}
-                    - 适用范围: {usage_scope}
-                    - 补充要求: {bullet_supplements}
+                    你是一个亚马逊Listing顶级专家。请严格基于以下信息和规则生成JSON格式Listing。
                     
-                    【目标受众与风格】
-                    - 语言: {language}
-                    - 风格: {tone}
-                    - 品类: {category}
-
-                    【全局撰写规则 (Compliance)】
-                    {amazon_rules}
+                    【输入信息】
+                    产品:{product_name}
+                    核心关键词(SEO Keywords):{top_keywords}
+                    卖点:{core_selling_point}
+                    适用:{usage_scope}
+                    补充:{bullet_supplements}
+                    语言:{language} 风格:{tone} 品类:{category}
                     
-                    【后台关键词规则 (Search Terms)】
-                    {st_rules}
-
-                    - 严禁词汇: {forbidden_words}
-
-                    【输出格式 - JSON】
-                    请仅输出标准 JSON，包含以下字段：
-                    {{
-                        "title": "符合SEO规则的标题",
-                        "bullet_point_1": "大写卖点: 描述",
-                        "bullet_point_2": "大写卖点: 描述",
-                        "bullet_point_3": "大写卖点: 描述",
-                        "bullet_point_4": "大写卖点: 描述",
-                        "bullet_point_5": "大写卖点: 描述",
-                        "description": "HTML格式的产品描述(A+文本)",
-                        "search_terms": "后台ST词"
-                    }}
+                    【🔴 必须严格遵守的规则库 (Based on 2025 Rules)】
+                    通用规则(标题/五点/描述):{amazon_rules}
+                    ST规则(Search Terms):{st_rules}
+                    违禁词:{forbidden_words}
+                    
+                    【重要指令：关键词权重排序】
+                    用户输入的【核心关键词】严格遵循“顺序即权重”的原则：
+                    1. 输入越靠前的关键词权重最高（High Weight），必须优先安排在 Listing 的高权重位置（如标题前部、五点描述的第一、二条）。
+                    2. 输入越靠后的关键词权重越低（Low Weight），可以安排在五点描述的后部或产品描述中。
+                    3. 请勿打乱这一权重逻辑。
+                    
+                    【重要指令：关键词标记】
+                    请将所有埋入的【核心关键词】用双尖括号 << >> 包裹起来。
+                    例如：This <<wireless earbuds>> features...
+                    不要使用 markdown 的 **，只用 << >>。
+                    
+                    【输出格式】
+                    仅输出 JSON：
+                    {{ "title": "...", "bullet_point_1": "...", "bullet_point_2": "...", "bullet_point_3": "...", "bullet_point_4": "...", "bullet_point_5": "...", "description": "...", "search_terms": "..." }}
                     """
                     
-                    # 传入图片和Prompt
                     image_obj = Image.open(uploaded_file)
                     response = model.generate_content([prompt, image_obj])
                     
-                    # 解析
-                    result = parse_gemini_response(response.text)
+                    clean_text_resp = response.text.replace("```json", "").replace("```", "")
+                    result = parse_gemini_response(clean_text_resp)
                     
                     if result:
-                        st.success("✅ 生成成功！所有文本框均可直接编辑修改。")
+                        st.success("✅ 生成成功！已根据新规和权重优化。")
                         
+                        # --- 标题区域 ---
                         st.markdown("#### 📝 Title (标题)")
-                        st.text_area("Title", value=result.get("title", ""), height=100, label_visibility="collapsed")
+                        raw_title = result.get("title", "")
+                        # 1. 显示高亮预览 (HTML)
+                        st.markdown(render_highlighted_text(raw_title), unsafe_allow_html=True)
+                        # 2. 显示纯净编辑框
+                        st.text_area("Title (Copy here)", value=clean_text_for_copy(raw_title), height=80, label_visibility="collapsed")
                         
                         st.markdown("#### 📌 Bullet Points (五点描述)")
-                        # 使用 text_area 替代 code，实现自动换行和编辑功能
-                        st.text_area("Bullet 1", value=result.get("bullet_point_1", ""), height=100)
-                        st.text_area("Bullet 2", value=result.get("bullet_point_2", ""), height=100)
-                        st.text_area("Bullet 3", value=result.get("bullet_point_3", ""), height=100)
-                        st.text_area("Bullet 4", value=result.get("bullet_point_4", ""), height=100)
-                        st.text_area("Bullet 5", value=result.get("bullet_point_5", ""), height=100)
+                        for i in range(1, 6):
+                            raw_bullet = result.get(f"bullet_point_{i}", "")
+                            col_b1, col_b2 = st.columns([0.1, 0.9])
+                            with col_b1:
+                                st.markdown(f"**BP{i}**")
+                            with col_b2:
+                                # 预览
+                                st.markdown(render_highlighted_text(raw_bullet), unsafe_allow_html=True)
+                                # 复制框
+                                st.text_area(f"Bullet {i}", value=clean_text_for_copy(raw_bullet), height=100, label_visibility="collapsed")
                         
-                        st.markdown("#### 🔍 Search Terms (后台ST - 独立规则控制)")
-                        st.text_area("Search Terms", value=result.get("search_terms", ""), height=100)
+                        st.markdown("#### 🔍 Search Terms")
+                        st.text_area("Search Terms", value=clean_text_for_copy(result.get("search_terms", "")), height=100)
                         
-                        st.markdown("#### 📖 Description (文案)")
-                        st.text_area("Description (HTML)", value=result.get("description", ""), height=300)
-                        
+                        st.markdown("#### 📖 Description")
+                        st.text_area("Description", value=clean_text_for_copy(result.get("description", "")), height=200)
                     else:
-                        st.error("⚠️ 格式解析失败，请重试。以下是原始内容：")
+                        st.error("解析失败")
                         st.text(response.text)
-                        
                 except Exception as e:
-                    st.error(f"发生错误: {e}")
-
-st.markdown("---")
-st.caption("Amazon AI Studio V2.1 | Powered by Gemini 3.0 Pro")
+                    st.error(f"错误: {e}")
