@@ -30,21 +30,16 @@ st.markdown("""
 <style>
     .stButton button {width: 100%; border-radius: 8px;}
     .stImage {border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
-    /* 优化 Tab 样式 */
-    .stTabs [data-baseweb="tab-list"] {gap: 10px;}
-    .stTabs [data-baseweb="tab"] {
-        height: 50px; 
-        background-color: #f8f9fa; 
-        border-radius: 5px 5px 0 0;
-        border: 1px solid #e0e0e0;
-        border-bottom: none;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #ffffff; 
-        border-top: 3px solid #ff9900;
+    .stTextArea textarea {font-family: 'Consolas', monospace; font-size: 14px;}
+    /* 步骤指示器 */
+    .step-indicator {
+        background-color: #e6f3ff;
+        padding: 10px;
+        border-radius: 5px;
+        border-left: 5px solid #0068c9;
+        margin-bottom: 15px;
         font-weight: bold;
     }
-    .stTextArea textarea {font-family: 'Consolas', monospace; font-size: 14px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -68,39 +63,48 @@ def download_image(url_or_data, filename, is_bytes=False):
     else:
         st.markdown(f"### [📥 点击下载 {filename}]({url_or_data})")
 
-def get_vision_model():
-    """获取视觉模型 (用于读图)"""
-    return genai.GenerativeModel('gemini-2.5-flash')
-
 def get_pro_vision_model():
-    """获取高级视觉模型 (用于生成Prompt，不生图)"""
+    """获取高级视觉模型 (用于读图写指令，不生图)"""
     return genai.GenerativeModel('gemini-3-pro-preview') 
 
 def get_image_gen_model_v3():
-    """获取图像生成模型 V3 (优先尝试)"""
+    """获取图像生成模型 V3 (优先)"""
     return genai.GenerativeModel('gemini-3-pro-image-preview')
 
 def get_image_gen_model_v25():
-    """获取图像生成模型 V2.5 (保底备用)"""
+    """获取图像生成模型 V2.5 (保底)"""
     return genai.GenerativeModel('gemini-2.5-flash-image-preview')
 
-def process_rembg_mask(image_file):
-    """Rembg 抠图并生成反向蒙版"""
+def validate_and_process_image(response_obj, model_name):
+    """
+    通用图像验证函数：检查 API 返回的是不是真的图片
+    返回: (image_bytes, error_message)
+    """
     try:
-        output_url = replicate.run("cjwbw/rembg:1.4", input={"image": image_file})
-        response = requests.get(str(output_url))
-        no_bg_image = Image.open(io.BytesIO(response.content))
-        
-        if no_bg_image.mode == 'RGBA':
-            alpha = no_bg_image.split()[-1]
-        else:
-            alpha = Image.new("L", no_bg_image.size, 255)
+        if not response_obj.parts:
+            return None, f"{model_name} 未返回任何内容。"
             
-        mask = ImageOps.invert(alpha)
-        return no_bg_image, mask
+        # 检查是否被拦截返回了文本
+        if response_obj.parts[0].text:
+            return None, f"{model_name} 拒绝生成图像，原因: {response_obj.parts[0].text}"
+            
+        if not response_obj.parts[0].inline_data:
+            return None, f"{model_name} 返回了未知格式的数据。"
+
+        # 解码 Base64
+        image_data = response_obj.parts[0].inline_data.data
+        image_bytes = base64.b64decode(image_data)
+        
+        # 关键步骤：使用 PIL 尝试打开，验证完整性
+        try:
+            img_test = Image.open(io.BytesIO(image_bytes))
+            img_test.verify() # 验证文件头和尾
+            return image_bytes, None # 验证通过
+        except Exception as img_err:
+            return None, f"{model_name} 返回了损坏的图像数据 (PIL校验失败): {str(img_err)}"
+
     except Exception as e:
-        st.error(f"抠图失败: {e}")
-        return None, None
+        return None, f"解析响应时发生严重错误: {str(e)}"
 
 # --- 5. 顶部导航 ---
 st.title("🎨 亚马逊 AI 视觉工场 (Pro)")
@@ -131,12 +135,6 @@ tabs = st.tabs([
 # ==================================================
 with tabs[0]:
     st.header("🖼️ 双模混合图生图 (Hybrid Workflow)")
-    st.markdown("""
-    **严谨工作流**：
-    1. **构思**：选择类型 -> 填写想法 -> Gemini 3.0 Pro 读图并综合生成指令。
-    2. **Step 1 (草图)**：Gemini 图像模型执行逻辑修改。
-    3. **Step 2 (精修)**：Flux 进行光影渲染。
-    """)
     
     col1, col2 = st.columns([5, 5])
     
@@ -148,11 +146,11 @@ with tabs[0]:
         if ref_img:
             st.image(ref_img, width=200, caption="原图")
             
-            st.markdown("#### 第一步：告诉 AI 你想要什么")
+            st.markdown('<div class="step-indicator">第 1 步：告诉 AI 你想要什么</div>', unsafe_allow_html=True)
             
             # 1. 选择任务类型
             task_type = st.radio(
-                "请选择生成方向：", 
+                "生成方向：", 
                 ["🏡 场景图 (Lifestyle - 放入真实场景)", 
                  "✨ 展示图 (Creative Show - 纯净高级背景)", 
                  "🔍 产品图 (Product Focus - 特写/状态改变)"], 
@@ -161,139 +159,159 @@ with tabs[0]:
             
             # 2. 用户输入想法
             user_idea = st.text_area(
-                "您的具体想法 (可选，支持中文)", 
+                "具体想法 (中文/英文)", 
                 height=80, 
-                placeholder="例如：我想要一个温馨的圣诞节氛围，背景有壁炉和雪花..."
+                placeholder="例如：我想要一个温馨的圣诞节氛围，背景有壁炉和雪花，给产品打暖色光..."
             )
             
             # 3. 生成指令按钮
-            if st.button("🧠 Gemini 读图并生成指令", type="secondary"):
-                with st.spinner("Gemini 3.0 Pro 正在分析图片并融合您的想法..."):
-                    try:
-                        img_obj = Image.open(ref_img)
-                        
-                        # 使用 3.0 Pro Preview (只读图写字，不画图)
-                        model = get_pro_vision_model()
-                        
-                        prompt = f"""
-                        你是一个亚马逊电商视觉专家。请基于这张图片的内容，结合用户的需求，写一段用于 AI 图像编辑的精确指令 (Prompt)。
-                        
-                        【任务类型】{task_type}
-                        【用户想法】{user_idea}
-                        
-                        【图片分析】
-                        请先快速识别图片中的主体产品是什么，保留其核心特征。
-                        
-                        【输出要求】
-                        请输出一段 **英文** 指令，格式为：
-                        "Edit this image to [change description]. Keep the product [product features] unchanged. Set the background to [background description]. Lighting should be [lighting description]."
-                        
-                        请直接输出指令内容，不要包含Markdown或其他废话。
-                        """
-                        
-                        response = model.generate_content([prompt, img_obj])
-                        st.session_state["hybrid_instruction"] = response.text
-                        st.success("✅ 指令已生成，请在下方确认！")
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"分析失败: {e}")
+            if st.button("🧠 Gemini 分析并写指令", type="secondary"):
+                if not user_idea:
+                    st.warning("请先告诉 AI 你的具体想法！")
+                else:
+                    with st.spinner("Gemini 3.0 Pro 正在读图并构思..."):
+                        try:
+                            img_obj = Image.open(ref_img)
+                            model = get_pro_vision_model()
+                            
+                            prompt = f"""
+                            你是一个亚马逊电商视觉专家。请基于这张图片的内容，结合用户的需求，写一段用于 AI 图像编辑的精确指令 (Prompt)。
+                            
+                            【任务类型】{task_type}
+                            【用户想法】{user_idea}
+                            
+                            【图片分析】
+                            请先快速识别图片中的主体产品是什么，保留其核心特征。
+                            
+                            【输出要求】
+                            请输出一段 **英文** 指令，格式为：
+                            "Edit this image to [change description]. Keep the product [product features] unchanged. Set the background to [background description]. Lighting should be [lighting description]."
+                            
+                            请直接输出指令内容，不要包含Markdown或其他废话。
+                            """
+                            
+                            response = model.generate_content([prompt, img_obj])
+                            st.session_state["hybrid_instruction"] = response.text
+                            st.success("✅ 指令已生成，请在下方确认！")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"分析失败: {e}")
 
             # 4. 显示并确认指令
-            st.markdown("#### 第二步：确认指令")
+            st.markdown('<div class="step-indicator">第 2 步：确认 AI 的指令</div>', unsafe_allow_html=True)
             edit_instruction = st.text_area(
-                "最终编辑指令 (英文 - 可手动修改)", 
+                "最终编辑指令 (英文 - Step 1 用)", 
                 value=st.session_state["hybrid_instruction"], 
                 height=120,
-                help="这是发给 AI 画师的最终命令。"
+                help="Gemini 将根据这段话生成草图。"
             )
             
             # 5. 执行 Step 1
-            st.markdown("#### 第三步：生成草图")
+            st.markdown('<div class="step-indicator">第 3 步：生成逻辑草图</div>', unsafe_allow_html=True)
             if st.button("✨ Step 1: Gemini 生成草图", type="primary"):
                 if not ref_img or not edit_instruction:
                     st.warning("请先生成或输入编辑指令！")
                 else:
-                    with st.spinner("🧠 Gemini 图像模型正在绘制... (尝试使用 3.0 Pro)"):
+                    # 清空旧图，防止误会
+                    st.session_state["step1_image"] = None
+                    
+                    with st.spinner("🧠 正在绘制草图... (尝试使用 3.0 Pro)"):
                         try:
-                            # 准备图片：转换为 RGB JPEG 格式，防止格式兼容性问题
+                            # 准备图片：转换为 RGB JPEG 格式
                             ref_img.seek(0)
                             original_img = Image.open(ref_img).convert("RGB")
                             
-                            # 尝试优先使用 3.0 Pro Image
-                            model = get_image_gen_model_v3()
+                            # --- 尝试方案 A: 3.0 Pro ---
+                            model_v3 = get_image_gen_model_v3()
+                            success = False
                             
                             try:
-                                response = model.generate_content(
+                                response = model_v3.generate_content(
                                     [edit_instruction, original_img],
                                     generation_config={"response_modalities": ["IMAGE"]}
                                 )
-                                # 解析
-                                image_data = response.candidates[0].content.parts[0].inline_data.data
-                                image_bytes = base64.b64decode(image_data)
-                                # 验证
-                                Image.open(io.BytesIO(image_bytes)).verify()
-                                st.session_state["step1_image"] = image_bytes
-                                st.success("✅ 3.0 Pro 生成成功！")
+                                # 严格验证
+                                img_bytes, err_msg = validate_and_process_image(response, "Gemini 3.0 Pro")
                                 
+                                if img_bytes:
+                                    st.session_state["step1_image"] = img_bytes
+                                    st.success("✅ 3.0 Pro 生成成功！")
+                                    success = True
+                                else:
+                                    print(f"V3 验证失败: {err_msg}") # 后台打印
+                                    # 不报错给用户，直接走 Fallback
+                                    
                             except Exception as e_v3:
-                                print(f"V3 失败: {e_v3}")
-                                st.warning("Gemini 3.0 Pro 暂未响应或不支持此图片编辑，正在切换至 2.5 Flash Image (更稳) 进行重试...")
+                                print(f"V3 调用异常: {e_v3}")
+                            
+                            # --- 尝试方案 B: 2.5 Flash (保底) ---
+                            if not success:
+                                st.warning("Gemini 3.0 Pro 暂未响应或数据异常，正在切换至 2.5 Flash Image (更稳) 进行重试...")
+                                model_v25 = get_image_gen_model_v25()
                                 
-                                # 保底方案：切换到 2.5 Flash Image Preview
-                                model_fallback = get_image_gen_model_v25()
-                                response = model_fallback.generate_content(
+                                response_v25 = model_v25.generate_content(
                                     [edit_instruction, original_img],
                                     generation_config={"response_modalities": ["IMAGE"]}
                                 )
-                                image_data = response.candidates[0].content.parts[0].inline_data.data
-                                image_bytes = base64.b64decode(image_data)
-                                st.session_state["step1_image"] = image_bytes
-                                st.success("✅ 2.5 Flash 生成成功！")
-
+                                # 再次严格验证
+                                img_bytes, err_msg = validate_and_process_image(response_v25, "Gemini 2.5 Flash")
+                                
+                                if img_bytes:
+                                    st.session_state["step1_image"] = img_bytes
+                                    st.success("✅ 2.5 Flash 生成成功！")
+                                else:
+                                    st.error(f"❌ 所有模型均尝试失败。\n最后一次错误信息: {err_msg}")
+                                    
                         except Exception as e:
-                            st.error(f"生成失败: {e}")
-                            st.info("💡 可能原因：指令涉及敏感内容，或者原图格式 AI 无法识别。建议换一张简单的指令重试。")
+                            st.error(f"系统错误: {e}")
 
     # === 右侧：预览与 Step 2 ===
     with col2:
         st.subheader("2. 预览与精修 (Hands)")
         
         if st.session_state["step1_image"]:
-            image_stream = io.BytesIO(st.session_state["step1_image"])
-            st.image(image_stream, caption="Step 1: Gemini 草图 (逻辑已修改)", use_column_width=True)
-            
-            st.divider()
-            st.info("👇 对草图满意吗？使用 Flux 进行光影精修！")
-            
-            flux_prompt = st.text_area(
-                "精修风格指令", 
-                value="Cinematic lighting, 8k resolution, photorealistic, commercial photography, highly detailed product shot, sharp focus",
-                height=80
-            )
-            
-            strength = st.slider("重绘幅度 (Denoising)", 0.1, 1.0, 0.35, help="0.3-0.4最稳。")
-            
-            if st.button("🚀 Step 2: Flux 极致精修", type="primary"):
-                with st.spinner("🎨 Flux 正在注入灵魂..."):
-                    try:
-                        step1_file = io.BytesIO(st.session_state["step1_image"])
-                        output = replicate.run(
-                            "black-forest-labs/flux-dev", 
-                            input={
-                                "prompt": flux_prompt + UNIVERSAL_QUALITY_PROMPT,
-                                "image": step1_file,
-                                "prompt_strength": 1 - strength, 
-                                "go_fast": False, 
-                                "output_quality": 100, 
-                                "num_inference_steps": 30
-                            }
-                        )
-                        final_url = str(output[0])
-                        st.image(final_url, caption="Step 2: Flux 精修成品", use_column_width=True)
-                        download_image(final_url, "final_product.jpg")
-                    except Exception as e:
-                        st.error(f"Flux 精修失败: {e}")
+            # 使用 io.BytesIO 包装
+            try:
+                image_stream = io.BytesIO(st.session_state["step1_image"])
+                st.image(image_stream, caption="Step 1: Gemini 草图 (逻辑已修改)", use_column_width=True)
+                download_image(st.session_state["step1_image"], "step1_draft.jpg", is_bytes=True)
+                
+                st.divider()
+                st.markdown('<div class="step-indicator">第 4 步：Flux 光影精修</div>', unsafe_allow_html=True)
+                
+                flux_prompt = st.text_area(
+                    "精修风格指令", 
+                    value="Cinematic lighting, 8k resolution, photorealistic, commercial photography, highly detailed product shot, sharp focus",
+                    height=80
+                )
+                
+                strength = st.slider("重绘幅度 (Denoising)", 0.1, 1.0, 0.35, help="0.3-0.4最稳。")
+                
+                if st.button("🚀 Step 2: Flux 极致精修", type="primary"):
+                    with st.spinner("🎨 Flux 正在注入灵魂..."):
+                        try:
+                            # 再次包装 stream，因为 Flux 需要文件对象
+                            step1_file = io.BytesIO(st.session_state["step1_image"])
+                            output = replicate.run(
+                                "black-forest-labs/flux-dev", 
+                                input={
+                                    "prompt": flux_prompt + UNIVERSAL_QUALITY_PROMPT,
+                                    "image": step1_file,
+                                    "prompt_strength": 1 - strength, 
+                                    "go_fast": False, 
+                                    "output_quality": 100, 
+                                    "num_inference_steps": 30
+                                }
+                            )
+                            final_url = str(output[0])
+                            st.image(final_url, caption="Step 2: Flux 精修成品", use_column_width=True)
+                            download_image(final_url, "final_product.jpg")
+                        except Exception as e:
+                            st.error(f"Flux 精修失败: {e}")
+            except Exception as display_err:
+                st.error(f"图片显示失败，数据可能损坏: {display_err}")
+                st.session_state["step1_image"] = None # 清除坏数据
         else:
             st.info("👈 请先在左侧完成 Step 1 的生成。")
 
