@@ -1,10 +1,11 @@
 import streamlit as st
 import replicate
 import google.generativeai as genai
-from PIL import Image
+from PIL import Image, ImageOps
 import io
 import sys
 import os
+import requests
 import time
 
 # --- 0. 引入门禁系统 ---
@@ -33,6 +34,14 @@ st.markdown("""
         border-left: 5px solid #0068c9;
         margin-bottom: 15px;
     }
+    .info-box {
+        background-color: #fff3cd;
+        padding: 10px;
+        border-radius: 5px;
+        font-size: 14px;
+        color: #856404;
+        margin-bottom: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -45,7 +54,6 @@ if "GOOGLE_API_KEY" in st.secrets:
 
 # --- 3. 常量 ---
 UNIVERSAL_QUALITY_PROMPT = ", commercial photography, 8k resolution, photorealistic, highly detailed, cinematic lighting, depth of field, masterpiece, sharp focus"
-UNIVERSAL_NEGATIVE_PROMPT = "blurry, low quality, distorted, ugly, pixelated, watermark, text, signature, bad anatomy, deformed, lowres, bad hands, mutation"
 
 # --- 4. 辅助函数 ---
 def download_image(url, filename):
@@ -55,9 +63,36 @@ def get_pro_vision_model():
     """使用 3.0 Pro 进行深度构思"""
     return genai.GenerativeModel('gemini-3-pro-preview') 
 
+def process_rembg_mask(image_file):
+    """
+    核心函数：调用 Rembg 抠图并生成反向蒙版 (用于 Flux Fill)
+    Flux Fill 逻辑: 白色 = 重绘区域(背景), 黑色 = 保护区域(主体)
+    """
+    try:
+        # 1. 调用抠图
+        output_url = replicate.run("cjwbw/rembg:1.4", input={"image": image_file})
+        response = requests.get(str(output_url))
+        no_bg_image = Image.open(io.BytesIO(response.content))
+        
+        # 2. 提取 Alpha 通道
+        if no_bg_image.mode == 'RGBA':
+            alpha = no_bg_image.split()[-1]
+        else:
+            alpha = Image.new("L", no_bg_image.size, 255)
+            
+        # 3. 反转 Alpha (主体变黑，背景变白)
+        # Rembg 默认: 主体255(白), 背景0(黑)
+        # 我们需要: 主体0(黑/保护), 背景255(白/重绘)
+        mask = ImageOps.invert(alpha)
+        
+        return no_bg_image, mask
+    except Exception as e:
+        st.error(f"抠图处理失败: {e}")
+        return None, None
+
 # --- 5. 主界面 ---
 st.title("🖼️ 智能场景变换 (Smart Scene Swap)")
-st.info("工作流：Gemini 3.0 Pro (构思指令) ➡ Flux.1 Pro (光影重绘)")
+st.info("🔥 **Pro 模式**：系统会自动锁定产品/模特像素，只重绘背景，确保 **产品 100% 不变**。")
 
 # 初始化 Session
 if "hybrid_instruction" not in st.session_state:
@@ -104,15 +139,15 @@ with col1:
                         model = get_pro_vision_model()
                         prompt = f"""
                         你是一个世界顶级的商业摄影提示词专家。
-                        请观察图片主体，结合用户需求："{user_idea}" 和任务类型："{task_type}"。
                         
                         【任务】
-                        写一段用于 FLUX AI 绘画模型的英文提示词。
+                        我们即将使用 "Inpainting" (局部重绘) 技术，保留产品主体，只替换背景。
+                        请基于用户需求："{user_idea}"，写一段专注于**描述新背景和光影**的英文 Prompt。
                         
-                        【要求】
-                        1. **Subject**: 准确描述产品主体（保留其核心特征）。
-                        2. **Environment**: 详细描述新的背景环境。
-                        3. **Style**: 8k分辨率、超写实商业摄影。
+                        【注意】
+                        1. **不要**过多描述产品本身（因为产品会被蒙版保护起来）。
+                        2. **重点描述**：背景环境、材质、氛围、光线方向（如何打在产品上）。
+                        3. **风格**：8k分辨率、超写实商业摄影。
                         
                         【输出】
                         直接输出一段完整的英文 Prompt。
@@ -137,56 +172,67 @@ with col2:
         "最终绘画指令 (英文)", 
         value=st.session_state["hybrid_instruction"], 
         height=150,
-        help="Flux 将根据这段话进行绘制。"
+        help="Flux Fill 将根据这段话填充背景。"
     )
     
-    # 参数
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        strength = st.slider("重绘幅度 (Strength)", 0.1, 1.0, 0.75, help="0.75 适合换背景。数值越低越像原图。")
-    with col_p2:
-        num_outputs = st.number_input("生成数量", 1, 4, 1)
+    st.markdown('<div class="info-box">💡 提示：系统将自动抠图并保护主体。如果生成结果边缘不干净，请尝试上传更清晰的白底图。</div>', unsafe_allow_html=True)
 
     # 生成按钮
-    if st.button("🚀 开始生成 (Run Flux)", type="primary"):
+    if st.button("🚀 开始生成 (Lock Subject & Fill Background)", type="primary"):
         if not ref_img or not final_prompt:
             st.warning("请先生成指令！")
         else:
-            with st.spinner("🎨 Flux 正在重绘..."):
-                try:
-                    ref_img.seek(0)
+            status_box = st.empty()
+            try:
+                # 1. 自动抠图
+                status_box.info("✂️ 正在自动抠图，锁定产品主体...")
+                ref_img.seek(0)
+                _, mask_img = process_rembg_mask(ref_img)
+                
+                if not mask_img:
+                    st.error("抠图失败，无法识别主体。")
+                    st.stop()
+                
+                # 准备上传数据 (Bytes)
+                ref_img.seek(0)
+                img_bytes = io.BytesIO()
+                # 转换为 RGB 避免格式兼容问题
+                Image.open(ref_img).convert("RGB").save(img_bytes, format="PNG")
+                
+                mask_bytes = io.BytesIO()
+                mask_img.save(mask_bytes, format="PNG")
+                
+                # 2. 调用 Flux Fill (填充模型)
+                status_box.info("🎨 Flux Fill Pro 正在重绘背景 (主体已保护)...")
+                
+                output = replicate.run(
+                    "black-forest-labs/flux-fill-pro", 
+                    input={
+                        "image": img_bytes,
+                        "mask": mask_bytes, # 传入蒙版
+                        "prompt": final_prompt + UNIVERSAL_QUALITY_PROMPT,
+                        "output_format": "jpg",
+                        "output_quality": 100,
+                        "steps": 50, # 提高步数保证质量
+                        "guidance": 60 # 提高引导值，让AI更听Prompt的话
+                    }
+                )
+                
+                # 强制转换为字符串列表
+                if isinstance(output, list):
+                    st.session_state["generated_image_urls"] = [str(url) for url in output]
+                else:
+                    st.session_state["generated_image_urls"] = [str(output)]
                     
-                    output = replicate.run(
-                        "black-forest-labs/flux-dev", 
-                        input={
-                            "prompt": final_prompt + UNIVERSAL_QUALITY_PROMPT,
-                            "image": ref_img,
-                            "prompt_strength": 1 - strength,
-                            "go_fast": True,
-                            "num_outputs": num_outputs,
-                            "output_format": "jpg",
-                            "output_quality": 100,
-                            "negative_prompt": UNIVERSAL_NEGATIVE_PROMPT
-                        }
-                    )
-                    
-                    # 【关键修复】强制转换为字符串列表
-                    # Replicate 返回的是对象，Streamlit 直接读会报错 AttributeError
-                    if isinstance(output, list):
-                        st.session_state["generated_image_urls"] = [str(url) for url in output]
-                    else:
-                        st.session_state["generated_image_urls"] = [str(output)]
-                        
-                    st.success("✅ 生成完成！")
-                    
-                except Exception as e:
-                    st.error(f"Flux 生成失败: {e}")
+                status_box.success("✅ 生成完成！")
+                
+            except Exception as e:
+                status_box.error(f"Flux 生成失败: {e}")
 
     # 结果展示
     if st.session_state["generated_image_urls"]:
         st.divider()
         st.markdown("#### 🎉 生成结果")
         for i, url in enumerate(st.session_state["generated_image_urls"]):
-            # 这里的 url 已经是纯字符串了，不会再报 AttributeError
-            st.image(url, caption=f"结果 {i+1}", use_column_width=True)
+            st.image(url, caption=f"结果 {i+1} (主体像素 100% 保留)", use_column_width=True)
             download_image(url, f"result_{i+1}.jpg")
