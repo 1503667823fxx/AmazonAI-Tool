@@ -1,41 +1,86 @@
 import streamlit as st
-import auth
+import sys
+import os
 
+# --- 0. 引入门禁系统 ---
+# 确保能找到根目录下的 auth.py
+sys.path.append(os.path.abspath('.'))
+try:
+    import auth
+except ImportError:
+    pass 
+
+# --- 1. 页面配置 ---
 st.set_page_config(
     page_title="亚马逊全能智造台 Hub",
     page_icon="🏠",
     layout="wide"
 )
-if not auth.check_password():
-    st.stop()  # 如果密码不对，直接停止运行下面的代码
-    
+
+# --- 2. 安全检查 ---
+# 如果没有通过密码验证，直接停止运行后续内容
+if 'auth' in sys.modules:
+    if not auth.check_password():
+        st.stop()
+
+# --- 3. 主页内容 ---
 st.title("🏠 亚马逊全能智造工作台 (Hub)")
+st.markdown("### 👋 欢迎回来，运营官！")
+st.markdown("这里是团队的 AI 核心作业系统。请在 **左侧菜单栏** 选择你需要的功能模块。")
 
-st.markdown("""
-### 👋 欢迎回来，运营官！
+st.divider()
 
-这是我们团队的 AI 核心工作台。请在 **左侧菜单栏** 选择你需要的功能模块：
+# --- 模块概览卡片 ---
+col1, col2, col3 = st.columns(3)
 
----
+with col1:
+    st.info("### ✍️ 文案工作室\n**Listing Copywriter**")
+    st.markdown("""
+    * **状态**: ✅ **V2.5 (稳定版)**
+    * **核心引擎**: Gemini 3.0 Pro
+    * **功能亮点**:
+        * 内置 2025 亚马逊新规库
+        * 支持标题/五点/ST 单独 AI 重写
+        * 自动自我审查 (Self-Correction)
+        * 尺寸与规格自动识别逻辑
+    """)
 
-#### 🚀 可用模块
-* **✍️ Listing Copywriter (文案工作室)**
-    * *状态：* ✅ **已上线 (V2.1)**
-    * *功能：* 视觉识别产品、撰写SEO标题、五点描述、生成后台关键词。
-    * *引擎：* Gemini 3.0 Pro
+with col2:
+    st.success("### 🎨 图片工场\n**Visual Studio**")
+    st.markdown("""
+    * **状态**: ✅ **V1.0 (正式版)**
+    * **核心引擎**: FLUX.1 Pro
+    * **功能亮点**:
+        * Gemini 智能编写摄影指令
+        * 支持亚马逊主图 (1:1) 及 A+ Banner (16:9)
+        * 商业级光影渲染
+    """)
 
-#### 🛠️ 开发中模块
-* **🎨 Visual Studio (视觉工场)**
-    * *状态：* 🚧 **建设中**
-    * *功能：* AI 场景图生成、产品换背景、智能修图。
+with col3:
+    st.warning("### 🎬 视频工场\n**Video Studio**")
+    st.markdown("""
+    * **状态**: 🚀 **Beta (公测中)**
+    * **核心引擎**: Minimax / SVD
+    * **功能亮点**:
+        * 图生视频 (Image-to-Video)
+        * 生成 5-6秒 4K 商业展示短片
+        * **注意**: 成本较高，生成时间约 2-3 分钟
+    """)
 
----
+st.divider()
 
-### 📢 系统公告
-> **2025-05-24 更新：** 文案模块已升级至 V2.1，支持 Search Terms 独立规则配置，输出框已加宽。
+# --- 系统公告与日志 ---
+with st.expander("📢 系统更新日志 (Changelog)", expanded=True):
+    st.markdown("""
+    * **2025-05-26 (Major Update):** * ✨ **视频模块上线**: 新增 `3_🎬_Video_Studio`，支持高质量产品视频生成。
+        * 🔧 **文案模块增强**: 加入“自我审查机制”，杜绝主观违禁词；新增“AI 单点重写”功能。
+    * **2025-05-25:**
+        * 🎨 **视觉模块拆分**: 将原来复杂的视觉功能拆分为独立的“图片”和“视频”两个板块，操作更流畅。
+        * 🔒 **安全升级**: 全站启用密码门禁系统。
+    * **2025-05-24:**
+        * 📜 **规则库更新**: 集成《亚马逊 2025 产权新规》，优化标题前 60 字符逻辑。
+    """)
 
-""")
-
-# 显示一张炫酷的背景图或Logo
-
-st.image("https://images.unsplash.com/photo-1523474253046-8cd2748b5fd2?q=80&w=2070&auto=format&fit=crop", caption="Amazon AI Operation Center")
+# --- 底部 ---
+st.markdown("---")
+st.caption("© 2025 Amazon AI Operation Team | Powered by Streamlit, Google Gemini & Replicate")
