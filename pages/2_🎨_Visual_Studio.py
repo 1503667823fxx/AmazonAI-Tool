@@ -31,6 +31,8 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] {gap: 20px;}
     .stTabs [data-baseweb="tab"] {height: 50px; white-space: pre-wrap; background-color: #f0f2f6; border-radius: 5px 5px 0 0;}
     .stTabs [aria-selected="true"] {background-color: #ffffff; border-top: 3px solid #ff9900;}
+    /* 优化文本域字体 */
+    .stTextArea textarea {font-family: 'Consolas', monospace; font-size: 14px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -41,23 +43,28 @@ if "REPLICATE_API_TOKEN" not in st.secrets:
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# --- 3. 辅助函数 ---
-def upload_to_replicate(image_file):
-    """将上传的图片文件转换为 Replicate 可读的格式"""
-    return image_file
+# --- 3. 底层提示词常量 (Base Prompts) ---
+# 这些词会自动追加到 Prompt 中，无需用户输入
+UNIVERSAL_QUALITY_PROMPT = ", commercial photography, 8k resolution, photorealistic, highly detailed, cinematic lighting, depth of field, masterpiece, sharp focus"
+UNIVERSAL_NEGATIVE_PROMPT = "blurry, low quality, distorted, ugly, pixelated, watermark, text, signature, bad anatomy, deformed, lowres, bad hands"
 
+# --- 4. 辅助函数 ---
 def download_image(url, filename):
     """提供下载链接"""
     st.markdown(f"### [📥 点击下载 {filename}]({url})")
 
-# --- 4. 顶部导航 ---
+# --- 5. 顶部导航 ---
 st.title("🎨 亚马逊 AI 视觉工场 (All-in-One)")
 st.caption("集成 FLUX.1 Pro, FLUX-Fill, Real-ESRGAN 等顶级模型")
+
+# 初始化 Session State
+if "i2i_final_prompt" not in st.session_state:
+    st.session_state["i2i_final_prompt"] = ""
 
 # 创建 6 个功能分区
 tabs = st.tabs([
     "✨ 文生图 (海报)", 
-    "🖼️ 图生图 (变体)", 
+    "🖼️ 图生图 (智能变体)", 
     "🖌️ 局部重绘 (换背景)", 
     "↔️ 画幅调整 (扩展)", 
     "🔍 高清放大", 
@@ -92,7 +99,6 @@ with tabs[0]:
                         st.error("Gemini 调用失败")
 
         final_prompt_t2i = st.text_area("最终指令 (英文)", value=st.session_state.get("t2i_final_prompt", ""), height=100, key="t2i_final")
-        
         ar_t2i = st.selectbox("比例", ["1:1", "16:9", "9:16", "4:5"], key="t2i_ar")
 
     with col2:
@@ -102,9 +108,11 @@ with tabs[0]:
             else:
                 with st.spinner("FLUX 正在绘画..."):
                     try:
+                        # 自动追加底层高质量词
+                        full_prompt = final_prompt_t2i + UNIVERSAL_QUALITY_PROMPT
                         output = replicate.run(
                             "black-forest-labs/flux-1.1-pro",
-                            input={"prompt": final_prompt_t2i, "aspect_ratio": ar_t2i, "output_quality": 100}
+                            input={"prompt": full_prompt, "aspect_ratio": ar_t2i, "output_quality": 100}
                         )
                         st.image(str(output), use_column_width=True)
                         download_image(str(output), "poster.jpg")
@@ -112,41 +120,119 @@ with tabs[0]:
                         st.error(f"生成失败: {e}")
 
 # ==================================================
-# Tab 2: 图生图 (风格迁移/参考生成)
+# Tab 2: 图生图 (智能变体 - 已升级)
 # ==================================================
 with tabs[1]:
-    st.header("🖼️ 图生图 (Image-to-Image)")
-    col1, col2 = st.columns([4, 6])
+    st.header("🖼️ 图生图 (Image-to-Image 3.0)")
+    st.caption("Gemini 3.0 Pro 视觉引擎 + FLUX 绘图引擎")
     
+    col1, col2 = st.columns([5, 5])
+    
+    # === 左侧：输入与构思 ===
     with col1:
-        st.info("适用于：保持产品大概轮廓，改变风格或背景。")
-        ref_img = st.file_uploader("上传参考图", type=["jpg", "png", "webp"], key="i2i_up")
+        st.subheader("1. 素材与构思")
+        ref_img = st.file_uploader("上传参考图 (Gemini将读取产品特征)", type=["jpg", "png", "webp"], key="i2i_up")
         if ref_img:
-            st.image(ref_img, width=200)
+            img_obj = Image.open(ref_img)
+            st.image(img_obj, width=200, caption="参考原图")
         
-        prompt_i2i = st.text_area("新画面描述", height=100, placeholder="例如：变成赛博朋克风格，霓虹灯光...")
-        strength = st.slider("重绘幅度 (Image Strength)", 0.1, 1.0, 0.75, help="数值越小越像原图，数值越大越像提示词。")
+        # 分离的输入框
+        col_in1, col_in2 = st.columns(2)
+        with col_in1:
+            user_modifications = st.text_area("修改要求 (User Instruction)", height=100, placeholder="例如：改成素描风格，或者让产品看起来更亮...")
+        with col_in2:
+            scene_context = st.text_area("植入场景 (Scene Context)", height=100, placeholder="例如：放在高档大理石桌面上，背景是温馨的客厅，晨光...")
 
-    with col2:
-        if st.button("🚀 生成变体", type="primary", key="i2i_run"):
-            if not ref_img or not prompt_i2i:
-                st.warning("请上传图片并输入描述")
+        strength = st.slider("重绘幅度 (Image Strength)", 0.1, 1.0, 0.75, help="数值越大，AI发挥空间越大（越不像原图）。推荐 0.6-0.8。")
+
+        # 智能合成按钮
+        if st.button("✨ Gemini 智能分析并生成 Prompt", type="secondary", key="i2i_magic"):
+            if not ref_img:
+                st.warning("请先上传参考图！")
             else:
-                with st.spinner("正在重绘..."):
+                with st.spinner("🧠 Gemini 正在观察图片并融合您的要求..."):
                     try:
-                        # 使用 Flux Dev 的 img2img 模式
+                        # 强制清空旧 Prompt
+                        st.session_state["i2i_final_prompt"] = ""
+                        
+                        model = genai.GenerativeModel('gemini-3-pro-preview')
+                        
+                        # 强大的合成 Prompt
+                        synthesis_prompt = f"""
+                        你是一个精通 FLUX 绘画模型的提示词专家。
+                        
+                        【任务】
+                        请基于这张图片的内容，结合用户的修改要求和场景植入需求，写一段高质量的英文 Prompt。
+                        
+                        【输入信息】
+                        1. **图片内容**: 请仔细观察图片，提取主体的核心特征（颜色、材质、结构、形状），确保重绘时主体不崩。
+                        2. **用户修改要求**: {user_modifications}
+                        3. **植入场景**: {scene_context}
+                        
+                        【输出要求】
+                        - 将产品特征与新场景自然融合。
+                        - 保持描述的准确性和画面的美感。
+                        - 直接输出一段英文 Prompt，不要包含任何解释性文字。
+                        """
+                        
+                        # 传入图片和文本
+                        response = model.generate_content([synthesis_prompt, img_obj])
+                        st.session_state["i2i_final_prompt"] = response.text
+                        st.success("✅ Prompt 已生成！")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Gemini 分析失败: {e}")
+
+    # === 右侧：生成与结果 ===
+    with col2:
+        st.subheader("2. 生成控制")
+        
+        # 显示合成后的 Prompt
+        final_prompt_display = st.text_area(
+            "最终指令 (自动追加了底层画质词)", 
+            value=st.session_state["i2i_final_prompt"], 
+            height=150,
+            key="i2i_final_text"
+        )
+        
+        # 展示底层规则 (只读，让用户知道不用自己写)
+        with st.expander("查看底层预设 (已自动生效)", expanded=False):
+            st.markdown(f"**✅ 自动追加的正向词:**\n`{UNIVERSAL_QUALITY_PROMPT}`")
+            st.markdown(f"**🚫 自动启用的负向词:**\n`{UNIVERSAL_NEGATIVE_PROMPT}`")
+
+        if st.button("🚀 生成变体 (Run FLUX)", type="primary", key="i2i_run_flux"):
+            if not ref_img or not final_prompt_display:
+                st.warning("请完善左侧信息并生成 Prompt")
+            else:
+                with st.spinner("🎨 正在重绘中..."):
+                    try:
+                        # 组合最终 Prompt
+                        full_prompt = final_prompt_display + UNIVERSAL_QUALITY_PROMPT
+                        
+                        # 调用 Flux Dev (支持 img2img)
                         output = replicate.run(
-                            "black-forest-labs/flux-dev", # Dev版支持img2img参数较好
+                            "black-forest-labs/flux-dev", 
                             input={
-                                "prompt": prompt_i2i, 
+                                "prompt": full_prompt, 
                                 "image": ref_img,
-                                "prompt_strength": 1 - strength, # Replicate参数逻辑有时相反，视具体模型
-                                "go_fast": True
+                                "prompt_strength": 1 - strength, # Replicate参数: 0保留原图, 1完全重绘
+                                "go_fast": True,
+                                "megapixels": "1",
+                                "num_outputs": 1,
+                                "aspect_ratio": "1:1",
+                                "output_format": "jpg",
+                                "output_quality": 100,
+                                # 虽然 Flux 不强依赖 negative_prompt，但为了保险我们加上
+                                "negative_prompt": UNIVERSAL_NEGATIVE_PROMPT 
                             }
                         )
-                        # Flux dev 返回的是 list
-                        st.image(output[0], use_column_width=True)
-                        download_image(str(output[0]), "variant.jpg")
+                        
+                        # Flux dev output 是 list
+                        image_url = str(output[0])
+                        st.image(image_url, caption="FLUX 生成结果", use_column_width=True)
+                        download_image(image_url, "variant_gen.jpg")
+                        
                     except Exception as e:
                         st.error(f"生成失败: {e}")
 
@@ -177,7 +263,7 @@ with tabs[2]:
                             input={
                                 "image": inp_img,
                                 "mask": inp_mask,
-                                "prompt": inp_prompt,
+                                "prompt": inp_prompt + UNIVERSAL_QUALITY_PROMPT,
                                 "output_format": "jpg"
                             }
                         )
@@ -203,7 +289,7 @@ with tabs[3]:
         target_ar = st.selectbox("目标比例", ["16:9 (电脑Banner)", "9:16 (手机全屏)", "4:3", "3:2"], key="out_ar")
         
         # 简单的Prompt辅助
-        out_prompt = st.text_input("背景描述 (AI需要知道补什么)", placeholder="例如：extended blurred living room background, high quality")
+        out_prompt = st.text_input("背景描述 (AI需要知道补什么)", placeholder="例如：extended blurred living room background")
 
     with col2:
         if st.button("🚀 智能扩展画幅", type="primary", key="out_run"):
@@ -216,7 +302,7 @@ with tabs[3]:
                             "black-forest-labs/flux-fill-pro",
                             input={
                                 "image": out_img,
-                                "prompt": out_prompt,
+                                "prompt": out_prompt + UNIVERSAL_QUALITY_PROMPT,
                                 "aspect_ratio": target_ar.split(" ")[0],
                                 "output_format": "jpg"
                             }
