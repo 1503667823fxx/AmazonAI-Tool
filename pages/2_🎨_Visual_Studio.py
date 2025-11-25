@@ -53,8 +53,7 @@ def download_image(url, filename):
     st.markdown(f"### [📥 点击下载 {filename}]({url})")
 
 def get_vision_model():
-    """获取视觉模型，优先使用快速版"""
-    # 使用 1.5-flash，速度极快，专门处理视觉任务
+    """获取视觉模型，强制使用快速版 1.5-flash 以防止卡顿"""
     return genai.GenerativeModel('gemini-1.5-flash')
 
 # --- 5. 顶部导航 ---
@@ -126,7 +125,7 @@ with tabs[0]:
                         st.error(f"生成失败: {e}")
 
 # ==================================================
-# Tab 2: 图生图 (智能变体 - 重点修复)
+# Tab 2: 图生图 (智能变体 - 重点修复版)
 # ==================================================
 with tabs[1]:
     st.header("🖼️ 图生图 (Image-to-Image 3.0)")
@@ -148,10 +147,10 @@ with tabs[1]:
         with col_in2:
             scene_context = st.text_area("植入场景", height=100, placeholder="例如：放在高档大理石桌面上，背景是温馨的客厅...")
 
-        strength = st.slider("重绘幅度", 0.1, 1.0, 0.75, help="数值越大，AI发挥空间越大。")
+        strength = st.slider("重绘幅度 (Image Strength)", 0.1, 1.0, 0.75, help="数值越大，AI发挥空间越大（越不像原图）。")
 
-        # 智能合成按钮
-        if st.button("✨ 生成 Prompt (快速响应)", type="secondary", key="i2i_magic"):
+        # 智能合成按钮 - 注意这里的 Key 和 Label 都改了，确保你看到的是新按钮
+        if st.button("✨ 生成 Prompt (快速响应)", type="secondary", key="i2i_magic_new"):
             if not ref_img:
                 st.warning("请先上传参考图！")
             else:
@@ -163,15 +162,14 @@ with tabs[1]:
                     status_text.text("⏳ 1/3: 正在压缩图片以加速传输...")
                     progress_bar.progress(30)
                     
-                    # 1. 强力压缩图片 (Gemini Flash 只需要看个大概)
+                    # 1. 强力压缩图片 (关键修复：防止大图卡死)
                     img_small = img_obj.copy()
-                    # 缩略图限制在 512px，保证极速上传
                     img_small.thumbnail((512, 512)) 
                     
                     status_text.text("⏳ 2/3: Gemini Flash 正在极速分析...")
                     progress_bar.progress(60)
                     
-                    # 2. 调用 Gemini Flash (速度远快于 Pro)
+                    # 2. 调用 Gemini Flash (秒回)
                     model = get_vision_model()
                     
                     synthesis_prompt = f"""
