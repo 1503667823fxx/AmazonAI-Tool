@@ -51,8 +51,6 @@ st.markdown("""
         margin-bottom: 20px;
     }
     h1, h2, h3 { color: #f8fafc !important; }
-    .mode-btn-selected { border: 2px solid #6366f1; background-color: #312e81; color: white; padding: 10px; border-radius: 8px; text-align: center; cursor: pointer; }
-    .mode-btn { border: 1px solid #334155; background-color: #1e293b; color: #94a3b8; padding: 10px; border-radius: 8px; text-align: center; cursor: pointer; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -63,15 +61,18 @@ if "GOOGLE_API_KEY" not in st.secrets:
 
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# TS 代码中使用的模型 (经过验证可用的模型)
+# TS 代码中使用的模型 (geminiService.ts Line 190)
 MODEL_NAME = "gemini-2.5-flash-image"
 
 # --- 3. 核心逻辑复刻 (Porting geminiService.ts) ---
 
-def pil_to_bytes(img: Image.Image, format="PNG") -> bytes:
-    """将 PIL 图片转为字节流"""
+def pil_to_bytes(img: Image.Image, format="WEBP", quality=95) -> bytes:
+    """
+    将 PIL 图片转为字节流
+    复刻 TS: canvasToBase64 (默认 webp, 0.95)
+    """
     buf = io.BytesIO()
-    img.save(buf, format=format)
+    img.save(buf, format=format, quality=quality)
     return buf.getvalue()
 
 def resize_for_context(img: Image.Image, max_dim=2048) -> Image.Image:
@@ -106,7 +107,6 @@ def extract_texture_patch(img: Image.Image) -> Image.Image:
 def invert_mask_image(mask_img: Image.Image) -> Image.Image:
     """
     复刻 TS: invertMask
-    反转蒙版颜色 (如果你上传的是黑底白主体，需要反转)
     """
     # 确保是灰度或RGB
     if mask_img.mode == 'RGBA':
@@ -117,19 +117,18 @@ def invert_mask_image(mask_img: Image.Image) -> Image.Image:
 
 def generate_image(
     original_img: Image.Image,
-    prompt: str, # Changed string to str
+    prompt: str, 
     mode: str,
     image_count: int = 1,
     secondary_img: Image.Image = None,
     inpainting_region: str = 'inside',
-    negative_prompt: str = '' # Changed string to str
+    negative_prompt: str = ''
 ):
     """
     复刻 TS: editImage 核心逻辑
     """
     
     # 1. 预处理：纹理锚定 (Texture Anchoring)
-    # TS: const texturePatch = extractTexturePatch(sourceImgObj);
     texture_patch = extract_texture_patch(original_img)
     
     # TS: const cleanSource = await processImageStandard(originalImage, 2560, useHD);
@@ -149,7 +148,7 @@ def generate_image(
         if inpainting_region == 'outside':
             final_mask = invert_mask_image(secondary_img)
         
-        final_mask = resize_for_context(final_mask, 2560) # 确保尺寸一致
+        final_mask = resize_for_context(final_mask, 2560)
 
         task_prompt = f"""Task: High-Fidelity Inpainting with TEXTURE ANCHORING.
 Input 1: Source Image.
@@ -164,9 +163,9 @@ Instructions:
 {f'AVOID: {negative_prompt}' if negative_prompt else ''}"""
 
         parts.append({"text": task_prompt})
-        parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(clean_source)).decode('utf-8')}})
-        parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(final_mask)).decode('utf-8')}})
-        parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(texture_patch)).decode('utf-8')}})
+        parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(clean_source)).decode('utf-8')}})
+        parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(final_mask)).decode('utf-8')}})
+        parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(texture_patch)).decode('utf-8')}})
 
     elif mode == 'pose' and secondary_img:
         # 复刻 Pose 逻辑
@@ -185,9 +184,9 @@ Instructions:
 {f'AVOID: {negative_prompt}' if negative_prompt else ''}"""
 
         parts.append({"text": task_prompt})
-        parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(clean_source)).decode('utf-8')}})
-        parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(clean_ref)).decode('utf-8')}})
-        parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(texture_patch)).decode('utf-8')}})
+        parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(clean_source)).decode('utf-8')}})
+        parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(clean_ref)).decode('utf-8')}})
+        parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(texture_patch)).decode('utf-8')}})
 
     elif mode == 'general':
         # 复刻 Fusion / General Edit 逻辑
@@ -210,16 +209,16 @@ Prompt: {prompt}
 {f'NEGATIVE CONSTRAINTS: {negative_prompt}' if negative_prompt else ''}"""
             
             parts.append({"text": task_prompt})
-            parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(clean_source)).decode('utf-8')}})
-            parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(clean_ref)).decode('utf-8')}})
-            parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(texture_patch)).decode('utf-8')}})
+            parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(clean_source)).decode('utf-8')}})
+            parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(clean_ref)).decode('utf-8')}})
+            parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(texture_patch)).decode('utf-8')}})
             
         else:
             # Standard Edit
             task_prompt = f"""Edit instruction: {prompt}. Maintain photorealism.
 {f'AVOID: {negative_prompt}' if negative_prompt else ''}"""
             parts.append({"text": task_prompt})
-            parts.append({"inline_data": {"mime_type": "image/png", "data": base64.b64encode(pil_to_bytes(clean_source)).decode('utf-8')}})
+            parts.append({"inline_data": {"mime_type": "image/webp", "data": base64.b64encode(pil_to_bytes(clean_source)).decode('utf-8')}})
 
     # 调用 Gemini API
     model = genai.GenerativeModel(MODEL_NAME)
@@ -227,10 +226,10 @@ Prompt: {prompt}
     generated_images = []
     
     # 模拟 Batch (Python SDK 不支持一次返回多张，需要循环调用)
-    for _ in range(image_count):
+    for i in range(image_count):
         response = model.generate_content(
             parts,
-            generation_config={"response_modalities": ["IMAGE"], "temperature": 0.4}
+            generation_config={"response_modalities": ["IMAGE"], "temperature": 0.3}
         )
         
         # 解析结果
@@ -239,10 +238,14 @@ Prompt: {prompt}
             if part.inline_data:
                 generated_images.append(part.inline_data.data) # Base64 bytes
             else:
-                raise Exception("API 返回了文本而非图片 (可能是拒绝处理)")
+                print(f"API 返回了文本: {part.text}")
+                # 继续循环，也许下一次成功
         else:
-            raise Exception("API 未返回有效内容")
+            print("API 未返回有效内容")
             
+    if not generated_images:
+        raise Exception("所有尝试均未返回图片。可能是 Prompt 触发了安全拦截。")
+
     return generated_images
 
 # --- 4. UI 界面 (复刻 App.tsx) ---
@@ -255,17 +258,15 @@ if "generated_results" not in st.session_state:
     st.session_state["generated_results"] = []
 
 # Mode Selector
-mode_cols = st.columns(4)
 modes = [
     ("general", "Global / Fusion"),
     ("inpainting", "Inpainting"),
     ("pose", "Pose Control"),
-    ("upscale", "Upscale HD (TBD)")
 ]
 
 # 简单的模式选择 UI
-selected_mode = st.radio("选择模式 (Mode)", [m[1] for m in modes], horizontal=True)
-current_mode_key = [m[0] for m in modes if m[1] == selected_mode][0]
+selected_mode_label = st.radio("选择模式 (Mode)", [m[1] for m in modes], horizontal=True)
+current_mode_key = [m[0] for m in modes if m[1] == selected_mode_label][0]
 
 col1, col2 = st.columns([5, 5])
 
@@ -286,7 +287,8 @@ with col1:
         st.markdown("---")
         mask_file = st.file_uploader("上传蒙版 (Mask)", type=["jpg", "png", "webp"], key="mask")
         if mask_file:
-            secondary_img = Image.open(mask_file).convert("L") # 转灰度
+            # 保持原始模式，不强制转L，以免丢失细节，让 invert_mask_image 处理
+            secondary_img = Image.open(mask_file) 
             st.image(secondary_img, caption="Mask", width=200)
             
         inpainting_region = st.radio("重绘区域", ["inside (蒙版内部)", "outside (蒙版外部/背景)"], index=0)
