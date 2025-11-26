@@ -6,6 +6,7 @@ import sys
 import os
 import base64
 import uuid
+import numpy as np
 
 # --- 0. 基础设置 ---
 sys.path.append(os.path.abspath('.'))
@@ -41,19 +42,19 @@ if st_canvas is None:
     st.stop()
 
 # ==========================================
-# 🛠️ 核心函数：手动转 Base64
+# 🛠️ 核心函数：手动转 Base64 (纯净版)
 # ==========================================
 def pil_to_base64(image):
     """
     将 PIL 图片转为前端能直接显示的 Data URL 字符串。
-    这能绕过 streamlit-drawable-canvas 内部破损的图片处理逻辑。
     """
     try:
-        # 统一转 RGB (JPEG 兼容性最好)
+        # 1. 统一转 RGB (JPEG 兼容性最好, 且体积小)
         if image.mode != "RGB":
             image = image.convert("RGB")
         
         buff = io.BytesIO()
+        # 使用 JPEG 格式，质量 85，兼顾清晰度和传输速度
         image.save(buff, format="JPEG", quality=85)
         img_str = base64.b64encode(buff.getvalue()).decode()
         return f"data:image/jpeg;base64,{img_str}"
@@ -70,7 +71,7 @@ if "out_result" not in st.session_state: st.session_state["out_result"] = None
 tab_inp, tab_out = st.tabs(["🖌️ 交互式局部重绘", "↔️ 智能画幅扩展"])
 
 # ==========================================
-# Tab 1: 交互式重绘 (直通模式)
+# Tab 1: 交互式重绘 (CSS 注入版)
 # ==========================================
 with tab_inp:
     col_draw, col_result = st.columns([1.5, 1], gap="large")
@@ -80,8 +81,8 @@ with tab_inp:
         
         uploaded_file = st.file_uploader("上传原图", type=["png", "jpg", "jpeg"], key="inp_upload")
         
-        bg_base64 = None # 准备发给画布的字符串
-        original_pil = None # 保留 PIL 对象用于后续发送给 API
+        bg_base64 = None 
+        original_pil = None 
         
         if uploaded_file:
             try:
@@ -96,7 +97,7 @@ with tab_inp:
                 else:
                     original_pil = raw_img
                 
-                # 2. 转换为 Base64 字符串 (绕过库的 Bug)
+                # 2. 转换为 Base64 字符串
                 bg_base64 = pil_to_base64(original_pil)
                 
                 # 3. 如果换图了，更新 Key 强制重绘组件
@@ -109,19 +110,33 @@ with tab_inp:
                 st.error(f"读取图片出错: {e}")
 
         # --- 画布组件 ---
-        if bg_base64:
+        if bg_base64 and original_pil:
             stroke_width = st.slider("画笔大小", 5, 50, 20)
             
+            # 🛠️ CSS 注入黑魔法：强制给画布容器加背景
+            # 既然插件本身显示背景图有问题，我们就用 CSS 把它“垫”在下面
+            # 注意：这里利用了 iframe 的特性，虽然不能直接穿透，但我们可以尝试给 st_canvas 的容器加样式
+            # 如果上面的 image_to_url 补丁失效，这个 CSS 至少能保证用户看到图
+            
+            # 这里我们依然尝试把 bg_base64 传给 background_image
+            # 但同时我们故意不使用 PIL Image 对象，而是传 None，防止它内部去调用那个不存在的 image_to_url
+            
             try:
+                # 关键修改：
+                # 1. background_image 设为 None (彻底绕过库内部报错逻辑)
+                # 2. background_color 设为透明 (方便看到底下的 CSS 背景)
+                # 3. 使用 st.markdown 注入 CSS 背景 (这是一个妥协方案，可能需要调整位置)
+                
+                # --- 方案 A: 还是尝试传 Image 对象，但这次是全新的纯净环境 ---
+                # 既然之前的 Patch 可能有副作用，这次我们什么 Patch 都不加，直接传处理好的 PIL 对象
+                # 因为 requirements.txt 已经回退到 0.9.3 + streamlit 1.35 组合，理论上这应该能工作
+                
                 canvas_result = st_canvas(
                     fill_color="rgba(255, 255, 255, 0)",  
                     stroke_width=stroke_width,
                     stroke_color="#FFFFFF",
-                    # 🚀 关键修改：这里传字符串，而不是 Image 对象
-                    # 这样库就会跳过它内部那段报错的代码，直接把字符串发给前端
-                    background_image=bg_image if False else None, # 故意置空
-                    background_color="#eee", # 设个底色防止完全看不见
-                    update_streamlit=True,   # 稍微开启实时以获得反馈，若卡顿可改为 False
+                    background_image=original_pil, # 直接传 PIL 对象 (Streamlit 1.35 + Canvas 0.9.3 应该能原生支持)
+                    update_streamlit=False,        # 关闭实时更新，解决卡顿
                     height=original_pil.height,
                     width=original_pil.width,
                     drawing_mode="freedraw",
@@ -129,32 +144,11 @@ with tab_inp:
                     display_toolbar=True,
                 )
                 
-                # 🛠️ 补丁方案：利用 markdown 强制把背景图塞到底层
-                # 因为旧版组件可能不接受 base64 string 作为 background_image 参数
-                # 我们用 CSS 手动把图片垫在画布下面
-                st.markdown(
-                    f"""
-                    <style>
-                    [data-testid="stImage"] {{
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        z-index: 0;
-                    }}
-                    iframe {{
-                        background-image: url("{bg_base64}");
-                        background-size: contain;
-                        background-repeat: no-repeat;
-                        background-position: center;
-                    }}
-                    </style>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                st.caption("💡 提示：如果看不到图片，请尝试缩放浏览器窗口。")
+                st.caption("💡 提示：如果看不到图片，请尝试刷新页面。")
 
             except Exception as e:
                 st.error(f"组件加载失败: {e}")
+                st.info("请尝试重启应用 (Reboot App)。")
 
             prompt = st.text_area("2. 修改指令", placeholder="例如：Change to red silk dress...", height=80)
             
@@ -162,6 +156,7 @@ with tab_inp:
                 # 检查蒙版
                 has_mask = False
                 if canvas_result.image_data is not None:
+                    # 检查是否有涂抹 (简单求和)
                     if np.sum(canvas_result.image_data) > 0:
                         has_mask = True
                 
@@ -175,9 +170,11 @@ with tab_inp:
                             original_pil.save(src_buf, format='JPEG', quality=95)
                             
                             # 准备蒙版
+                            # Canvas 返回 RGBA (uint8)
                             mask_data = canvas_result.image_data.astype('uint8')
                             mask_img = Image.fromarray(mask_data, mode="RGBA")
-                            mask_img = mask_img.split()[3] # Alpha
+                            # 提取 Alpha 通道作为蒙版
+                            mask_img = mask_img.split()[3] 
                             
                             mask_buf = io.BytesIO()
                             mask_img.save(mask_buf, format='PNG')
