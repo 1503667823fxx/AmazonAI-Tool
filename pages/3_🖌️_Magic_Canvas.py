@@ -10,13 +10,11 @@ import numpy as np
 sys.path.append(os.path.abspath('.'))
 try:
     import auth
-    # 复用你之前写的 core_utils 来处理下载
     from core_utils import process_image_for_download 
 except ImportError:
     pass 
 
-# --- 关键修复：安全导入画布组件 ---
-# 使用 try-except 包裹，防止因缺少库导致整个 App (包括 Home) 崩溃
+# --- 安全导入画布组件 ---
 try:
     from streamlit_drawable_canvas import st_canvas
 except ImportError:
@@ -38,21 +36,16 @@ else:
 st.title("🖌️ 魔术画布 (Magic Canvas)")
 st.caption("交互式局部重绘 & 智能扩图工作台")
 
-# 如果缺少库，直接显示安装指引，不运行后续代码
+# --- 组件检查 ---
 if st_canvas is None:
     st.error("❌ 缺少必要组件：streamlit-drawable-canvas")
-    st.info("""
-    **修复方法：**
-    1. 打开你的 `requirements.txt` 文件。
-    2. 在最后一行添加：`streamlit-drawable-canvas`
-    3. 保存并重启应用 (Reboot App)。
-    """)
+    st.info("请在 requirements.txt 中添加：streamlit-drawable-canvas>=0.9.5 并重启应用。")
     st.stop()
 
 tab_inp, tab_out = st.tabs(["🖌️ 交互式局部重绘", "↔️ 智能画幅扩展"])
 
 # ==========================================
-# Tab 1: 交互式重绘 (解决了用户不会做蒙版的痛点)
+# Tab 1: 交互式重绘
 # ==========================================
 with tab_inp:
     col_draw, col_result = st.columns([1.5, 1], gap="large")
@@ -61,14 +54,13 @@ with tab_inp:
         st.subheader("1. 涂抹修改区域")
         uploaded_file = st.file_uploader("上传原图", type=["png", "jpg", "jpeg"], key="canvas_upload")
         
-        mask_data = None # 初始化
+        mask_data = None 
         
         if uploaded_file:
-            # 获取图片尺寸，调整画布大小
             bg_image = Image.open(uploaded_file).convert("RGB")
             w, h = bg_image.size
             
-            # 限制显示大小，防止画布撑破屏幕 (等比缩放)
+            # 限制显示大小
             max_width = 700
             if w > max_width:
                 ratio = max_width / w
@@ -77,55 +69,59 @@ with tab_inp:
             else:
                 new_w, new_h = w, h
 
-            # 画笔工具栏
             stroke_width = st.slider("画笔大小", 10, 100, 30)
             
-            # ★★★ 核心组件：交互式画布 ★★★
-            canvas_result = st_canvas(
-                fill_color="rgba(255, 255, 255, 0)",  # 透明填充
-                stroke_width=stroke_width,
-                stroke_color="#FFFFFF", # 白色画笔代表蒙版区域
-                background_image=bg_image,
-                update_streamlit=True,
-                height=new_h,
-                width=new_w,
-                drawing_mode="freedraw",
-                key="inpainting_canvas",
-            )
-            
-            st.caption("💡 提示：用鼠标在左图中涂抹你想要修改的地方（涂白处将被重绘）。")
-
-            # 处理蒙版数据
-            if canvas_result.image_data is not None:
-                # canvas_result.image_data 是 RGBA 数组
-                # 我们需要提取 Alpha 通道或者绘制的白色笔触作为 Mask
-                mask_data = canvas_result.image_data[:, :, :3] # 取 RGB
-                # 简单的处理：有颜色的地方就是 Mask
-                # 注意：这里简化了处理，实际可能需要转为灰度图
+            # ★★★ 核心组件：带防崩保护 ★★★
+            try:
+                canvas_result = st_canvas(
+                    fill_color="rgba(255, 255, 255, 0)", 
+                    stroke_width=stroke_width,
+                    stroke_color="#FFFFFF", 
+                    background_image=bg_image,
+                    update_streamlit=True,
+                    height=new_h,
+                    width=new_w,
+                    drawing_mode="freedraw",
+                    key="inpainting_canvas",
+                )
                 
-                # 临时保存 Mask 用于预览（调试用，可隐藏）
-                # st.image(mask_data, caption="生成的蒙版数据 (Debug)", width=100)
+                st.caption("💡 提示：涂白处将被重绘。")
+
+                if canvas_result.image_data is not None:
+                    mask_data = canvas_result.image_data[:, :, :3]
+
+            except AttributeError:
+                st.error("⚠️ **组件版本不兼容**")
+                st.warning("""
+                检测到 `AttributeError`。这通常是因为 `streamlit-drawable-canvas` 版本过低。
+                
+                **解决方法：**
+                1. 打开 `requirements.txt` 文件。
+                2. 将 `streamlit-drawable-canvas` 修改为 `streamlit-drawable-canvas>=0.9.5`。
+                3. 如果在 Cloud 运行，请点击右下角 "Manage app" -> "Reboot app"。
+                """)
+                st.stop()
+            except Exception as e:
+                st.error(f"画布加载失败: {e}")
+                st.stop()
 
         # 输入指令
         prompt = st.text_area("2. 修改指令", placeholder="例如：Change the shirt to a red silk dress...", height=80)
         
         if st.button("🚀 开始重绘 (Flux Fill)", type="primary"):
-            if not uploaded_file or canvas_result.image_data is None or not prompt:
+            # 这里的 canvas_result 可能会因为上面的报错而未定义，加个检查
+            if not uploaded_file or 'canvas_result' not in locals() or canvas_result.image_data is None or not prompt:
                 st.warning("请先上传图片、涂抹区域并输入指令")
             else:
                 with st.spinner("正在重绘..."):
                     try:
                         # 1. 准备原图
-                        bg_image.seek(0) # 指针复位
+                        bg_image.seek(0) 
                         img_byte_arr = io.BytesIO()
                         bg_image.save(img_byte_arr, format='PNG')
                         
-                        # 2. 准备蒙版 (从 Canvas 数据生成)
-                        # 将 numpy array 转为 PIL Image
-                        # 这里的逻辑：Canvas 画的是白色，背景透明。Flux 需要蒙版区域为白，背景为黑。
+                        # 2. 准备蒙版
                         mask_pil = Image.fromarray(canvas_result.image_data.astype('uint8'), mode="RGBA")
-                        # 提取 Alpha 通道作为蒙版依据，或者直接用 RGB (如果是黑底白画笔)
-                        # 简单做法：转灰度，二值化
                         mask_pil = mask_pil.split()[3] # 取 Alpha 通道
                         
                         mask_byte_arr = io.BytesIO()
@@ -142,7 +138,6 @@ with tab_inp:
                                 "output_quality": 95
                             }
                         )
-                        
                         st.session_state["magic_result"] = str(output)
                         
                     except Exception as e:
@@ -170,15 +165,12 @@ with tab_out:
             if out_img:
                 with st.spinner("正在扩展画幅..."):
                     try:
-                        # Flux Fill 的 Outpainting 逻辑
-                        # 注意：Flux Fill Pro 的 API 调用方式可能需要具体的参数调整 (padding vs aspect_ratio)
-                        # 这里使用 aspect_ratio 模式
                         out_res = replicate.run(
                             "black-forest-labs/flux-fill-pro",
                             input={
                                 "image": out_img,
                                 "prompt": out_prompt if out_prompt else "background texture",
-                                "aspect_ratio": target_ar.replace(":", ":"), # 确保格式 16:9
+                                "aspect_ratio": target_ar.replace(":", ":"), 
                                 "output_format": "jpg"
                             }
                         )
