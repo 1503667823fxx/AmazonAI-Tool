@@ -39,9 +39,8 @@ st.markdown("""
         font-size: 0.9rem;
         color: #666;
         margin-bottom: 15px;
-        min-height: 60px; /* 保证卡片高度对齐 */
+        min-height: 60px; 
     }
-    /* 让按钮更显眼 */
     .stButton button {
         width: 100%;
         border-radius: 8px;
@@ -60,75 +59,70 @@ with st.sidebar:
     st.success("🟢 System Online")
     st.info(f"📅 {datetime.date.today()}")
     st.divider()
-    if st.button("🔒 退出登录 (Logout)"):
+    if st.button("🔒 退出登录"):
         st.session_state["authenticated"] = False
         st.rerun()
 
-# --- 5. 欢迎区 ---
+# --- 5. 主页内容 ---
 st.markdown('<div class="welcome-header">Amazon 全能智造工作台</div>', unsafe_allow_html=True)
 st.markdown("👋 欢迎回来，运营官。请选择下方的工作模块开始任务。")
 st.divider()
 
-# --- 6. 功能导航区 (核心修改点) ---
-# 使用 Streamlit 原生容器 + Page Link 实现跳转
+# --- 6. 功能导航区 ---
 
-# === 第一行 ===
+# Row 1: Core Workflow
 c1, c2 = st.columns(2, gap="medium")
-
 with c1:
-    # 使用带边框的容器模拟卡片
     with st.container(border=True):
         st.markdown('<div class="card-title">✍️ 1. Listing 智能文案</div>', unsafe_allow_html=True)
         st.caption("✅ V2.5 Stable | 引擎: Gemini 3.0 Pro")
-        st.markdown('<div class="card-desc">亚马逊 SEO 文案撰写、五点描述、关键词埋词。支持新规合规性检查。</div>', unsafe_allow_html=True)
-        
-        # 🚀 关键：跳转按钮
-        # 请确保这里的字符串和你 pages 文件夹里的文件名一模一样！
+        st.markdown('<div class="card-desc">SEO 文案撰写、五点描述、关键词埋词。支持合规性检查与多语言适配。</div>', unsafe_allow_html=True)
         st.page_link("pages/1_✍️_Listing_Copywriter.py", label="进入文案工作室", icon="🚀", use_container_width=True)
 
 with c2:
     with st.container(border=True):
         st.markdown('<div class="card-title">🖼️ 2. Google 智造核心</div>', unsafe_allow_html=True)
-        st.caption("✅ V2.0 Core | 引擎: Gemini Multimodal")
-        st.markdown('<div class="card-desc">原生图生图、创意构思、变体批量生产。支持电商比例控制与批量工厂。</div>', unsafe_allow_html=True)
-        
-        # 🚀 关键：跳转按钮
-        # 如果你刚才把文件改名成了 Fashion_AI_Google_Core.py，这里要改成对应的名字
-        # 这里假设你还是用截图里的名字 2_🖼️_Smart_Edit.py
-        # 如果不对，请手动修改下面这行引号里的字
+        st.caption("✅ V6.1 Core | 引擎: Gemini Multimodal")
+        st.markdown('<div class="card-desc">原生图生图、改款变体、场景置换。支持多任务拆分与批量生产。</div>', unsafe_allow_html=True)
         st.page_link("pages/2_🖼️_Smart_Edit.py", label="进入 Google 智造台", icon="🎨", use_container_width=True)
 
-# === 第二行 ===
-st.write("") # 留白
-c3, c4 = st.columns(2, gap="medium")
+st.write("") 
 
+# Row 2: Advanced Visuals
+c3, c4 = st.columns(2, gap="medium")
 with c3:
     with st.container(border=True):
-        st.markdown('<div class="card-title">🎨 3. Visual Studio (Flux)</div>', unsafe_allow_html=True)
-        st.caption("🚧 Coming Soon | 引擎: FLUX.1 Pro")
-        st.markdown('<div class="card-desc">视觉精修工作台。支持局部重绘 (Inpainting)、扩图 (Outpainting) 及 4K 增强。</div>', unsafe_allow_html=True)
-        
-        # 假设文件名是 3_🎨_Visual_Studio.py
-        st.page_link("pages/3_🎨_Visual_Studio.py", label="进入视觉精修", icon="🛠️", use_container_width=True)
+        st.markdown('<div class="card-title">🖌️ 3. Magic Canvas (魔术画布)</div>', unsafe_allow_html=True)
+        st.caption("🚧 Beta | 引擎: FLUX Fill Pro")
+        st.markdown('<div class="card-desc">交互式局部重绘 (Inpainting) 与智能画幅扩展 (Outpainting)。</div>', unsafe_allow_html=True)
+        st.page_link("pages/3_🖌️_Magic_Canvas.py", label="进入魔术画布", icon="🖌️", use_container_width=True)
 
 with c4:
     with st.container(border=True):
         st.markdown('<div class="card-title">🎬 4. Video Studio</div>', unsafe_allow_html=True)
         st.caption("🚀 Beta | 引擎: Minimax / SVD")
         st.markdown('<div class="card-desc">电商短视频生成。支持图生视频 (Img2Vid) 及运镜控制。</div>', unsafe_allow_html=True)
-        
-        # 假设文件名是 4_🎬_Video_Studio.py
         st.page_link("pages/4_🎬_Video_Studio.py", label="进入视频工场", icon="🎥", use_container_width=True)
 
-# --- 7. 系统日志 ---
-with st.expander("📢 系统更新日志 (System Changelog)", expanded=False):
-    st.markdown("""
-    * **2025-05-27 (Architecture Update):**
-        * 🏗️ **架构重组**: 正式确立 `1-文案`, `2-谷歌核心`, `3-Flux精修`, `4-视频` 的四步工作流。
-        * 🖼️ **Smart Edit 上线**: 谷歌原生工作台 (Page 2) 升级为 V2.0，支持批量变体。
-    * **2025-05-26:**
-        * ✨ **视频模块**: Video Studio (Page 4) 进入公测。
-        * 🔒 **安全**: 全站 API 密钥与门禁系统升级。
-    """)
+st.write("")
 
-st.caption("© 2025 Amazon AI Operation Team | Design by Streamlit")
+# Row 3: Special Tools
+c5, c6 = st.columns(2, gap="medium")
+with c5:
+    with st.container(border=True):
+        st.markdown('<div class="card-title">🧩 5. A+ 创意工场</div>', unsafe_allow_html=True)
+        st.caption("✨ New | 工具: Slicer & GIF Maker")
+        st.markdown('<div class="card-desc">A+ 页面专属工具。长图智能切片、无缝拼接预览、动态 GIF 制作。</div>', unsafe_allow_html=True)
+        st.page_link("pages/5_🧩_APlus_Studio.py", label="进入 A+ 工场", icon="🧩", use_container_width=True)
+
+with c6:
+    # Visual Studio 现在主要作为补充工具
+    with st.container(border=True):
+        st.markdown('<div class="card-title">🎨 视觉基础工场</div>', unsafe_allow_html=True)
+        st.caption("🛠️ Utility | 引擎: Flux & ESRGAN")
+        st.markdown('<div class="card-desc">纯文生图 (Text-to-Image) 与 4K 画质增强 (Upscale) 中心。</div>', unsafe_allow_html=True)
+        st.page_link("pages/3_🎨_Visual_Studio.py", label="进入视觉基础", icon="🔭", use_container_width=True)
+
+# --- 7. 底部 ---
+st.divider()
+st.caption("© 2025 Amazon AI Operation Team")
