@@ -7,16 +7,23 @@ import os
 import time
 from collections import deque 
 
-# --- 0. 基础设置 ---
+# --- 0. 基础设置与门禁系统 (修复版) ---
+# 1. 确保能找到根目录下的 auth.py
 sys.path.append(os.path.abspath('.'))
+
+# 2. 尝试引入 auth，如果还没有 auth.py 就跳过 (防止本地调试报错)
+try:
+    import auth
+except ImportError:
+    pass 
+
 st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
 
-# --- 1. 鉴权配置 ---
-if "GOOGLE_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-else:
-    st.error("❌ 错误：未找到 GOOGLE_API_KEY")
-    st.stop()
+# 3. 执行安全检查
+if 'auth' in sys.modules:
+    if not auth.check_password():
+        st.stop()  # 验证失败则停止往下运行
+
 
 # --- 2. 样式优化 ---
 st.markdown("""
