@@ -6,201 +6,297 @@ import io
 import sys
 import os
 import time
+from collections import deque # 用于实现定长历史记录
 
-# --- 0. 基础设置与门禁系统 ---
+# --- 0. 基础设置 ---
 sys.path.append(os.path.abspath('.'))
-try:
-    import auth
-except ImportError:
-    pass 
+st.set_page_config(page_title="Fashion AI Pro Workflow", page_icon="🧬", layout="wide")
 
-# 页面配置
-st.set_page_config(page_title="Fashion AI Studio", page_icon="🚀", layout="wide")
-
-# 安全检查
-if 'auth' in sys.modules:
-    if not auth.check_password():
-        st.stop()
-
-# --- 1. 关键修复：API 密钥配置 ---
+# --- 1. 鉴权配置 ---
+# Replicate
 if "REPLICATE_API_TOKEN" in st.secrets:
     os.environ["REPLICATE_API_TOKEN"] = st.secrets["REPLICATE_API_TOKEN"]
 else:
-    st.error("❌ 错误：未在 secrets.toml 中找到 REPLICATE_API_TOKEN")
+    st.error("❌ 错误：未找到 REPLICATE_API_TOKEN")
     st.stop()
 
+# Google
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.warning("⚠️ 警告：未找到 GOOGLE_API_KEY，AI 构思功能将不可用。")
+    st.error("❌ 错误：未找到 GOOGLE_API_KEY")
+    st.stop()
 
-# --- 2. 样式与常量 ---
+# --- 2. 常量与样式 ---
 st.markdown("""
 <style>
-    .stButton button {width: 100%; border-radius: 8px; font-weight: bold;}
-    .step-card {
-        background-color: #f8f9fa;
-        padding: 20px;
-        border-radius: 10px;
-        border-left: 5px solid #ff4b4b;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    .step-header {
+        background: linear-gradient(90deg, #f0f2f6 0%, #ffffff 100%);
+        padding: 10px 20px;
+        border-radius: 8px;
+        border-left: 5px solid #4F8BF9;
+        margin-top: 20px;
+        margin-bottom: 10px;
+        font-weight: bold;
+        color: #31333F;
     }
+    .stButton button {border-radius: 8px;}
+    .history-img {border: 2px solid #ddd; border-radius: 5px;}
 </style>
 """, unsafe_allow_html=True)
 
-UNIVERSAL_QUALITY_PROMPT = ", commercial photography, 8k resolution, photorealistic, highly detailed, cinematic lighting, depth of field, masterpiece, sharp focus"
-UNIVERSAL_NEGATIVE_PROMPT = "blurry, low quality, distorted, ugly, pixelated, watermark, text, signature, bad anatomy, deformed, lowres, bad hands, mutation"
+# Google 生图模型列表 (锁定这两个最强的)
+GOOGLE_IMG_MODELS = [
+    "models/gemini-2.5-flash-image",
+    "models/gemini-3-pro-image-preview"
+]
 
-# --- 3. 新增功能：自动获取可用模型 ---
-@st.cache_data(ttl=3600) # 缓存1小时，避免每次刷新都去请求谷歌
-def get_available_gemini_models():
-    """
-    自动去问 Google：你现在有哪些模型可以用？
-    只返回支持 generateContent (生成内容) 的模型
-    """
-    try:
-        models = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                # 过滤掉一些太老的模型，只保留 gemini 系列
-                if 'gemini' in m.name:
-                    models.append(m.name)
-        # 如果获取成功但列表为空，给个保底
-        if not models:
-            return ["models/gemini-1.5-flash-latest", "models/gemini-pro"]
-        return sorted(models, reverse=True) # 让最新的模型排前面
-    except Exception as e:
-        # 如果报错（比如网络不通），返回一个最稳的默认列表
-        return ["models/gemini-1.5-flash", "models/gemini-1.0-pro"]
+# --- 3. 状态管理 (Session State) ---
+if "history_queue" not in st.session_state:
+    st.session_state["history_queue"] = deque(maxlen=5) # 自动保留最后5个
+if "current_step" not in st.session_state:
+    st.session_state["current_step"] = 1
+if "draft_prompt" not in st.session_state:
+    st.session_state["draft_prompt"] = ""
+if "google_image_bytes" not in st.session_state:
+    st.session_state["google_image_bytes"] = None # 存储 Google 生成图的二进制
+if "flux_prompt" not in st.session_state:
+    st.session_state["flux_prompt"] = ""
 
-# --- 4. 主界面逻辑 ---
-st.title("🚀 Fashion AI Studio")
-st.caption("双核驱动：Google Gemini (大脑) + Flux Pro (画笔)")
+# --- 4. 辅助函数 ---
+def update_history(image_data, source="AI", prompt_summary=""):
+    """更新历史记录"""
+    timestamp = time.strftime("%H:%M:%S")
+    st.session_state["history_queue"].appendleft({
+        "image": image_data,
+        "source": source,
+        "time": timestamp,
+        "desc": prompt_summary[:20] + "..."
+    })
 
-# 初始化 Session State
-if "hybrid_instruction" not in st.session_state:
-    st.session_state["hybrid_instruction"] = ""
-if "generated_image_urls" not in st.session_state:
-    st.session_state["generated_image_urls"] = []
+def get_text_model():
+    return genai.GenerativeModel('gemini-1.5-flash')
 
-col1, col2 = st.columns([1, 1], gap="large")
+# ==========================================
+# 🚀 主界面布局
+# ==========================================
 
-# === 左侧：上传与构思 (Gemini) ===
-with col1:
-    st.markdown('<div class="step-card">Step 1: 上传与 AI 构思</div>', unsafe_allow_html=True)
+# 侧边栏：历史记录
+with st.sidebar:
+    st.header("🕒 历史记录 (Latest 5)")
+    if len(st.session_state["history_queue"]) == 0:
+        st.caption("暂无生成记录")
+    else:
+        for item in st.session_state["history_queue"]:
+            st.markdown(f"**{item['source']}** - {item['time']}")
+            # 判断是 URL 还是 Bytes
+            if isinstance(item['image'], bytes):
+                st.image(item['image'], use_column_width=True)
+            else:
+                st.image(item['image'], use_column_width=True)
+            st.divider()
+
+st.title("🧬 Fashion AI 全流程工作流")
+st.caption("Flow: 理解与构思 -> Google 原型生成 -> Flux 精细化重绘")
+
+# 分栏布局
+col_main, col_preview = st.columns([1.2, 1], gap="large")
+
+with col_main:
+    # ==========================================
+    # Step 1: 输入与构思 (The Brain)
+    # ==========================================
+    st.markdown('<div class="step-header">Step 1: 需求分析与构思</div>', unsafe_allow_html=True)
     
-    # --- 新增：模型选择器 ---
-    with st.expander("⚙️ Gemini 模型设置 (点此切换模型)", expanded=False):
-        available_models = get_available_gemini_models()
-        # 默认选中第一个
-        selected_model_name = st.selectbox(
-            "选择 Google 模型 (报错404请换一个)", 
-            available_models,
-            index=0 if available_models else 0
-        )
-        st.caption(f"当前使用: {selected_model_name}")
-
-    ref_img = st.file_uploader("📤 上传原始图片", type=["jpg", "png", "webp"], key="upload_main")
+    uploaded_file = st.file_uploader("1. 上传图片", type=["jpg", "png", "webp"])
     
-    if ref_img:
-        st.image(ref_img, width=300, caption="当前原图")
-        
-        task_type = st.radio("✨ 选择模式", ["换背景 (Scene Swap)", "创意重绘 (Creative)", "画质增强 (Upscale)"], horizontal=True)
-        user_idea = st.text_area("💡 你的想法 (可选)", height=80, placeholder="例如：把背景改成极简主义风格的白色摄影棚，光线要柔和...")
+    task_type = st.radio(
+        "2. 选择生成类型", 
+        ["场景图 (Lifestyle)", "展示图 (Creative)", "产品图 (Product Only)"], 
+        horizontal=True,
+        help="产品图模式会自动尝试去除模特，将衣物/商品平铺展示。"
+    )
+    
+    user_idea = st.text_area("3. 你的想法 (简单描述即可)", height=70, placeholder="例如：在海边的夕阳下，光线温暖...")
 
-        # 调用 Gemini 生成指令
-        if st.button("🧠 让 Gemini 编写绘画指令", type="secondary"):
-            with st.spinner(f"正在使用 {selected_model_name} 分析图片..."):
+    if st.button("🧠 生成设计方案 (Draft Prompt)"):
+        if not uploaded_file:
+            st.warning("请先上传图片")
+        else:
+            with st.spinner("Gemini 正在读图并设计方案..."):
                 try:
-                    # 准备图片数据
-                    ref_img.seek(0)
-                    img_obj = Image.open(ref_img)
+                    uploaded_file.seek(0)
+                    img_obj = Image.open(uploaded_file)
+                    model = get_text_model()
                     
-                    # 使用用户选择的模型
-                    model = genai.GenerativeModel(selected_model_name)
-                    
+                    # 针对“产品图”的特殊逻辑
+                    special_instruction = ""
+                    if "产品图" in task_type:
+                        special_instruction = "IMPORTANT: User wants a 'Product Only' shot. Remove any human models, body parts, or mannequins. Lay the clothing/product flat or hang it invisibly. Focus purely on the item itself on a clean background."
+
                     prompt_req = f"""
-                    你是一个商业摄影指导。请基于这张图片和用户需求："{user_idea}"，
-                    写一段用于 FLUX 生图模型的英文提示词 (Prompt)。
+                    Role: Expert Commercial Art Director.
+                    Task: Analyze the image and user idea to write a perfect prompt for AI Image Generation.
                     
-                    要求：
-                    1. 描述主体(Subject)要忠实于原图。
-                    2. 描述环境(Environment)要符合模式："{task_type}"。
-                    3. 风格为 8k 超写实摄影。
+                    Input Image: A fashion product/scene.
+                    User Goal: {task_type}
+                    User Idea: "{user_idea}"
                     
-                    请直接输出英文 Prompt，不要包含任何解释或Markdown符号。
+                    {special_instruction}
+                    
+                    Requirements:
+                    1. Describe the Subject (Product) in detail (keep it faithful).
+                    2. Describe the Environment/Background based on User Idea.
+                    3. Lighting & Style: Commercial photography, 8k, masterpiece.
+                    
+                    Output: ONLY the English Prompt text. No explanations.
                     """
                     
-                    # 调用 Google API
                     response = model.generate_content([prompt_req, img_obj])
-                    
-                    if response.text:
-                        st.session_state["hybrid_instruction"] = response.text.strip()
-                        st.success("✅ 指令已生成！")
-                        time.sleep(0.5)
-                        st.rerun()
+                    st.session_state["draft_prompt"] = response.text.strip()
+                    st.session_state["current_step"] = 2
+                    st.rerun() # 刷新进入下一步
                 except Exception as e:
-                    st.error(f"Gemini 调用失败: {e}")
-                    st.info("💡 建议：点击上方的 '⚙️ Gemini 模型设置' 换一个模型试试 (推荐 gemini-1.5-flash)。")
+                    st.error(f"分析失败: {e}")
 
-# === 右侧：生成与结果 (Flux) ===
-with col2:
-    st.markdown('<div class="step-card">Step 2: Flux 极速绘图</div>', unsafe_allow_html=True)
-    
-    # 显示/编辑指令
-    final_prompt = st.text_area(
-        "🎨 最终绘画指令 (英文)", 
-        value=st.session_state["hybrid_instruction"], 
-        height=120,
-        help="Flux 模型将严格按照这段文字进行绘制"
-    )
+    # ==========================================
+    # Step 2: Google 原型验证 (The Skeleton)
+    # ==========================================
+    if st.session_state.get("draft_prompt"):
+        st.markdown('<div class="step-header">Step 2: Google 原型生成</div>', unsafe_allow_html=True)
+        
+        # 4. 用户编辑 Prompt
+        edited_prompt = st.text_area("4. 确认/修改 提示词方案", value=st.session_state["draft_prompt"], height=120)
+        st.session_state["draft_prompt"] = edited_prompt # 同步修改
 
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        strength = st.slider("⚡ 重绘幅度 (Strength)", 0.1, 1.0, 0.80, help="数值越大，变化越大。0.8适合换背景，0.3适合微调。")
-    with col_p2:
-        num_outputs = st.number_input("🖼️ 生成数量", 1, 4, 1)
+        # 5. 选择 Google 模型
+        google_model = st.selectbox("5. 选择多模态 AI", GOOGLE_IMG_MODELS)
 
-    # 调用 Replicate (Flux)
-    if st.button("🚀 立即生成图片", type="primary"):
-        if not ref_img or not final_prompt:
-            st.warning("⚠️ 请先上传图片并生成指令！")
-        else:
-            with st.spinner("🎨 Flux 正在绘制中 (通常需要 5-10秒)..."):
+        if st.button("🎨 运行 Google 生成 (原型验证)"):
+            with st.spinner(f"正在调用 {google_model} ..."):
                 try:
-                    ref_img.seek(0) # 关键：重置文件指针
+                    uploaded_file.seek(0)
+                    img_pil = Image.open(uploaded_file)
+                    
+                    gen_model = genai.GenerativeModel(google_model)
+                    
+                    # Google 图生图逻辑
+                    response = gen_model.generate_content([edited_prompt, img_pil], stream=True)
+                    
+                    found_img = False
+                    for chunk in response:
+                        if hasattr(chunk, "parts"):
+                            for part in chunk.parts:
+                                if part.inline_data:
+                                    img_data = part.inline_data.data
+                                    st.session_state["google_image_bytes"] = img_data # 存入缓存
+                                    found_img = True
+                                    # 更新历史
+                                    update_history(img_data, source="Google", prompt_summary=edited_prompt)
+                    
+                    if found_img:
+                        st.success("Google 生成完成！请在右侧查看。")
+                        st.session_state["current_step"] = 3
+                    else:
+                        st.error("Google 未返回图片，可能是被安全策略拦截或 Prompt 违规。")
+                except Exception as e:
+                    st.error(f"Google 生成出错: {e}")
+
+    # ==========================================
+    # Step 3: Flux 精修 (The Final Polish)
+    # ==========================================
+    if st.session_state.get("google_image_bytes"):
+        st.markdown('<div class="step-header">Step 3: Flux 质感精修</div>', unsafe_allow_html=True)
+        
+        st.info("是否对 Google 的结果满意？如果不满意，可以用 Flux 进行更强力的重绘。")
+        
+        # 7. 用户填写修改建议
+        flux_feedback = st.text_input("6. (可选) 填写修改建议", placeholder="例如：增加皮肤质感，光线再柔和一点，背景虚化...")
+        
+        # 8. AI 润色 Flux 指令
+        if st.button("✨ 优化 Flux 指令并生成"):
+            with st.spinner("正在优化指令并调用 Flux Pro..."):
+                try:
+                    # A. 优化 Prompt
+                    optimizer_model = get_text_model()
+                    opt_req = f"""
+                    Base Prompt: {st.session_state["draft_prompt"]}
+                    User Feedback: {flux_feedback}
+                    
+                    Task: Rewrite the Base Prompt to incorporate User Feedback. 
+                    Ensure keywords for Flux model are added: "hyper-realistic, 8k, film grain, ray tracing".
+                    Output: ONLY the optimized English Prompt.
+                    """
+                    opt_res = optimizer_model.generate_content(opt_req)
+                    final_flux_prompt = opt_res.text.strip()
+                    st.session_state["flux_prompt"] = final_flux_prompt # 记录
+                    
+                    # B. 调用 Flux
+                    # 决策：Flux 用原图还是用 Google 图？
+                    # 逻辑：通常为了保留产品细节，用原图 + 新 Prompt 效果更好。
+                    # 如果想要完全利用 Google 的构图，可以用 Google 图，但在“产品图”场景下，原图细节最重要。
+                    # 这里默认使用【原图】作为底图，利用 Google 验证过的 Prompt。
+                    uploaded_file.seek(0)
                     
                     output = replicate.run(
                         "black-forest-labs/flux-dev",
                         input={
-                            "prompt": final_prompt + UNIVERSAL_QUALITY_PROMPT,
-                            "image": ref_img, 
-                            "prompt_strength": strength, 
+                            "prompt": final_flux_prompt,
+                            "image": uploaded_file, # 使用原图以保真
+                            "prompt_strength": 0.75, # 适合重绘
                             "go_fast": True,
-                            "num_outputs": num_outputs,
+                            "num_outputs": 1,
                             "output_format": "jpg",
                             "output_quality": 100,
-                            "negative_prompt": UNIVERSAL_NEGATIVE_PROMPT
+                            "negative_prompt": "blurry, low quality, illustration, painting, cartoon"
                         }
                     )
                     
-                    urls = []
-                    if isinstance(output, list):
-                        urls = [str(url) for url in output]
-                    else:
-                        urls = [str(output)]
+                    # 处理 Flux 结果
+                    flux_url = str(output[0]) if isinstance(output, list) else str(output)
                     
-                    st.session_state["generated_image_urls"] = urls
-                    st.success("🎉 生成成功！")
+                    # 更新历史
+                    update_history(flux_url, source="Flux", prompt_summary=final_flux_prompt)
+                    st.success("Flux 精修完成！")
+                    st.rerun()
                     
                 except Exception as e:
-                    st.error(f"Flux 生成失败: {str(e)}")
-                    st.info("💡 如果显示 401 Unauthorized，请检查 .streamlit/secrets.toml 里的 REPLICATE_API_TOKEN")
+                    st.error(f"Flux 处理失败: {e}")
 
-    # 展示结果
-    if st.session_state["generated_image_urls"]:
+# ==========================================
+# 右侧预览区
+# ==========================================
+with col_preview:
+    st.header("🖼️ 实时画布")
+    
+    # 1. 显示 Google 结果
+    if st.session_state.get("google_image_bytes"):
+        st.subheader("Google Prototype")
+        g_img = Image.open(io.BytesIO(st.session_state["google_image_bytes"]))
+        st.image(g_img, caption="Google 2.5/3.0 Result", use_column_width=True)
+        
+        # 下载按钮
+        st.download_button("📥 下载 Google 图", st.session_state["google_image_bytes"], file_name="google_draft.png")
+    
+    # 2. 显示 Flux 结果 (如果有)
+    # 获取历史记录中最新的 Flux 图片
+    latest_flux = None
+    for item in st.session_state["history_queue"]:
+        if item["source"] == "Flux":
+            latest_flux = item
+            break
+            
+    if latest_flux:
         st.divider()
+        st.subheader("Flux Final Result")
+        st.image(latest_flux["image"], caption="Flux Refined Result", use_column_width=True)
+        st.info(f"使用的 Prompt: {latest_flux.get('desc', '')}")
+    
+    # 3. 如果还没生成，显示占位
+    if not st.session_state.get("google_image_bytes") and not latest_flux:
+        st.info("等待操作... 请在左侧上传图片并开始。")
+        if uploaded_file:
+            st.image(uploaded_file, caption="原始图片", width=200)
         st.subheader("👀 生成结果")
         for i, url in enumerate(st.session_state["generated_image_urls"]):
             st.image(url, caption=f"Result {i+1}", use_column_width=True)
