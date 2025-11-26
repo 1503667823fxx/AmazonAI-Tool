@@ -47,7 +47,7 @@ def get_vision_model():
 st.title("🎨 亚马逊 AI 视觉工场 (基础版)")
 st.info("👉 想要高级图生图/换场景？请使用左侧菜单的 **「智能图生图」** 模块。")
 
-tabs = st.tabs(["✨ 文生图", "🖌️ 局部重绘", "↔️ 画幅扩展", "🔍 高清放大", "🧩 A+ 助手"])
+tabs = st.tabs(["✨ 文生图", "🔍 高清放大"])
 
 # Tab 1: 文生图
 with tabs[0]:
@@ -76,35 +76,6 @@ with tabs[0]:
                     except Exception as e:
                         st.error(e)
 
-# Tab 2: 局部重绘
-with tabs[1]:
-    st.header("🖌️ 局部重绘")
-    c1, c2 = st.columns([4,6])
-    with c1:
-        img = st.file_uploader("原图", key="inp_img")
-        mask = st.file_uploader("蒙版", key="inp_mask")
-        p = st.text_input("描述")
-    with c2:
-        if st.button("🚀 重绘"):
-            if img and mask and p:
-                with st.spinner("重绘中..."):
-                    out = replicate.run("black-forest-labs/flux-fill-pro", input={"image": img, "mask": mask, "prompt": p})
-                    st.image(str(out))
-
-# Tab 3: 画幅扩展
-with tabs[2]:
-    st.header("↔️ 画幅扩展")
-    c1, c2 = st.columns([4,6])
-    with c1:
-        img = st.file_uploader("原图", key="out_img")
-        ar = st.selectbox("扩展至", ["16:9", "9:16"], key="out_ar")
-        p = st.text_input("背景描述", key="out_p")
-    with c2:
-        if st.button("🚀 扩展"):
-            if img and p:
-                with st.spinner("扩展中..."):
-                    out = replicate.run("black-forest-labs/flux-fill-pro", input={"image": img, "prompt": p, "aspect_ratio": ar.split(":")[0]+":"+ar.split(":")[1]})
-                    st.image(str(out))
 
 # Tab 4: 高清放大
 with tabs[3]:
@@ -116,9 +87,3 @@ with tabs[3]:
                 out = replicate.run("nightmareai/real-esrgan", input={"image": img, "scale": 4})
                 st.image(str(out))
 
-# Tab 5: A+
-with tabs[4]:
-    st.header("🧩 A+ 助手")
-    imgs = st.file_uploader("多图", accept_multiple_files=True)
-    if imgs:
-        for i in imgs: st.image(i)
