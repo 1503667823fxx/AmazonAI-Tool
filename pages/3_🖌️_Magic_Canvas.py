@@ -14,7 +14,22 @@ try:
 except ImportError:
     pass 
 
-# --- 安全导入画布组件 ---
+# ==========================================
+# 🛠️ 核心修复：兼容性补丁 (Monkey Patch)
+# ==========================================
+# 解决 Streamlit 1.35+ 移除了 image_to_url 导致画板背景不显示或报错的问题
+import streamlit.elements.image
+if not hasattr(streamlit.elements.image, "image_to_url"):
+    try:
+        from streamlit.elements.lib.image_utils import image_to_url
+        streamlit.elements.image.image_to_url = image_to_url
+    except ImportError:
+        # 如果连 lib 都没有，尝试定义一个哑函数防止崩溃
+        def image_to_url(image, width, clamp, channels, output_format, image_id, allow_emoji=False):
+            return ""
+        streamlit.elements.image.image_to_url = image_to_url
+
+# --- 安全导入画布 ---
 try:
     from streamlit_drawable_canvas import st_canvas
 except ImportError:
@@ -26,7 +41,6 @@ if 'auth' in sys.modules:
     if not auth.check_password():
         st.stop()
 
-# API Check
 if "REPLICATE_API_TOKEN" in st.secrets:
     os.environ["REPLICATE_API_TOKEN"] = st.secrets["REPLICATE_API_TOKEN"]
 else:
@@ -37,8 +51,7 @@ st.title("🖌️ 魔术画布 (Magic Canvas)")
 st.caption("交互式局部重绘 & 智能扩图工作台")
 
 if st_canvas is None:
-    st.error("❌ 缺少必要组件：streamlit-drawable-canvas")
-    st.info("请检查 requirements.txt 配置。")
+    st.error("❌ 缺少必要组件，请检查 requirements.txt")
     st.stop()
 
 # --- 状态初始化 ---
@@ -60,14 +73,14 @@ with tab_inp:
         
         uploaded_file = st.file_uploader("上传原图", type=["png", "jpg", "jpeg"], key="inp_upload")
         
-        # --- 图片预处理 ---
+        # --- 图片预处理逻辑 ---
         if uploaded_file:
-            # 只有当上传了新文件时才处理
+            # 检查是否是新文件
             if st.session_state["original_upload"] != uploaded_file.name:
                 try:
                     raw_image = Image.open(uploaded_file).convert("RGB")
                     
-                    # 【优化】最大宽度限制为 700px，提升流畅度
+                    # 强制缩小图片，防止过大导致不显示
                     max_canvas_width = 700
                     if raw_image.width > max_canvas_width:
                         ratio = max_canvas_width / raw_image.width
@@ -79,7 +92,6 @@ with tab_inp:
                     # 存入 Session
                     st.session_state["canvas_bg"] = resized_image
                     st.session_state["original_upload"] = uploaded_file.name
-                    # 强制刷新页面以更新 canvas key
                     st.rerun()
                     
                 except Exception as e:
@@ -89,10 +101,14 @@ with tab_inp:
         if st.session_state.get("canvas_bg"):
             bg_img = st.session_state["canvas_bg"]
             
+            # 调试区域：如果画布没图，点开这个看看 Session 里有没有图
+            with st.expander("🖼️ 画布底层调试 (如果不显示请点此)", expanded=False):
+                st.image(bg_img, caption=f"内存中的底图 ({bg_img.width}x{bg_img.height})", width=300)
+                st.info("如果这里有图但下方画布是白的，请尝试刷新网页。")
+
             stroke_width = st.slider("画笔大小", 5, 50, 20)
             
-            # 【核心修复】使用动态 Key，确保换图时画布彻底重置
-            # 如果没有这个，换图后画布可能还是显示旧图或空白
+            # 使用文件名作为 Key，确保换图时强制重绘
             dynamic_key = f"canvas_{st.session_state['original_upload']}"
             
             try:
@@ -100,16 +116,16 @@ with tab_inp:
                     fill_color="rgba(255, 255, 255, 0)",  
                     stroke_width=stroke_width,
                     stroke_color="#FFFFFF", 
-                    background_image=bg_img, 
+                    background_image=bg_img, # 这里的 bg_img 必须是 RGB 模式的 PIL Image
                     update_streamlit=True,
                     height=bg_img.height,
                     width=bg_img.width,
                     drawing_mode="freedraw",
-                    key=dynamic_key, # 使用动态 Key
+                    key=dynamic_key,
                     display_toolbar=True,
                 )
                 
-                st.caption("💡 提示：在左图涂抹要修改的区域（白色）。")
+                st.caption("💡 提示：在图片上涂抹白色区域，该区域将被 AI 重绘。")
 
             except Exception as e:
                 st.error(f"画布加载出错: {e}")
@@ -119,8 +135,15 @@ with tab_inp:
             prompt = st.text_area("2. 修改指令", placeholder="例如：Change to red silk dress...", height=80)
             
             if st.button("🚀 开始重绘", type="primary"):
-                if not canvas_result.image_data is not None or not prompt:
-                    st.warning("请先涂抹区域并输入指令")
+                # 检查逻辑优化
+                has_mask = False
+                if canvas_result.image_data is not None:
+                    # 检查是否有涂抹内容 (求和 > 0)
+                    if np.sum(canvas_result.image_data) > 0:
+                        has_mask = True
+                
+                if not has_mask or not prompt:
+                    st.warning("请先涂抹区域并输入指令！(如果画布是空的，请刷新页面)")
                 else:
                     with st.spinner("正在重绘 (Flux Fill Pro)..."):
                         try:
@@ -131,8 +154,7 @@ with tab_inp:
                             # 2. 准备蒙版
                             mask_data = canvas_result.image_data.astype('uint8')
                             mask_pil = Image.fromarray(mask_data, mode="RGBA")
-                            # 提取 Alpha 通道 (涂抹部分)
-                            mask_pil = mask_pil.split()[3] 
+                            mask_pil = mask_pil.split()[3] # 取 Alpha 通道
                             
                             mask_byte_arr = io.BytesIO()
                             mask_pil.save(mask_byte_arr, format='PNG')
@@ -189,9 +211,6 @@ with tab_out:
                     except Exception as e:
                         st.error(f"扩展失败: {e}")
     
-    with c2:
-        if "out_result" in st.session_state:
-            st.image(st.session_state["out_result"], caption="扩展结果", use_container_width=True)
     with c2:
         if "out_result" in st.session_state:
             st.image(st.session_state["out_result"], caption="扩展结果", use_container_width=True)
