@@ -121,8 +121,9 @@ with c6:
         st.markdown('<div class="card-title">🎨 视觉基础工场</div>', unsafe_allow_html=True)
         st.caption("🛠️ Utility | 引擎: Flux & ESRGAN")
         st.markdown('<div class="card-desc">纯文生图 (Text-to-Image) 与 4K 画质增强 (Upscale) 中心。</div>', unsafe_allow_html=True)
-        st.page_link("pages/3_🎨_Visual_Studio.py", label="进入视觉基础", icon="🔭", use_container_width=True)
+        st.page_link("pages/6_🎨_Visual_Studio.py", label="进入视觉基础", icon="🔭", use_container_width=True)
 
 # --- 7. 底部 ---
 st.divider()
 st.caption("© 2025 Amazon AI Operation Team")
+
