@@ -1,4 +1,4 @@
-streamlit>=1.35.0
+streamlit
 google-generativeai
 replicate
 pillow
@@ -6,3 +6,4 @@ numpy
 requests
 streamlit-drawable-canvas>=0.9.5
 watchdog
+
