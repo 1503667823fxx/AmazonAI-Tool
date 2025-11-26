@@ -1,238 +1,183 @@
 import streamlit as st
 import replicate
 import google.generativeai as genai
-from PIL import Image, ImageOps
+from PIL import Image
 import io
 import sys
 import os
-import requests
 import time
 
-# --- 0. 引入门禁系统 ---
+# --- 0. 基础设置与门禁系统 ---
+# 确保能找到同目录下的 auth.py
 sys.path.append(os.path.abspath('.'))
 try:
     import auth
 except ImportError:
     pass 
 
-# --- 1. 页面配置 ---
-st.set_page_config(page_title="智能图生图", page_icon="🖼️", layout="wide")
+# 页面配置
+st.set_page_config(page_title="Fashion AI Studio", page_icon="🚀", layout="wide")
 
-# 安全检查
+# 安全检查 (如果有 auth 模块则启用)
 if 'auth' in sys.modules:
     if not auth.check_password():
         st.stop()
 
-# --- 自定义 CSS ---
+# --- 1. 关键修复：API 密钥配置 ---
+# 必须把 st.secrets 里的 key 告诉环境变量，Replicate 库才能用！
+if "REPLICATE_API_TOKEN" in st.secrets:
+    os.environ["REPLICATE_API_TOKEN"] = st.secrets["REPLICATE_API_TOKEN"]
+else:
+    st.error("❌ 错误：未在 secrets.toml 中找到 REPLICATE_API_TOKEN")
+    st.stop()
+
+if "GOOGLE_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+else:
+    st.warning("⚠️ 警告：未找到 GOOGLE_API_KEY，AI 构思功能将不可用。")
+
+# --- 2. 样式与常量 ---
 st.markdown("""
 <style>
-    .stButton button {width: 100%; border-radius: 8px;}
+    .stButton button {width: 100%; border-radius: 8px; font-weight: bold;}
     .step-card {
-        background-color: #f0f8ff;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 5px solid #0068c9;
-        margin-bottom: 15px;
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #ff4b4b;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .info-box {
-        background-color: #fff3cd;
-        padding: 10px;
-        border-radius: 5px;
-        font-size: 14px;
-        color: #856404;
-        margin-bottom: 10px;
-    }
+    h1 {color: #333;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. 验证 Keys ---
-if "REPLICATE_API_TOKEN" not in st.secrets:
-    st.error("❌ 未找到 Replicate API Token")
-    st.stop()
-if "GOOGLE_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-
-# --- 3. 常量 ---
 UNIVERSAL_QUALITY_PROMPT = ", commercial photography, 8k resolution, photorealistic, highly detailed, cinematic lighting, depth of field, masterpiece, sharp focus"
+UNIVERSAL_NEGATIVE_PROMPT = "blurry, low quality, distorted, ugly, pixelated, watermark, text, signature, bad anatomy, deformed, lowres, bad hands, mutation"
 
-# --- 4. 辅助函数 ---
-def download_image(url, filename):
-    st.markdown(f"### [📥 点击下载 {filename}]({url})")
-
+# --- 3. 辅助函数 ---
 def get_pro_vision_model():
-    """使用 3.0 Pro 进行深度构思"""
-    return genai.GenerativeModel('gemini-3-pro-preview') 
+    """使用 Gemini 3.0 Pro 进行视觉分析"""
+    return genai.GenerativeModel('gemini-1.5-pro') # 建议先用稳定的 1.5-pro，如果你的账号支持 3.0 可自行改回
 
-def process_rembg_mask(image_file):
-    """
-    核心函数：调用 Rembg 抠图并生成反向蒙版 (用于 Flux Fill)
-    Flux Fill 逻辑: 白色 = 重绘区域(背景), 黑色 = 保护区域(主体)
-    """
-    try:
-        # 1. 调用抠图
-        output_url = replicate.run("cjwbw/rembg:1.4", input={"image": image_file})
-        response = requests.get(str(output_url))
-        no_bg_image = Image.open(io.BytesIO(response.content))
-        
-        # 2. 提取 Alpha 通道
-        if no_bg_image.mode == 'RGBA':
-            alpha = no_bg_image.split()[-1]
-        else:
-            alpha = Image.new("L", no_bg_image.size, 255)
-            
-        # 3. 反转 Alpha (主体变黑，背景变白)
-        # Rembg 默认: 主体255(白), 背景0(黑)
-        # 我们需要: 主体0(黑/保护), 背景255(白/重绘)
-        mask = ImageOps.invert(alpha)
-        
-        return no_bg_image, mask
-    except Exception as e:
-        st.error(f"抠图处理失败: {e}")
-        return None, None
+# --- 4. 主界面逻辑 ---
+st.title("🚀 Fashion AI Studio")
+st.caption("双核驱动：Google Gemini (大脑) + Flux Pro (画笔)")
 
-# --- 5. 主界面 ---
-st.title("🖼️ 智能场景变换 (Smart Scene Swap)")
-st.info("🔥 **Pro 模式**：系统会自动锁定产品/模特像素，只重绘背景，确保 **产品 100% 不变**。")
-
-# 初始化 Session
+# 初始化 Session State
 if "hybrid_instruction" not in st.session_state:
     st.session_state["hybrid_instruction"] = ""
 if "generated_image_urls" not in st.session_state:
     st.session_state["generated_image_urls"] = []
 
-col1, col2 = st.columns([5, 5])
+col1, col2 = st.columns([1, 1], gap="large")
 
-# === 左侧：构思 (Brain) ===
+# === 左侧：上传与构思 (Gemini) ===
 with col1:
-    st.markdown('<div class="step-card">Step 1: 上传与构思</div>', unsafe_allow_html=True)
-    ref_img = st.file_uploader("上传原图", type=["jpg", "png", "webp"], key="smart_up")
+    st.markdown('<div class="step-card">Step 1: 上传与 AI 构思</div>', unsafe_allow_html=True)
+    
+    ref_img = st.file_uploader("📤 上传原始图片", type=["jpg", "png", "webp"], key="upload_main")
     
     if ref_img:
-        st.image(ref_img, width=200, caption="原图")
+        st.image(ref_img, width=300, caption="当前原图")
         
-        # 任务类型
-        task_type = st.radio(
-            "生成方向", 
-            ["🏡 场景图 (Lifestyle)", "✨ 展示图 (Creative)", "🔍 创意变体 (Variation)"], 
-            horizontal=True
-        )
-        
-        # 用户想法
-        user_idea = st.text_area(
-            "您的具体想法 (支持中文)", 
-            height=80, 
-            placeholder="例如：把背景改成温馨的圣诞节客厅，壁炉在燃烧，给产品打暖色光..."
-        )
-        
-        # 生成指令
-        if st.button("🧠 Gemini 编写指令", type="secondary"):
-            if not user_idea:
-                st.warning("请先写下您的想法！")
-            else:
-                with st.spinner("Gemini 3.0 Pro 正在深度分析..."):
-                    try:
-                        img_obj = Image.open(ref_img)
-                        # 缩图加速
-                        img_small = img_obj.copy()
-                        img_small.thumbnail((1024, 1024))
-                        
-                        model = get_pro_vision_model()
-                        prompt = f"""
-                        你是一个世界顶级的商业摄影提示词专家。
-                        
-                        【任务】
-                        我们即将使用 "Inpainting" (局部重绘) 技术，保留产品主体，只替换背景。
-                        请基于用户需求："{user_idea}"，写一段专注于**描述新背景和光影**的英文 Prompt。
-                        
-                        【注意】
-                        1. **不要**过多描述产品本身（因为产品会被蒙版保护起来）。
-                        2. **重点描述**：背景环境、材质、氛围、光线方向（如何打在产品上）。
-                        3. **风格**：8k分辨率、超写实商业摄影。
-                        
-                        【输出】
-                        直接输出一段完整的英文 Prompt。
-                        """
-                        
-                        response = model.generate_content([prompt, img_small])
-                        st.session_state["hybrid_instruction"] = response.text
-                        st.success("✅ 指令已生成！请在右侧确认。")
-                        # 强制刷新
-                        time.sleep(0.1)
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"Gemini 分析失败: {e}")
+        task_type = st.radio("✨ 选择模式", ["换背景 (Scene Swap)", "创意重绘 (Creative)", "画质增强 (Upscale)"], horizontal=True)
+        user_idea = st.text_area("💡 你的想法 (可选)", height=80, placeholder="例如：把背景改成极简主义风格的白色摄影棚，光线要柔和...")
 
-# === 右侧：生成 (Hands) ===
-with col2:
-    st.markdown('<div class="step-card">Step 2: 生成与精修</div>', unsafe_allow_html=True)
-    
-    # 指令确认
-    final_prompt = st.text_area(
-        "最终绘画指令 (英文)", 
-        value=st.session_state["hybrid_instruction"], 
-        height=150,
-        help="Flux Fill 将根据这段话填充背景。"
-    )
-    
-    st.markdown('<div class="info-box">💡 提示：系统将自动抠图并保护主体。如果生成结果边缘不干净，请尝试上传更清晰的白底图。</div>', unsafe_allow_html=True)
-
-    # 生成按钮
-    if st.button("🚀 开始生成 (Lock Subject & Fill Background)", type="primary"):
-        if not ref_img or not final_prompt:
-            st.warning("请先生成指令！")
-        else:
-            status_box = st.empty()
-            try:
-                # 1. 自动抠图
-                status_box.info("✂️ 正在自动抠图，锁定产品主体...")
-                ref_img.seek(0)
-                _, mask_img = process_rembg_mask(ref_img)
-                
-                if not mask_img:
-                    st.error("抠图失败，无法识别主体。")
-                    st.stop()
-                
-                # 准备上传数据 (Bytes)
-                ref_img.seek(0)
-                img_bytes = io.BytesIO()
-                # 转换为 RGB 避免格式兼容问题
-                Image.open(ref_img).convert("RGB").save(img_bytes, format="PNG")
-                
-                mask_bytes = io.BytesIO()
-                mask_img.save(mask_bytes, format="PNG")
-                
-                # 2. 调用 Flux Fill (填充模型)
-                status_box.info("🎨 Flux Fill Pro 正在重绘背景 (主体已保护)...")
-                
-                output = replicate.run(
-                    "black-forest-labs/flux-fill-pro", 
-                    input={
-                        "image": img_bytes,
-                        "mask": mask_bytes, # 传入蒙版
-                        "prompt": final_prompt + UNIVERSAL_QUALITY_PROMPT,
-                        "output_format": "jpg",
-                        "output_quality": 100,
-                        "steps": 50, # 提高步数保证质量
-                        "guidance": 60 # 提高引导值，让AI更听Prompt的话
-                    }
-                )
-                
-                # 强制转换为字符串列表
-                if isinstance(output, list):
-                    st.session_state["generated_image_urls"] = [str(url) for url in output]
-                else:
-                    st.session_state["generated_image_urls"] = [str(output)]
+        # 调用 Gemini 生成指令
+        if st.button("🧠 让 Gemini 编写绘画指令", type="secondary"):
+            with st.spinner("Gemini 正在观察图片并撰写 Prompt..."):
+                try:
+                    # 准备图片数据
+                    ref_img.seek(0)
+                    img_obj = Image.open(ref_img)
                     
-                status_box.success("✅ 生成完成！")
-                
-            except Exception as e:
-                status_box.error(f"Flux 生成失败: {e}")
+                    # 构建 Prompt
+                    model = get_pro_vision_model()
+                    prompt_req = f"""
+                    你是一个商业摄影指导。请基于这张图片和用户需求："{user_idea}"，
+                    写一段用于 FLUX 生图模型的英文提示词 (Prompt)。
+                    
+                    要求：
+                    1. 描述主体(Subject)要忠实于原图。
+                    2. 描述环境(Environment)要符合模式："{task_type}"。
+                    3. 风格为 8k 超写实摄影。
+                    
+                    请直接输出英文 Prompt，不要包含任何解释或Markdown符号。
+                    """
+                    
+                    # 调用 Google API
+                    response = model.generate_content([prompt_req, img_obj])
+                    
+                    if response.text:
+                        st.session_state["hybrid_instruction"] = response.text.strip()
+                        st.success("✅ 指令已生成！")
+                        time.sleep(0.5)
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Gemini 调用失败: {e}")
 
-    # 结果展示
+# === 右侧：生成与结果 (Flux) ===
+with col2:
+    st.markdown('<div class="step-card">Step 2: Flux 极速绘图</div>', unsafe_allow_html=True)
+    
+    # 显示/编辑指令
+    final_prompt = st.text_area(
+        "🎨 最终绘画指令 (英文)", 
+        value=st.session_state["hybrid_instruction"], 
+        height=120,
+        help="Flux 模型将严格按照这段文字进行绘制"
+    )
+
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        # 修复参数逻辑：Flux 的 prompt_strength
+        strength = st.slider("⚡ 重绘幅度 (Strength)", 0.1, 1.0, 0.80, help="数值越大，变化越大。0.8适合换背景，0.3适合微调。")
+    with col_p2:
+        num_outputs = st.number_input("🖼️ 生成数量", 1, 4, 1)
+
+    # 调用 Replicate (Flux)
+    if st.button("🚀 立即生成图片", type="primary"):
+        if not ref_img or not final_prompt:
+            st.warning("⚠️ 请先上传图片并生成指令！")
+        else:
+            with st.spinner("🎨 Flux 正在绘制中 (通常需要 5-10秒)..."):
+                try:
+                    ref_img.seek(0) # 关键：重置文件指针
+                    
+                    # 调用 API
+                    output = replicate.run(
+                        "black-forest-labs/flux-dev",
+                        input={
+                            "prompt": final_prompt + UNIVERSAL_QUALITY_PROMPT,
+                            "image": ref_img, # 直接传文件对象
+                            "prompt_strength": strength, # 修复：直接传值
+                            "go_fast": True,
+                            "num_outputs": num_outputs,
+                            "output_format": "jpg",
+                            "output_quality": 100,
+                            "negative_prompt": UNIVERSAL_NEGATIVE_PROMPT
+                        }
+                    )
+                    
+                    # 处理返回结果 (Replicate 返回的是 URL 列表)
+                    urls = []
+                    if isinstance(output, list):
+                        urls = [str(url) for url in output]
+                    else:
+                        urls = [str(output)]
+                    
+                    st.session_state["generated_image_urls"] = urls
+                    st.success("🎉 生成成功！")
+                    
+                except Exception as e:
+                    st.error(f"Flux 生成失败: {str(e)}")
+                    st.info("💡 如果显示 401 Unauthorized，请检查 .streamlit/secrets.toml 里的 REPLICATE_API_TOKEN")
+
+    # 展示结果
     if st.session_state["generated_image_urls"]:
         st.divider()
-        st.markdown("#### 🎉 生成结果")
+        st.subheader("👀 生成结果")
         for i, url in enumerate(st.session_state["generated_image_urls"]):
-            st.image(url, caption=f"结果 {i+1} (主体像素 100% 保留)", use_column_width=True)
-            download_image(url, f"result_{i+1}.jpg")
+            st.image(url, caption=f"Result {i+1}", use_column_width=True)
+            st.markdown(f"[📥 点击下载大图]({url})")
