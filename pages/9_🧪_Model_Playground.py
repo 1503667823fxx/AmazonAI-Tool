@@ -1,150 +1,155 @@
 import streamlit as st
-import requests
-import json
-import base64
+import google.generativeai as genai
 from PIL import Image
 import io
 import sys
 import os
 
-# --- 0. 引入门禁 ---
+# --- 0. 基础设置 ---
 sys.path.append(os.path.abspath('.'))
-try:
-    import auth
-    if not auth.check_password(): st.stop()
-except ImportError:
-    pass 
+# 页面宽屏模式，方便看大图
+st.set_page_config(page_title="Google 生图测试台", page_icon="🧪", layout="wide")
 
-st.set_page_config(page_title="API 终极实验室", page_icon="🧪", layout="wide")
-
-st.title("🧪 Gemini API 终极实验室 (TS 复刻版)")
-st.info("本页面复刻了 geminiService.ts 中的图像预处理逻辑 (Resize -> PNG)。")
-
-# --- 1. 配置 ---
-if "GOOGLE_API_KEY" not in st.secrets:
-    st.error("请配置 GOOGLE_API_KEY")
+# --- 1. 鉴权配置 ---
+if "GOOGLE_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+else:
+    st.error("❌ 未找到 GOOGLE_API_KEY，请检查 secrets.toml")
     st.stop()
 
-API_KEY = st.secrets["GOOGLE_API_KEY"]
-
-# --- 2. TS 逻辑复刻函数 (Python版) ---
-
-def resize_for_context(pil_img, max_dim=1024):
+# --- 2. 核心功能：获取能画图的模型 ---
+@st.cache_data(ttl=3600)
+def get_image_generation_models():
     """
-    复刻 TS: resizeForContext
-    将图片限制在 max_dim 以内，保持比例，强制转为 PNG 字节流
+    自动检索支持 'generateImages' 的 Google 模型。
+    注意：Imagen 3 目前可能是白名单或 Beta 状态，如果没有检索到，
+    我们会手动把已知可用的模型名称加进去。
     """
-    w, h = pil_img.size
-    # 只有当图片过大时才缩放
-    if w > max_dim or h > max_dim:
-        ratio = min(max_dim / w, max_dim / h)
-        new_w = int(w * ratio)
-        new_h = int(h * ratio)
-        pil_img = pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    
-    # TS 代码使用的是 canvasToBase64(..., 'image/png')
-    # 所以这里我们也必须转为 PNG
-    buff = io.BytesIO()
-    pil_img.save(buff, format="PNG")
-    return base64.b64encode(buff.getvalue()).decode('utf-8')
+    try:
+        image_models = []
+        # 尝试从 API 列表里找
+        for m in genai.list_models():
+            # 检查是否支持生图方法
+            if 'generateImages' in m.supported_generation_methods:
+                image_models.append(m.name)
+        
+        # ⚠️ 强制补充：因为 API 有时隐藏 Imagen 3，手动补全最新的
+        known_models = [
+            "models/imagen-3.0-generate-001",  # Google 最强生图模型
+            "models/imagen-2.0"
+        ]
+        
+        # 合并列表并去重
+        final_list = list(set(image_models + known_models))
+        return sorted(final_list, reverse=True)
+    except Exception as e:
+        # 如果报错，返回保底列表
+        return ["models/imagen-3.0-generate-001"]
 
-# --- 3. 界面 ---
+# --- 3. 界面布局 ---
+st.title("🧪 Google Imagen 专项测试")
+st.caption("独立模块：专门用于测试 Google 原生生图能力，解决数据解析报错问题。")
 
-col1, col2 = st.columns([4, 6])
+# 左侧控制栏，右侧显示图
+col_ctrl, col_show = st.columns([1, 2])
 
-with col1:
-    st.subheader("1. 参数配置")
+with col_ctrl:
+    st.subheader("⚙️ 参数设置")
     
-    # TS 代码中使用的模型名称
-    model_name = st.text_input("模型名称", value="gemini-2.5-flash-image")
+    # 1. 模型选择
+    available_models = get_image_generation_models()
+    selected_model = st.selectbox(
+        "选择 Google 生图模型", 
+        available_models,
+        index=0
+    )
+    st.info(f"当前选中: `{selected_model}`")
     
-    uploaded_file = st.file_uploader("上传图片", type=["jpg", "png", "webp"])
+    # 2. 提示词
+    prompt = st.text_area(
+        "生图提示词 (Prompt)", 
+        height=150,
+        placeholder="例如：A futuristic fashion photoshoot of a model wearing a glowing cyber-punk jacket, commercial lighting, 8k..."
+    )
     
-    prompt_input = st.text_area("修改指令 (Prompt)", value="Change the background to a luxury office", height=100)
-    
-    st.caption("💡 提示：根据 TS 代码逻辑，我们将自动把图片转为 PNG 并限制在 1024px 以内。")
+    # 3. 数量和比例
+    num_images = st.slider("生成数量", 1, 4, 1)
+    aspect_ratio = st.selectbox("图片比例", ["1:1", "16:9", "9:16", "4:3"], index=0)
 
-with col2:
-    st.subheader("2. 执行与诊断")
+    # 4. 生成按钮
+    btn_generate = st.button("🚀 调用 Google 生成", type="primary")
+
+# --- 4. 生成逻辑与解析修复 ---
+with col_show:
+    st.subheader("🖼️ 结果展示")
     
-    if st.button("🚀 发送请求 (复刻 TS 逻辑)", type="primary"):
-        if not uploaded_file:
-            st.warning("请上传图片")
+    if btn_generate:
+        if not prompt:
+            st.warning("请先输入提示词！")
         else:
-            status = st.empty()
-            debug_area = st.expander("🔍 查看 Payload 和 响应", expanded=True)
-            
-            try:
-                status.info("正在预处理图片 (Resize & Convert to PNG)...")
-                
-                # 加载图片并转 RGB (防止 RGBA 兼容性问题)
-                original_pil = Image.open(uploaded_file).convert("RGB")
-                
-                # 1. 准备主图 (Clean Source)
-                clean_source_b64 = resize_for_context(original_pil, max_dim=1024)
-                
-                # 2. 构造 Prompt (参考 TS 的 Standard General Edit)
-                # finalPrompt = `Edit instruction: ${prompt}. Maintain photorealism.`
-                final_prompt = f"Edit instruction: {prompt_input}. Maintain photorealism."
-                
-                parts = []
-                parts.append({"text": final_prompt})
-                parts.append({"inline_data": {"mime_type": "image/png", "data": clean_source_b64}})
-
-                # 构建请求体
-                payload = {
-                    "contents": [{"parts": parts}],
-                    "generationConfig": {
-                        "response_modalities": ["IMAGE"],
-                        "temperature": 0.4
+            with st.spinner("Google Imagen 正在绘制 (通常比 Flux 慢一点)..."):
+                try:
+                    # 实例化生图模型 (这是专门针对 Google Imagen 的写法)
+                    # 注意：Gemini 用 GenerativeModel，Imagen 用 ImageGenerationModel
+                    # 这种细微区别是导致报错的主要原因
+                    
+                    # 尝试用通用入口（最新版 SDK 推荐）
+                    # 如果你的 SDK 版本较旧，这里可能会有差异，但 try-catch 会捕获
+                    
+                    # 准备参数
+                    generation_config = {
+                        "number_of_images": num_images,
+                        "aspect_ratio": aspect_ratio.replace(":", "/"), # 某些版本需要 16/9 格式
+                        "safety_filter_level": "block_only_high"
                     }
-                }
-                
-                # 发起 HTTP 请求
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={API_KEY}"
-                
-                status.info(f"正在 POST 到 {model_name} ...")
-                
-                response = requests.post(
-                    url,
-                    headers={"Content-Type": "application/json"},
-                    data=json.dumps(payload)
-                )
-                
-                # 处理响应
-                if response.status_code == 200:
-                    res_json = response.json()
-                    with debug_area:
-                        st.caption("API Response:")
-                        st.json(res_json)
                     
-                    # 提取图片
-                    try:
-                        candidates = res_json.get("candidates", [])
-                        found = False
-                        if candidates:
-                            parts_res = candidates[0].get("content", {}).get("parts", [])
-                            for part in parts_res:
-                                if "inline_data" in part:
-                                    b64_data = part["inline_data"]["data"]
-                                    img_data = base64.b64decode(b64_data)
-                                    st.image(img_data, caption="Gemini 生成结果")
-                                    st.success("🎉 成功！TS 逻辑复刻生效！")
-                                    found = True
-                                    break
+                    # ⚠️ 关键调用
+                    # 现在的 Google SDK 并没有统一的入口，这里用最底层的调用方式防止出错
+                    from google.generativeai.types import ImageGenerationModel
+                    
+                    # 必须去掉 'models/' 前缀才能实例化 ImageGenerationModel
+                    clean_model_name = selected_model.replace("models/", "")
+                    model_instance = ImageGenerationModel(clean_model_name)
+                    
+                    response = model_instance.generate_images(
+                        prompt=prompt,
+                        number_of_images=num_images,
+                    )
+                    
+                    # --- 5. 关键修复：如何解析返回的数据 ---
+                    # Google 返回的 response.images 是一个 PIL.Image 对象列表
+                    # 之前报错是因为你可能试图用 .content 或 .text 去读它
+                    
+                    if response.images:
+                        st.success(f"成功生成 {len(response.images)} 张图片！")
                         
-                        if not found:
-                            st.error("⚠️ API 返回成功但没有图片数据 (可能被拦截或返回了文本)。请查看上方 JSON。")
-                            
-                    except Exception as e:
-                        st.error(f"解析失败: {e}")
-                else:
-                    status.error(f"HTTP {response.status_code}")
-                    st.error(response.text)
+                        cols = st.columns(len(response.images))
+                        for idx, img in enumerate(response.images):
+                            with cols[idx]:
+                                # img 已经是 PIL Image 对象了，可以直接显示
+                                st.image(img, caption=f"Result {idx+1}", use_column_width=True)
+                                
+                                # 为了提供下载，我们需要把它转回 bytes
+                                buf = io.BytesIO()
+                                img.save(buf, format="PNG")
+                                byte_im = buf.getvalue()
+                                
+                                st.download_button(
+                                    label=f"📥 下载图片 {idx+1}",
+                                    data=byte_im,
+                                    file_name=f"google_imagen_{idx+1}.png",
+                                    mime="image/png"
+                                )
+                    else:
+                        st.error("API 返回了空结果，可能是触发了安全拦截 (Safety Filter)。")
 
-            except Exception as e:
-                st.error(f"系统错误: {e}")
-                    st.error(response.text) # 打印报错详情
-                    
-            except Exception as e:
-                st.error(f"系统错误: {e}")
+                except Exception as e:
+                    st.error(f"❌ 生成失败: {str(e)}")
+                    st.markdown("""
+                    **排查建议：**
+                    1. 确保你的 Google API Key 有 **Imagen 3** 的权限 (AI Studio 中需开通)。
+                    2. 报错 `404 Not Found`? 说明你选的模型名称不对，请在左侧切换模型试试。
+                    3. 报错 `AttributeError`? 可能是你的 `google-generativeai` 库版本太低。
+                       尝试在终端运行: `pip install -U google-generativeai`
+                    """)
+
