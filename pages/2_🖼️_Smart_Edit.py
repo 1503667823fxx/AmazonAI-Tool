@@ -11,6 +11,7 @@ from collections import deque
 sys.path.append(os.path.abspath('.'))
 try:
     import auth
+    from translator import AITranslator # 引入刚写的翻译模块
 except ImportError:
     pass 
 
@@ -27,6 +28,9 @@ if "GOOGLE_API_KEY" in st.secrets:
 else:
     st.error("❌ 错误：未找到 GOOGLE_API_KEY")
     st.stop()
+
+# 初始化翻译器
+translator = AITranslator()
 
 # --- 2. 样式优化 (CSS) ---
 st.markdown("""
@@ -47,14 +51,13 @@ st.markdown("""
         height: 3em; 
         font-weight: bold;
     }
-    .stTextArea {
-        margin-bottom: 0px;
-    }
+    /* 紧凑布局 */
+    .stTextArea { margin-bottom: 0px; }
 </style>
 """, unsafe_allow_html=True)
 
 # --- 3. 常量定义 ---
-ANALYSIS_MODELS = ["models/gemini-2.0-flash-exp", "models/gemini-1.5-pro", "models/gemini-1.5-flash"]
+ANALYSIS_MODELS = ["models/gemini-flash-latest", "models/gemini-2.5-pro", "models/gemini-3-pro-preview"]
 GOOGLE_IMG_MODELS = ["models/gemini-2.5-flash-image", "models/gemini-3-pro-image-preview"]
 
 RATIO_MAP = {
@@ -66,19 +69,19 @@ RATIO_MAP = {
 # --- 4. 状态管理 ---
 if "history_queue" not in st.session_state: st.session_state["history_queue"] = deque(maxlen=10)
 
-# Tab 1 States (Standard)
-if "std_draft_prompt" not in st.session_state: st.session_state["std_draft_prompt"] = ""
-if "std_draft_prompt_zh" not in st.session_state: st.session_state["std_draft_prompt_zh"] = "" 
+# Tab 1 States
+if "std_prompt_en" not in st.session_state: st.session_state["std_prompt_en"] = ""
+if "std_prompt_zh" not in st.session_state: st.session_state["std_prompt_zh"] = "" 
 if "std_images" not in st.session_state: st.session_state["std_images"] = []
 
-# Tab 2 States (Restyling)
-if "var_draft_prompt" not in st.session_state: st.session_state["var_draft_prompt"] = ""
-if "var_draft_prompt_zh" not in st.session_state: st.session_state["var_draft_prompt_zh"] = ""
+# Tab 2 States
+if "var_prompt_en" not in st.session_state: st.session_state["var_prompt_en"] = ""
+if "var_prompt_zh" not in st.session_state: st.session_state["var_prompt_zh"] = ""
 if "batch_results" not in st.session_state: st.session_state["batch_results"] = []
 
-# Tab 3 States (Background)
-if "bg_draft_prompt" not in st.session_state: st.session_state["bg_draft_prompt"] = ""
-if "bg_draft_prompt_zh" not in st.session_state: st.session_state["bg_draft_prompt_zh"] = ""
+# Tab 3 States
+if "bg_prompt_en" not in st.session_state: st.session_state["bg_prompt_en"] = ""
+if "bg_prompt_zh" not in st.session_state: st.session_state["bg_prompt_zh"] = ""
 if "bg_results" not in st.session_state: st.session_state["bg_results"] = []
 
 # --- 5. 辅助函数 ---
@@ -100,17 +103,6 @@ def convert_image_format(image_bytes, format="PNG"):
     except Exception as e:
         return image_bytes, "image/png"
 
-def translate_text(text, target_lang="English"):
-    """使用轻量模型进行快速翻译"""
-    if not text: return ""
-    try:
-        model = genai.GenerativeModel("models/gemini-1.5-flash")
-        prompt = f"Translate the following text to {target_lang}. Only output the translation, no explanations.\nText: {text}"
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except:
-        return text
-
 def generate_image_call(model_name, prompt, image_input, ratio_suffix):
     final_prompt = prompt + ratio_suffix + ", high quality, 8k resolution"
     gen_model = genai.GenerativeModel(model_name)
@@ -126,16 +118,18 @@ def generate_image_call(model_name, prompt, image_input, ratio_suffix):
         return None
     return None
 
-# --- 回调同步函数 (单向同步：中文 -> 英文) ---
-def sync_std_zh():
-    """中文变 -> 翻译 -> 更新英文"""
-    st.session_state.std_draft_prompt = translate_text(st.session_state.std_draft_prompt_zh, "English")
+# --- 双语同步回调 (核心修复逻辑) ---
+def sync_std_zh_to_en():
+    """Tab 1: 用户改中文 -> 翻译并更新英文"""
+    st.session_state.std_prompt_en = translator.to_english(st.session_state.std_prompt_zh)
 
-def sync_var_zh():
-    st.session_state.var_draft_prompt = translate_text(st.session_state.var_draft_prompt_zh, "English")
+def sync_var_zh_to_en():
+    """Tab 2: 用户改中文 -> 翻译并更新英文"""
+    st.session_state.var_prompt_en = translator.to_english(st.session_state.var_prompt_zh)
 
-def sync_bg_zh():
-    st.session_state.bg_draft_prompt = translate_text(st.session_state.bg_draft_prompt_zh, "English")
+def sync_bg_zh_to_en():
+    """Tab 3: 用户改中文 -> 翻译并更新英文"""
+    st.session_state.bg_prompt_en = translator.to_english(st.session_state.bg_prompt_zh)
 
 # ==========================================
 # 🚀 侧边栏
@@ -177,7 +171,7 @@ with tab_workflow:
         if st.button("🧠 生成 Prompt", type="primary"):
             if not uploaded_file: st.warning("⚠️ 请先上传图片")
             else:
-                with st.spinner("AI 正在分析并生成双语指令..."):
+                with st.spinner("AI 正在构思 (生成英文 -> 自动转中文)..."):
                     try:
                         uploaded_file.seek(0)
                         img_obj = Image.open(uploaded_file)
@@ -186,31 +180,37 @@ with tab_workflow:
                         prompt_req = f"Role: Art Director. Task: Create a prompt based on User Idea: '{user_idea}'. Type: {task_type}. Output: English Prompt Only."
                         response = model.generate_content([prompt_req, img_obj])
                         
-                        # 生成后立即更新双语状态
+                        # 1. 获取 AI 生成的英文
                         en_text = response.text.strip()
-                        st.session_state["std_draft_prompt"] = en_text
-                        st.session_state["std_draft_prompt_zh"] = translate_text(en_text, "Chinese")
+                        # 2. 翻译成中文
+                        zh_text = translator.to_chinese(en_text)
+                        
+                        # 3. 同时更新 Session State
+                        st.session_state["std_prompt_en"] = en_text
+                        st.session_state["std_prompt_zh"] = zh_text
                         st.rerun()
                     except Exception as e: st.error(f"分析失败: {e}")
 
         # Step 2: 双语编辑区
-        if st.session_state.get("std_draft_prompt"):
+        if st.session_state.get("std_prompt_en"):
             st.markdown('<div class="step-header">Step 2: 指令微调 (双语同步)</div>', unsafe_allow_html=True)
             
             p_col1, p_col2 = st.columns(2)
             with p_col1:
+                # 左侧：中文，绑定回调
                 st.text_area(
-                    "🇨🇳 中文指令 (编辑此处 -> 自动同步英文)", 
-                    key="std_draft_prompt_zh", 
+                    "🇨🇳 中文指令 (在此编辑)", 
+                    key="std_prompt_zh", 
                     height=150,
-                    on_change=sync_std_zh  # 绑定回调
+                    on_change=sync_std_zh_to_en 
                 )
             with p_col2:
+                # 右侧：英文，禁用编辑
                 st.text_area(
-                    "🇺🇸 English Prompt (AI 读取此内容 | 只读)", 
-                    key="std_draft_prompt", 
+                    "🇺🇸 English Prompt (AI 读取只读)", 
+                    key="std_prompt_en", 
                     height=150,
-                    disabled=True  # 禁用编辑
+                    disabled=True 
                 )
 
             cg1, cg2, cg3 = st.columns(3)
@@ -224,10 +224,11 @@ with tab_workflow:
                 for i in range(num_images):
                     uploaded_file.seek(0)
                     img_pil = Image.open(uploaded_file)
-                    img_data = generate_image_call(google_model, st.session_state["std_draft_prompt"], img_pil, RATIO_MAP[selected_ratio_key])
+                    # ⚠️ 关键：始终使用英文 prompt_en 发送给 AI
+                    img_data = generate_image_call(google_model, st.session_state["std_prompt_en"], img_pil, RATIO_MAP[selected_ratio_key])
                     if img_data:
                         st.session_state["std_images"].append(img_data)
-                        update_history(img_data, source=f"Std {i+1}", prompt_summary=st.session_state["std_draft_prompt"])
+                        update_history(img_data, source=f"Std {i+1}", prompt_summary=st.session_state["std_prompt_zh"])
                     bar.progress((i+1)/num_images)
                     time.sleep(1)
                 st.success("完成")
@@ -243,24 +244,20 @@ with tab_workflow:
         if st.session_state["std_images"]:
             st.divider()
             st.markdown("#### ✨ 生成结果")
+            st.caption("💡 点击图片即可全屏放大")
             for idx, img_bytes in enumerate(st.session_state["std_images"]):
-                # 缩略图
+                # 预览图 (直接使用 st.image，不加额外 expander)
                 st.image(img_bytes, caption=f"Result {idx+1}", width=350)
                 
-                # 操作行：下载 + 放大 (精简为一个按钮)
-                col_btn1, col_btn2 = st.columns([1, 1])
-                with col_btn1:
-                    final_bytes, mime = convert_image_format(img_bytes, download_format)
-                    st.download_button(
-                        label=f"📥 下载", 
-                        data=final_bytes, 
-                        file_name=f"std_{idx}.{download_format.lower()}", 
-                        mime=mime,
-                        use_container_width=True
-                    )
-                with col_btn2:
-                    with st.expander("🔍 放大"):
-                        st.image(img_bytes, use_container_width=True)
+                # 仅保留下载按钮
+                final_bytes, mime = convert_image_format(img_bytes, download_format)
+                st.download_button(
+                    label=f"📥 下载 ({download_format})", 
+                    data=final_bytes, 
+                    file_name=f"std_{idx}.{download_format.lower()}", 
+                    mime=mime,
+                    use_container_width=True
+                )
 
 # ==========================================
 # TAB 2: ⚡ 变体改款 (Restyling)
@@ -270,7 +267,6 @@ with tab_variants:
     
     cv_left, cv_right = st.columns([1.5, 1], gap="large")
     with cv_left:
-        # Step 1
         st.markdown("#### Step 1: AI 读取产品特征")
         var_file = st.file_uploader("上传原版图片", type=["jpg", "png"], key="var_upload")
         var_ana_model = st.selectbox("分析模型", ANALYSIS_MODELS, index=0, key="var_ana_model")
@@ -287,29 +283,19 @@ with tab_variants:
                         resp = model.generate_content([prompt, v_img])
                         
                         en_text = resp.text.strip()
-                        st.session_state["var_draft_prompt"] = en_text
-                        st.session_state["var_draft_prompt_zh"] = translate_text(en_text, "Chinese")
+                        st.session_state["var_prompt_en"] = en_text
+                        st.session_state["var_prompt_zh"] = translator.to_chinese(en_text)
                         st.success("特征提取成功")
                     except Exception as e: st.error(f"读取失败: {e}")
 
-        # Step 2: 双语编辑
+        # Step 2
         st.markdown("#### Step 2: 改款设置")
         
         vp_col1, vp_col2 = st.columns(2)
         with vp_col1:
-            st.text_area(
-                "🇨🇳 特征描述 (中文 - 编辑此处)", 
-                key="var_draft_prompt_zh", 
-                height=100,
-                on_change=sync_var_zh
-            )
+            st.text_area("🇨🇳 特征描述 (中文)", key="var_prompt_zh", height=100, on_change=sync_var_zh_to_en)
         with vp_col2:
-            st.text_area(
-                "🇺🇸 特征描述 (English - 只读)", 
-                key="var_draft_prompt", 
-                height=100, 
-                disabled=True
-            )
+            st.text_area("🇺🇸 Feature Desc (English)", key="var_prompt_en", height=100, disabled=True)
 
         CHANGE_LEVELS = {
             "🎨 微调 (纹理/面料)": "Keep the main silhouette and structure EXACTLY the same. Only modify fabric texture.",
@@ -325,7 +311,7 @@ with tab_variants:
 
     with cv_right:
         st.subheader("📦 方案预览")
-        if start_batch and var_file and st.session_state["var_draft_prompt"]:
+        if start_batch and var_file and st.session_state["var_prompt_en"]:
             st.session_state["batch_results"] = []
             grid = st.columns(2)
             sys_instruct = CHANGE_LEVELS[change_level]
@@ -335,14 +321,13 @@ with tab_variants:
                 try:
                     var_file.seek(0)
                     v_img = Image.open(var_file)
-                    prompt = f"Task: Restyling. Base: {st.session_state['var_draft_prompt']}. Constraint: {sys_instruct}. Mod Request: {user_mod}. Var ID: {i}"
+                    # 组合 Prompt
+                    prompt = f"Task: Restyling. Base: {st.session_state['var_prompt_en']}. Constraint: {sys_instruct}. Mod Request: {user_mod}. Var ID: {i}"
                     img_data = generate_image_call(var_model, prompt, v_img, "")
                     if img_data:
                         st.session_state["batch_results"].append(img_data)
                         with grid[i%2]:
                             st.image(img_data, use_container_width=True)
-                            with st.expander("🔍"):
-                                st.image(img_data, use_container_width=True)
                 except: pass
                 my_bar.progress((i+1)/batch_count)
                 time.sleep(1)
@@ -351,7 +336,7 @@ with tab_variants:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["batch_results"]):
                 final_bytes, mime = convert_image_format(img_bytes, download_format)
-                st.download_button(f"📥 下载方案 {idx+1}", final_bytes, file_name=f"var_{idx}.{download_format.lower()}", mime=mime)
+                st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"var_{idx}.{download_format.lower()}", mime=mime)
 
 # ==========================================
 # TAB 3: 🏞️ 场景置换 (Background)
@@ -361,7 +346,6 @@ with tab_background:
     
     cb_left, cb_right = st.columns([1.5, 1], gap="large")
     with cb_left:
-        # Step 1
         st.markdown("#### Step 1: AI 锁定产品")
         bg_file = st.file_uploader("上传产品图", type=["jpg", "png"], key="bg_upload")
         bg_ana_model = st.selectbox("分析模型", ANALYSIS_MODELS, index=0, key="bg_ana_model")
@@ -378,8 +362,8 @@ with tab_background:
                         resp = model.generate_content([prompt, v_img])
                         
                         en_text = resp.text.strip()
-                        st.session_state["bg_draft_prompt"] = en_text
-                        st.session_state["bg_draft_prompt_zh"] = translate_text(en_text, "Chinese")
+                        st.session_state["bg_prompt_en"] = en_text
+                        st.session_state["bg_prompt_zh"] = translator.to_chinese(en_text)
                         st.success("锁定成功")
                     except Exception as e: st.error(f"失败: {e}")
 
@@ -387,9 +371,9 @@ with tab_background:
         st.markdown("#### Step 2: 换背景设置")
         bp_col1, bp_col2 = st.columns(2)
         with bp_col1:
-            st.text_area("🇨🇳 产品特征 (中文 - 编辑此处)", key="bg_draft_prompt_zh", height=100, on_change=sync_bg_zh)
+            st.text_area("🇨🇳 产品特征 (中文)", key="bg_prompt_zh", height=100, on_change=sync_bg_zh_to_en)
         with bp_col2:
-            st.text_area("🇺🇸 Product Features (English - 只读)", key="bg_draft_prompt", height=100, disabled=True)
+            st.text_area("🇺🇸 Product Features (English)", key="bg_prompt_en", height=100, disabled=True)
         
         bg_desc = st.text_area("新背景描述", height=60, placeholder="例如：木质桌面，自然光...")
         bg_count = st.slider("数量", 1, 20, 4, key="bg_count")
@@ -398,7 +382,7 @@ with tab_background:
 
     with cb_right:
         st.subheader("📦 场景预览")
-        if start_bg and bg_file and st.session_state["bg_draft_prompt"]:
+        if start_bg and bg_file and st.session_state["bg_prompt_en"]:
             st.session_state["bg_results"] = []
             bg_grid = st.columns(2)
             bg_bar = st.progress(0)
@@ -407,14 +391,12 @@ with tab_background:
                 try:
                     bg_file.seek(0)
                     v_img = Image.open(bg_file)
-                    prompt = f"Product BG Swap. Product: {st.session_state['bg_draft_prompt']}. New BG: {bg_desc}. Constraint: KEEP PRODUCT SAME. Var ID: {i}"
+                    prompt = f"Product BG Swap. Product: {st.session_state['bg_prompt_en']}. New BG: {bg_desc}. Constraint: KEEP PRODUCT SAME. Var ID: {i}"
                     img_data = generate_image_call(bg_model, prompt, v_img, "")
                     if img_data:
                         st.session_state["bg_results"].append(img_data)
                         with bg_grid[i%2]:
                             st.image(img_data, use_container_width=True)
-                            with st.expander("🔍"):
-                                st.image(img_data, use_container_width=True)
                 except: pass
                 bg_bar.progress((i+1)/bg_count)
                 time.sleep(1)
@@ -423,4 +405,4 @@ with tab_background:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["bg_results"]):
                 final_bytes, mime = convert_image_format(img_bytes, download_format)
-                st.download_button(f"📥 下载场景 {idx+1}", final_bytes, file_name=f"scene_{idx}.{download_format.lower()}", mime=mime)
+                st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"scene_{idx}.{download_format.lower()}", mime=mime)
