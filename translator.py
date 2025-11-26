@@ -10,7 +10,7 @@ class AITranslator:
         # 尝试从 secrets 获取 key，如果没有则无法初始化
         if "GOOGLE_API_KEY" in st.secrets:
             genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-            self.model = genai.GenerativeModel("models/gemini-1.5-flash")
+            self.model = genai.GenerativeModel("models/gemini-flash-latest")
             self.valid = True
         else:
             self.valid = False
