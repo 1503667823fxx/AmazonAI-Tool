@@ -233,35 +233,53 @@ with tab_workflow:
              st.image(uploaded_file, caption="原图参考", width=200)
 
 # ==========================================
-# TAB 2: ⚡ 变体批量工厂 (全新功能)
+# TAB 2: ⚡ 变体批量工厂 (改款专用版)
 # ==========================================
 with tab_variants:
-    st.markdown("### ⚡ 变体批量制作 (Variant Factory)")
-    st.info("💡 此模式用于大批量生成同一产品的不同变体。系统将循环执行指令，适合寻找灵感。")
+    st.markdown("### ⚡ 产品改款批量工厂 (Restyling Factory)")
+    st.info("💡 此模式专用于【服装改款/设计微调】。AI 将基于原版型，批量生成细节不同的变体方案。")
     
     col_v_left, col_v_right = st.columns([1, 2], gap="large")
     
     with col_v_left:
-        var_file = st.file_uploader("1. 上传产品图 (变体源)", type=["jpg", "png", "webp"], key="var_upload")
+        # 1. 上传
+        var_file = st.file_uploader("1. 上传款式原图", type=["jpg", "png", "webp"], key="var_upload")
         if var_file:
-            st.image(var_file, caption="变体源图", width=200)
+            st.image(var_file, caption="原版型参考", width=200)
             
-        var_prompt = st.text_area(
-            "2. 变体指令 (Prompt)", 
-            height=150,
-            value="Creative variation of the product, change background to different luxury settings, cinematic lighting, 8k resolution.",
-            help="描述你希望看到的批量变化方向"
+        # 2. 核心：改款幅度控制 (新增功能)
+        st.markdown("#### 2. 改款设置")
+        
+        # 定义不同幅度的 Prompt 前缀，引导模型
+        CHANGE_LEVELS = {
+            "🎨 微调 (纹理/面料变化)": "Keep the main structure and silhouette exactly the same. Only slightly modify the fabric texture and details. High consistency.",
+            "✂️ 中改 (领口/袖口/装饰)": "Keep the overall clothing shape. You can modify specific details like collar shape, sleeve length, or pockets. Restyle the fashion design.",
+            "🪄 大改 (版型/风格重构)": "Redesign the fashion item based on the original vibe. You can change the silhouette, cut, and style significantly. Creative fashion sketching."
+        }
+        
+        change_level = st.selectbox(
+            "改款幅度 (Change Level)", 
+            list(CHANGE_LEVELS.keys()),
+            help="微调：只动面料不动版型；中改：动领口袖口；大改：重新设计版型"
         )
         
-        # 【改动 5】批量生成数量设置
-        batch_count = st.slider("3. 批量数量 (Batch Size)", 1, 20, 4, help="一次性生成的图片数量，注意数量越多耗时越久")
+        # 3. 变体指令
+        var_prompt = st.text_area(
+            "3. 改款具体指令", 
+            height=100,
+            value="Change the fabric to silk, add lace details on the collar.",
+            placeholder="例如：把面料改成牛仔材质，领口加一圈铆钉...",
+            help="在此描述你希望具体改变的部位或元素"
+        )
         
-        var_model = st.selectbox("4. 选用模型", GOOGLE_IMG_MODELS, key="var_model")
+        # 4. 批量数量
+        batch_count = st.slider("4. 生成方案数 (Batch Size)", 1, 20, 4)
+        var_model = st.selectbox("5. 选用模型", GOOGLE_IMG_MODELS, key="var_model")
         
-        start_batch = st.button("🚀 启动批量引擎 (Batch Run)", type="primary")
+        start_batch = st.button("🚀 启动改款引擎", type="primary")
 
     with col_v_right:
-        st.subheader("📦 批量产出池")
+        st.subheader("📦 改款方案池")
         
         # 批量生成的容器
         if "batch_results" not in st.session_state:
@@ -276,40 +294,44 @@ with tab_variants:
             # 动态网格布局
             grid_cols = st.columns(3) # 3列显示
             
+            # 获取当前幅度的系统指令
+            system_instruction = CHANGE_LEVELS[change_level]
+            
             for i in range(batch_count):
-                status_text.text(f"正在生产变体 {i+1} / {batch_count} ...")
+                status_text.text(f"正在设计方案 {i+1} / {batch_count} ...")
                 try:
                     var_file.seek(0)
                     v_img = Image.open(var_file)
                     
-                    # 可以在每次循环微调 Prompt seed (Gemini 不支持显式 seed，但循环调用本身会有随机性)
-                    # 加上时间戳微调 Prompt 防止缓存
-                    loop_prompt = var_prompt + f" (variation id {int(time.time()*1000)})"
+                    # --- 核心逻辑优化 ---
+                    # 组合 Prompt：系统约束(幅度) + 用户指令 + 随机种子后缀
+                    # 这样能确保每一张图既符合改款幅度，又有随机变化
+                    final_loop_prompt = f"{system_instruction} User Request: {var_prompt}. Variation ID: {int(time.time()*1000)+i}"
                     
-                    img_data = generate_image_call(var_model, loop_prompt, v_img, "")
+                    img_data = generate_image_call(var_model, final_loop_prompt, v_img, "")
                     
                     if img_data:
                         st.session_state["batch_results"].append(img_data)
-                        update_history(img_data, source=f"Batch Var {i+1}", prompt_summary="Variant Batch")
+                        update_history(img_data, source=f"Restyle {i+1}", prompt_summary=var_prompt)
                         
-                        # 实时显示在网格中
+                        # 实时显示
                         col_idx = i % 3
                         with grid_cols[col_idx]:
-                            st.image(img_data, use_column_width=True)
+                            st.image(img_data, caption=f"方案 {i+1}", use_column_width=True)
                     
                 except Exception as e:
-                    st.error(f"变体 {i+1} 失败: {e}")
+                    st.error(f"方案 {i+1} 失败: {e}")
                 
                 my_bar.progress((i + 1) / batch_count)
-                time.sleep(1.5) # 稍微增加间隔，防止 Google 判定并发攻击
+                time.sleep(1.5) 
             
-            status_text.success(f"✅ 批量任务完成！产出 {len(st.session_state['batch_results'])} 张。")
+            status_text.success(f"✅ 改款任务完成！生成了 {len(st.session_state['batch_results'])} 个设计方案。")
             
-        # 如果有缓存结果，显示出来 (防止刷新消失)
+        # 缓存显示
         elif st.session_state["batch_results"]:
             grid_cols = st.columns(3)
             for idx, img_bytes in enumerate(st.session_state["batch_results"]):
                 col_idx = idx % 3
                 with grid_cols[col_idx]:
-                    st.image(img_bytes, caption=f"Var {idx+1}", use_column_width=True)
-                    st.download_button("📥", img_bytes, file_name=f"var_{idx}.png", key=f"dl_var_{idx}")
+                    st.image(img_bytes, caption=f"方案 {idx+1}", use_column_width=True)
+                    st.download_button("📥", img_bytes, file_name=f"restyle_{idx}.png", key=f"dl_var_{idx}")
