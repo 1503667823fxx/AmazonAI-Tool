@@ -3,3 +3,4 @@ google-generativeai
 Pillow
 replicate
 watchdog
+streamlit-drawable-canvas
