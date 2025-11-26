@@ -8,7 +8,6 @@ import os
 import time
 
 # --- 0. 基础设置与门禁系统 ---
-# 确保能找到同目录下的 auth.py
 sys.path.append(os.path.abspath('.'))
 try:
     import auth
@@ -18,13 +17,12 @@ except ImportError:
 # 页面配置
 st.set_page_config(page_title="Fashion AI Studio", page_icon="🚀", layout="wide")
 
-# 安全检查 (如果有 auth 模块则启用)
+# 安全检查
 if 'auth' in sys.modules:
     if not auth.check_password():
         st.stop()
 
 # --- 1. 关键修复：API 密钥配置 ---
-# 必须把 st.secrets 里的 key 告诉环境变量，Replicate 库才能用！
 if "REPLICATE_API_TOKEN" in st.secrets:
     os.environ["REPLICATE_API_TOKEN"] = st.secrets["REPLICATE_API_TOKEN"]
 else:
@@ -48,17 +46,33 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    h1 {color: #333;}
 </style>
 """, unsafe_allow_html=True)
 
 UNIVERSAL_QUALITY_PROMPT = ", commercial photography, 8k resolution, photorealistic, highly detailed, cinematic lighting, depth of field, masterpiece, sharp focus"
 UNIVERSAL_NEGATIVE_PROMPT = "blurry, low quality, distorted, ugly, pixelated, watermark, text, signature, bad anatomy, deformed, lowres, bad hands, mutation"
 
-# --- 3. 辅助函数 ---
-def get_pro_vision_model():
-    """使用 Gemini 3.0 Pro 进行视觉分析"""
-    return genai.GenerativeModel('gemini-1.5-pro') # 建议先用稳定的 1.5-pro，如果你的账号支持 3.0 可自行改回
+# --- 3. 新增功能：自动获取可用模型 ---
+@st.cache_data(ttl=3600) # 缓存1小时，避免每次刷新都去请求谷歌
+def get_available_gemini_models():
+    """
+    自动去问 Google：你现在有哪些模型可以用？
+    只返回支持 generateContent (生成内容) 的模型
+    """
+    try:
+        models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                # 过滤掉一些太老的模型，只保留 gemini 系列
+                if 'gemini' in m.name:
+                    models.append(m.name)
+        # 如果获取成功但列表为空，给个保底
+        if not models:
+            return ["models/gemini-1.5-flash-latest", "models/gemini-pro"]
+        return sorted(models, reverse=True) # 让最新的模型排前面
+    except Exception as e:
+        # 如果报错（比如网络不通），返回一个最稳的默认列表
+        return ["models/gemini-1.5-flash", "models/gemini-1.0-pro"]
 
 # --- 4. 主界面逻辑 ---
 st.title("🚀 Fashion AI Studio")
@@ -76,6 +90,17 @@ col1, col2 = st.columns([1, 1], gap="large")
 with col1:
     st.markdown('<div class="step-card">Step 1: 上传与 AI 构思</div>', unsafe_allow_html=True)
     
+    # --- 新增：模型选择器 ---
+    with st.expander("⚙️ Gemini 模型设置 (点此切换模型)", expanded=False):
+        available_models = get_available_gemini_models()
+        # 默认选中第一个
+        selected_model_name = st.selectbox(
+            "选择 Google 模型 (报错404请换一个)", 
+            available_models,
+            index=0 if available_models else 0
+        )
+        st.caption(f"当前使用: {selected_model_name}")
+
     ref_img = st.file_uploader("📤 上传原始图片", type=["jpg", "png", "webp"], key="upload_main")
     
     if ref_img:
@@ -86,14 +111,15 @@ with col1:
 
         # 调用 Gemini 生成指令
         if st.button("🧠 让 Gemini 编写绘画指令", type="secondary"):
-            with st.spinner("Gemini 正在观察图片并撰写 Prompt..."):
+            with st.spinner(f"正在使用 {selected_model_name} 分析图片..."):
                 try:
                     # 准备图片数据
                     ref_img.seek(0)
                     img_obj = Image.open(ref_img)
                     
-                    # 构建 Prompt
-                    model = get_pro_vision_model()
+                    # 使用用户选择的模型
+                    model = genai.GenerativeModel(selected_model_name)
+                    
                     prompt_req = f"""
                     你是一个商业摄影指导。请基于这张图片和用户需求："{user_idea}"，
                     写一段用于 FLUX 生图模型的英文提示词 (Prompt)。
@@ -116,6 +142,7 @@ with col1:
                         st.rerun()
                 except Exception as e:
                     st.error(f"Gemini 调用失败: {e}")
+                    st.info("💡 建议：点击上方的 '⚙️ Gemini 模型设置' 换一个模型试试 (推荐 gemini-1.5-flash)。")
 
 # === 右侧：生成与结果 (Flux) ===
 with col2:
@@ -131,7 +158,6 @@ with col2:
 
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        # 修复参数逻辑：Flux 的 prompt_strength
         strength = st.slider("⚡ 重绘幅度 (Strength)", 0.1, 1.0, 0.80, help="数值越大，变化越大。0.8适合换背景，0.3适合微调。")
     with col_p2:
         num_outputs = st.number_input("🖼️ 生成数量", 1, 4, 1)
@@ -145,13 +171,12 @@ with col2:
                 try:
                     ref_img.seek(0) # 关键：重置文件指针
                     
-                    # 调用 API
                     output = replicate.run(
                         "black-forest-labs/flux-dev",
                         input={
                             "prompt": final_prompt + UNIVERSAL_QUALITY_PROMPT,
-                            "image": ref_img, # 直接传文件对象
-                            "prompt_strength": strength, # 修复：直接传值
+                            "image": ref_img, 
+                            "prompt_strength": strength, 
                             "go_fast": True,
                             "num_outputs": num_outputs,
                             "output_format": "jpg",
@@ -160,7 +185,6 @@ with col2:
                         }
                     )
                     
-                    # 处理返回结果 (Replicate 返回的是 URL 列表)
                     urls = []
                     if isinstance(output, list):
                         urls = [str(url) for url in output]
