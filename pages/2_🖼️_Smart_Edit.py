@@ -61,7 +61,7 @@ st.markdown("""
 # --- 3. 常量定义 ---
 
 # 读图分析模型
-ANALYSIS_MODELS = ["models/gemini-2.0-flash-exp", "models/gemini-1.5-pro", "models/gemini-1.5-flash"]
+ANALYSIS_MODELS = ["models/gemini-flash-latest", "models/gemini-2.5-pro", "models/gemini-3-pro-preview"]
 
 # 生图模型
 GOOGLE_IMG_MODELS = [
