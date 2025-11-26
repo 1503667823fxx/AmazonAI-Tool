@@ -5,8 +5,6 @@ import io
 import sys
 import os
 import numpy as np
-# 需要安装: pip install streamlit-drawable-canvas
-from streamlit_drawable_canvas import st_canvas
 
 # --- 0. 基础设置 ---
 sys.path.append(os.path.abspath('.'))
@@ -16,6 +14,13 @@ try:
     from core_utils import process_image_for_download 
 except ImportError:
     pass 
+
+# --- 关键修复：安全导入画布组件 ---
+# 使用 try-except 包裹，防止因缺少库导致整个 App (包括 Home) 崩溃
+try:
+    from streamlit_drawable_canvas import st_canvas
+except ImportError:
+    st_canvas = None
 
 st.set_page_config(page_title="Magic Canvas", page_icon="🖌️", layout="wide")
 
@@ -32,6 +37,17 @@ else:
 
 st.title("🖌️ 魔术画布 (Magic Canvas)")
 st.caption("交互式局部重绘 & 智能扩图工作台")
+
+# 如果缺少库，直接显示安装指引，不运行后续代码
+if st_canvas is None:
+    st.error("❌ 缺少必要组件：streamlit-drawable-canvas")
+    st.info("""
+    **修复方法：**
+    1. 打开你的 `requirements.txt` 文件。
+    2. 在最后一行添加：`streamlit-drawable-canvas`
+    3. 保存并重启应用 (Reboot App)。
+    """)
+    st.stop()
 
 tab_inp, tab_out = st.tabs(["🖌️ 交互式局部重绘", "↔️ 智能画幅扩展"])
 
