@@ -6,6 +6,7 @@ import sys
 import os
 import numpy as np
 import base64
+import uuid
 
 # --- 0. 基础设置 ---
 sys.path.append(os.path.abspath('.'))
@@ -14,6 +15,44 @@ try:
     from core_utils import process_image_for_download 
 except ImportError:
     pass 
+
+# ==========================================
+# 🛠️ 核心修复：Base64 强力注入补丁 (V4.0)
+# ==========================================
+# 这是一个“核弹级”补丁，它强制拦截所有图片转换请求
+# 并将其转化为浏览器绝对能看懂的 Base64 编码
+def force_base64_patch(image, width=None, clamp=False, channels='RGB', output_format='auto', image_id=None, allow_emoji=False):
+    try:
+        # 1. 兼容 Numpy
+        if isinstance(image, np.ndarray):
+            image = Image.fromarray(image)
+        
+        # 2. 强制转 RGB (JPEG 不支持透明)
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+            
+        # 3. 转换
+        buffered = io.BytesIO()
+        # ⚠️ 关键优化：强制使用 JPEG 格式 + 85% 质量
+        # 这能将数据量从 5MB 压到 200KB，解决 iframe 传输失败的问题
+        image.save(buffered, format="JPEG", quality=85)
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        return f"data:image/jpeg;base64,{img_str}"
+    except Exception as e:
+        print(f"Patch Failed: {e}")
+        return ""
+
+# 注入到 Streamlit 核心
+import streamlit.elements.image
+import streamlit.elements.lib.image_utils as image_utils
+streamlit.elements.image.image_to_url = force_base64_patch
+image_utils.image_to_url = force_base64_patch
+
+# --- 导入画布 ---
+try:
+    from streamlit_drawable_canvas import st_canvas
+except ImportError:
+    st_canvas = None
 
 st.set_page_config(page_title="Magic Canvas", page_icon="🖌️", layout="wide")
 
@@ -27,41 +66,7 @@ else:
     st.error("❌ 缺少 REPLICATE_API_TOKEN")
     st.stop()
 
-# ==========================================
-# 🛠️ 终极补丁：强制让画布显示图片
-# ==========================================
-# 既然插件找不到 image_to_url，我们就造一个给它，并且放在它能找到的任何地方
-def local_image_to_url(image, width=None, clamp=False, channels='RGB', output_format='auto', image_id=None, allow_emoji=False):
-    """将 PIL 图片直接转换为浏览器可读的 Base64 字符串"""
-    try:
-        if isinstance(image, np.ndarray):
-            image = Image.fromarray(image)
-        
-        # 统一转 RGB，避免 PNG 透明度导致的保存错误
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-            
-        buffered = io.BytesIO()
-        image.save(buffered, format="JPEG", quality=90)
-        img_str = base64.b64encode(buffered.getvalue()).decode()
-        return f"data:image/jpeg;base64,{img_str}"
-    except Exception:
-        return ""
-
-# 暴力注入到 streamlit 的各个模块中，确保旧插件能引用到
-import streamlit.elements.image
-import streamlit.elements.lib.image_utils as image_utils
-
-streamlit.elements.image.image_to_url = local_image_to_url
-image_utils.image_to_url = local_image_to_url
-
-# --- 导入画布 ---
-try:
-    from streamlit_drawable_canvas import st_canvas
-except ImportError:
-    st_canvas = None
-
-st.title("🖌️ 魔术画布 V3.0")
+st.title("🖌️ 魔术画布 V4.0 (Speed Mode)")
 st.caption("交互式局部重绘 & 智能扩图工作台")
 
 if st_canvas is None:
@@ -71,11 +76,12 @@ if st_canvas is None:
 # --- 状态管理 ---
 if "magic_result" not in st.session_state: st.session_state["magic_result"] = None
 if "out_result" not in st.session_state: st.session_state["out_result"] = None
+if "canvas_key" not in st.session_state: st.session_state["canvas_key"] = str(uuid.uuid4())
 
 tab_inp, tab_out = st.tabs(["🖌️ 交互式局部重绘", "↔️ 智能画幅扩展"])
 
 # ==========================================
-# Tab 1: 交互式重绘 (极速版)
+# Tab 1: 交互式重绘
 # ==========================================
 with tab_inp:
     col_draw, col_result = st.columns([1.5, 1], gap="large")
@@ -83,69 +89,88 @@ with tab_inp:
     with col_draw:
         st.markdown("### 1. 涂抹区域")
         
-        uploaded_file = st.file_uploader("上传图片 (建议 < 2MB)", type=["png", "jpg", "jpeg"], key="inp_upload")
+        uploaded_file = st.file_uploader("上传原图", type=["png", "jpg", "jpeg"], key="inp_upload")
         
         bg_image = None
+        
         if uploaded_file:
             try:
-                # 预处理：限制图片尺寸，防止浏览器卡死
-                raw_img = Image.open(uploaded_file).convert("RGB")
-                max_w = 700
-                if raw_img.width > max_w:
-                    ratio = max_w / raw_img.width
-                    new_h = int(raw_img.height * ratio)
-                    bg_image = raw_img.resize((max_w, new_h))
+                # 1. 读取并强制压缩
+                # 限制为 600px 宽，这是为了保证 Cloud 端不卡顿的黄金尺寸
+                raw = Image.open(uploaded_file).convert("RGB")
+                max_w = 600 
+                
+                if raw.width > max_w:
+                    ratio = max_w / raw.width
+                    new_h = int(raw.height * ratio)
+                    bg_image = raw.resize((max_w, new_h), Image.Resampling.LANCZOS)
                 else:
-                    bg_image = raw_img
-            except:
-                st.error("图片无法读取")
+                    bg_image = raw
+                
+            except Exception as e:
+                st.error(f"图片错误: {e}")
 
         # 画布逻辑
         if bg_image:
-            # 画笔设置
-            b_width = st.slider("画笔粗细", 5, 50, 25)
+            b_width = st.slider("画笔粗细", 5, 50, 20)
             
-            # 动态 Key：确保换图时画布刷新
-            canvas_key = f"canvas_{uploaded_file.name}_{uploaded_file.size}"
-            
-            # ★★★ 关键优化：update_streamlit=False ★★★
-            # 这会让画布只在鼠标松开时才发送数据，而不是移动时一直发，极大解决卡顿
-            canvas_result = st_canvas(
-                fill_color="rgba(255, 255, 255, 0)",
-                stroke_width=b_width,
-                stroke_color="#FFFFFF",
-                background_image=bg_image,
-                update_streamlit=False,  # 🚀 解决卡顿的核心参数
-                height=bg_image.height,
-                width=bg_image.width,
-                drawing_mode="freedraw",
-                key=canvas_key,
-            )
-            
-            st.caption("💡 提示：涂抹完成后，画布会自动保存状态。")
+            # 如果换了图，更新 key 强制重绘
+            if "last_file" not in st.session_state or st.session_state["last_file"] != uploaded_file.name:
+                st.session_state["canvas_key"] = str(uuid.uuid4())
+                st.session_state["last_file"] = uploaded_file.name
+                st.rerun()
 
-            prompt = st.text_area("2. 修改指令", placeholder="例如：Change background to beach...", height=80)
+            # ★★★ 画布组件 ★★★
+            try:
+                canvas_result = st_canvas(
+                    fill_color="rgba(255, 255, 255, 0)",
+                    stroke_width=b_width,
+                    stroke_color="#FFFFFF",
+                    background_image=bg_image, # 这里的图片会被上面的 Patch 转成 Base64
+                    update_streamlit=False,    # 🚀 核心优化：关闭实时更新，解决卡顿！
+                    height=bg_image.height,
+                    width=bg_image.width,
+                    drawing_mode="freedraw",
+                    key=st.session_state["canvas_key"],
+                    display_toolbar=True,
+                )
+                st.caption("✅ 提示：画笔已就绪。请在图上涂抹（松开鼠标后生效）。")
+                
+            except Exception as e:
+                st.error(f"画布加载失败: {e}")
+
+            # 调试信息 (如果还不显示，请把 width 调得更小)
+            # st.write(f"Canvas Size: {bg_image.width}x{bg_image.height}")
+
+            prompt = st.text_area("2. 修改指令", placeholder="例如：Change to red silk dress...", height=80)
             
             if st.button("🚀 开始重绘", type="primary"):
-                if canvas_result.image_data is None:
-                    st.warning("请先在图片上涂抹！")
+                # 检查是否有涂抹
+                has_mask = False
+                if canvas_result.image_data is not None:
+                    # 简单的求和检查
+                    if np.sum(canvas_result.image_data) > 0:
+                        has_mask = True
+                
+                if not has_mask:
+                    st.warning("⚠️ 请先在图片上涂抹白色区域！(如果没有显示笔迹，请刷新页面)")
+                elif not prompt:
+                    st.warning("⚠️ 请输入修改指令")
                 else:
-                    with st.spinner("正在发送给 AI (Flux Fill)..."):
+                    with st.spinner("正在发送给 Flux Pro (约 15s)..."):
                         try:
-                            # 1. 处理原图
+                            # 准备原图 (JPEG)
                             src_buf = io.BytesIO()
-                            bg_image.save(src_buf, format='PNG')
+                            bg_image.save(src_buf, format='JPEG', quality=95)
                             
-                            # 2. 处理蒙版
-                            # Canvas 返回 RGBA，取 Alpha 通道作为蒙版
+                            # 准备蒙版 (PNG Alpha)
                             mask_data = canvas_result.image_data.astype('uint8')
                             mask_img = Image.fromarray(mask_data, mode="RGBA")
-                            mask_img = mask_img.split()[3] # 提取 Alpha
+                            mask_img = mask_img.split()[3] # 提取 Alpha 通道
                             
                             mask_buf = io.BytesIO()
                             mask_img.save(mask_buf, format='PNG')
                             
-                            # 3. 调用 Replicate
                             output = replicate.run(
                                 "black-forest-labs/flux-fill-pro",
                                 input={
