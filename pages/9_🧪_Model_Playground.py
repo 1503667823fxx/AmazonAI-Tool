@@ -7,149 +7,143 @@ import os
 
 # --- 0. 基础设置 ---
 sys.path.append(os.path.abspath('.'))
-# 页面宽屏模式，方便看大图
-st.set_page_config(page_title="Google 生图测试台", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="Gemini 图生图测试", page_icon="🍌", layout="wide")
 
 # --- 1. 鉴权配置 ---
+# 必须先确保连上了 Google
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
     st.error("❌ 未找到 GOOGLE_API_KEY，请检查 secrets.toml")
     st.stop()
 
-# --- 2. 核心功能：获取能画图的模型 ---
-@st.cache_data(ttl=3600)
-def get_image_generation_models():
+# --- 2. 核心功能：获取账号下所有可用模型 ---
+@st.cache_data(ttl=600)
+def get_all_models():
     """
-    自动检索支持 'generateImages' 的 Google 模型。
-    注意：Imagen 3 目前可能是白名单或 Beta 状态，如果没有检索到，
-    我们会手动把已知可用的模型名称加进去。
+    不加任何过滤，直接拉取所有模型列表。
+    方便你找到 gemini-2.5-flash-image 或 gemini-3-pro-image-preview
     """
     try:
-        image_models = []
-        # 尝试从 API 列表里找
+        model_list = []
         for m in genai.list_models():
-            # 检查是否支持生图方法
-            if 'generateImages' in m.supported_generation_methods:
-                image_models.append(m.name)
+            # 只要名字里带 gemini 的都拿出来
+            if "gemini" in m.name:
+                model_list.append(m.name)
         
-        # ⚠️ 强制补充：因为 API 有时隐藏 Imagen 3，手动补全最新的
-        known_models = [
-            "models/imagen-3.0-generate-001",  # Google 最强生图模型
-            "models/imagen-2.0"
-        ]
-        
-        # 合并列表并去重
-        final_list = list(set(image_models + known_models))
-        return sorted(final_list, reverse=True)
+        # 按照新旧排序，把类似 1.5, 2.0, 3.0 的排前面
+        return sorted(model_list, reverse=True)
     except Exception as e:
-        # 如果报错，返回保底列表
-        return ["models/imagen-3.0-generate-001"]
+        st.error(f"获取模型列表失败: {e}")
+        return ["models/gemini-1.5-pro", "models/gemini-1.5-flash"]
 
 # --- 3. 界面布局 ---
-st.title("🧪 Google Imagen 专项测试")
-st.caption("独立模块：专门用于测试 Google 原生生图能力，解决数据解析报错问题。")
+st.title("🍌 Gemini 多模态图生图 (Img2Img) 测试台")
+st.info("本模块用于测试 Google 最新模型的原生【图生图】能力。")
 
-# 左侧控制栏，右侧显示图
-col_ctrl, col_show = st.columns([1, 2])
+# 布局：左侧控制，右侧结果
+col_ctrl, col_res = st.columns([1, 1.5], gap="medium")
 
 with col_ctrl:
-    st.subheader("⚙️ 参数设置")
+    st.subheader("1. 模型与输入")
     
-    # 1. 模型选择
-    available_models = get_image_generation_models()
-    selected_model = st.selectbox(
-        "选择 Google 生图模型", 
-        available_models,
+    # 自动检索模型列表
+    all_models = get_all_models()
+    
+    # --- 关键：在这里选择你截图里的模型 ---
+    selected_model_name = st.selectbox(
+        "🔍 选择模型 (请找 gemini-2.5 或 3.0-image)", 
+        all_models,
         index=0
     )
-    st.info(f"当前选中: `{selected_model}`")
+    st.caption(f"当前选中: `{selected_model_name}`")
+
+    # 上传原图
+    uploaded_file = st.file_uploader("📤 上传参考图", type=["jpg", "png", "jpeg", "webp"])
     
-    # 2. 提示词
-    prompt = st.text_area(
-        "生图提示词 (Prompt)", 
-        height=150,
-        placeholder="例如：A futuristic fashion photoshoot of a model wearing a glowing cyber-punk jacket, commercial lighting, 8k..."
+    if uploaded_file:
+        st.image(uploaded_file, caption="原图预览", width=200)
+
+    # 提示词
+    prompt_text = st.text_area(
+        "📝 修改指令 (Prompt)", 
+        height=100, 
+        placeholder="例如：Change the background to a snowy mountain, keep the product same...",
+        help="告诉模型你想怎么修改这张图"
     )
-    
-    # 3. 数量和比例
-    num_images = st.slider("生成数量", 1, 4, 1)
-    aspect_ratio = st.selectbox("图片比例", ["1:1", "16:9", "9:16", "4:3"], index=0)
 
-    # 4. 生成按钮
-    btn_generate = st.button("🚀 调用 Google 生成", type="primary")
+    btn_run = st.button("🚀 开始图生图", type="primary")
 
-# --- 4. 生成逻辑与解析修复 ---
-with col_show:
-    st.subheader("🖼️ 结果展示")
+# --- 4. 执行与解析 (解决文件报错的核心) ---
+with col_res:
+    st.subheader("2. 生成结果")
     
-    if btn_generate:
-        if not prompt:
-            st.warning("请先输入提示词！")
+    if btn_run:
+        if not uploaded_file or not prompt_text:
+            st.warning("⚠️ 请确保图片和提示词都已就绪。")
         else:
-            with st.spinner("Google Imagen 正在绘制 (通常比 Flux 慢一点)..."):
+            with st.spinner(f"正在请求 {selected_model_name} 进行图生图处理..."):
                 try:
-                    # 实例化生图模型 (这是专门针对 Google Imagen 的写法)
-                    # 注意：Gemini 用 GenerativeModel，Imagen 用 ImageGenerationModel
-                    # 这种细微区别是导致报错的主要原因
+                    # 1. 准备数据
+                    uploaded_file.seek(0)
+                    img_pil = Image.open(uploaded_file)
                     
-                    # 尝试用通用入口（最新版 SDK 推荐）
-                    # 如果你的 SDK 版本较旧，这里可能会有差异，但 try-catch 会捕获
+                    # 2. 实例化模型
+                    model = genai.GenerativeModel(selected_model_name)
                     
-                    # 准备参数
-                    generation_config = {
-                        "number_of_images": num_images,
-                        "aspect_ratio": aspect_ratio.replace(":", "/"), # 某些版本需要 16/9 格式
-                        "safety_filter_level": "block_only_high"
-                    }
+                    # 3. 发送请求 [提示词, 图片]
+                    # 注意：Gemini 原生图生图通常直接返回 content
+                    response = model.generate_content([prompt_text, img_pil], stream=True)
                     
-                    # ⚠️ 关键调用
-                    # 现在的 Google SDK 并没有统一的入口，这里用最底层的调用方式防止出错
-                    from google.generativeai.types import ImageGenerationModel
+                    # 4. 【核心修复】智能解析返回流
+                    # Gemini 返回的可能是一段混合流，我们需要把里面的图片部分提取出来
                     
-                    # 必须去掉 'models/' 前缀才能实例化 ImageGenerationModel
-                    clean_model_name = selected_model.replace("models/", "")
-                    model_instance = ImageGenerationModel(clean_model_name)
+                    found_image = False
+                    full_text = ""
                     
-                    response = model_instance.generate_images(
-                        prompt=prompt,
-                        number_of_images=num_images,
-                    )
-                    
-                    # --- 5. 关键修复：如何解析返回的数据 ---
-                    # Google 返回的 response.images 是一个 PIL.Image 对象列表
-                    # 之前报错是因为你可能试图用 .content 或 .text 去读它
-                    
-                    if response.images:
-                        st.success(f"成功生成 {len(response.images)} 张图片！")
+                    for chunk in response:
+                        # 检查这个 chunk 里有没有 part 包含图片
+                        if hasattr(chunk, "parts"):
+                            for part in chunk.parts:
+                                # 情况 A: 返回了文本 (说明模型可能拒绝画图，或者在解释)
+                                if part.text:
+                                    full_text += part.text
+                                
+                                # 情况 B: 返回了内联数据 (Base64图片)
+                                if part.inline_data:
+                                    image_data = part.inline_data.data
+                                    image = Image.open(io.BytesIO(image_data))
+                                    st.image(image, caption="Gemini 生成结果", use_column_width=True)
+                                    found_image = True
+                                
+                                # 情况 C: 返回了函数调用或其他 (通常不处理)
                         
-                        cols = st.columns(len(response.images))
-                        for idx, img in enumerate(response.images):
-                            with cols[idx]:
-                                # img 已经是 PIL Image 对象了，可以直接显示
-                                st.image(img, caption=f"Result {idx+1}", use_column_width=True)
-                                
-                                # 为了提供下载，我们需要把它转回 bytes
-                                buf = io.BytesIO()
-                                img.save(buf, format="PNG")
-                                byte_im = buf.getvalue()
-                                
-                                st.download_button(
-                                    label=f"📥 下载图片 {idx+1}",
-                                    data=byte_im,
-                                    file_name=f"google_imagen_{idx+1}.png",
-                                    mime="image/png"
-                                )
+                        # 某些 SDK 版本可能直接把 image 放在 chunk.image
+                        # 为了兼容性，我们做个深层检查
+                        try:
+                            # 某些特定的预览版模型返回格式比较特殊
+                            if hasattr(chunk, "image") and chunk.image:
+                                st.image(chunk.image, caption="Gemini 生成结果 (Preview)", use_column_width=True)
+                                found_image = True
+                        except:
+                            pass
+
+                    # 5. 结果反馈
+                    if found_image:
+                        st.success("✅ 图片生成成功！")
+                        if full_text:
+                            with st.expander("模型还说了什么？"):
+                                st.write(full_text)
                     else:
-                        st.error("API 返回了空结果，可能是触发了安全拦截 (Safety Filter)。")
+                        st.error("❌ 模型没有返回图片。")
+                        st.markdown("### 可能的原因：")
+                        st.write("1. **模型选错了**：你选的模型可能不支持画图 (如标准的 gemini-1.5-pro 只能看图不能画图)。请确保选的是带有 `image` 后缀的预览模型。")
+                        st.write("2. **被拒绝**：Prompt 可能触发了安全过滤。")
+                        if full_text:
+                            st.warning("模型返回的文本内容如下：")
+                            st.info(full_text)
 
                 except Exception as e:
-                    st.error(f"❌ 生成失败: {str(e)}")
-                    st.markdown("""
-                    **排查建议：**
-                    1. 确保你的 Google API Key 有 **Imagen 3** 的权限 (AI Studio 中需开通)。
-                    2. 报错 `404 Not Found`? 说明你选的模型名称不对，请在左侧切换模型试试。
-                    3. 报错 `AttributeError`? 可能是你的 `google-generativeai` 库版本太低。
-                       尝试在终端运行: `pip install -U google-generativeai`
-                    """)
-
+                    st.error(f"❌ 调用报错: {str(e)}")
+                    st.markdown("---")
+                    st.caption("调试信息：请确认你的 API Key 是否有权访问该预览版模型。")
