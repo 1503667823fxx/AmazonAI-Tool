@@ -120,6 +120,15 @@ with c4:
         # 假设文件名是 4_🎬_Video_Studio.py
         st.page_link("pages/4_🎬_Video_Studio.py", label="进入视频工场", icon="🎥", use_container_width=True)
 
-# --- 7. 底部 ---
-st.divider()
-st.caption("© 2025 Amazon AI Operation Team")
+# --- 7. 系统日志 ---
+with st.expander("📢 系统更新日志 (System Changelog)", expanded=False):
+    st.markdown("""
+    * **2025-05-27 (Architecture Update):**
+        * 🏗️ **架构重组**: 正式确立 `1-文案`, `2-谷歌核心`, `3-Flux精修`, `4-视频` 的四步工作流。
+        * 🖼️ **Smart Edit 上线**: 谷歌原生工作台 (Page 2) 升级为 V2.0，支持批量变体。
+    * **2025-05-26:**
+        * ✨ **视频模块**: Video Studio (Page 4) 进入公测。
+        * 🔒 **安全**: 全站 API 密钥与门禁系统升级。
+    """)
+
+st.caption("© 2025 Amazon AI Operation Team | Design by Streamlit")
