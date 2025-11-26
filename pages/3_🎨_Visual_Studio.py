@@ -1,89 +1,118 @@
 import streamlit as st
 import replicate
 import google.generativeai as genai
-from PIL import Image, ImageOps
+from PIL import Image
 import io
 import sys
 import os
-import requests
 
-# --- 0. 引入门禁系统 ---
+# --- 0. 基础设置 ---
 sys.path.append(os.path.abspath('.'))
 try:
     import auth
+    from core_utils import process_image_for_download
 except ImportError:
     pass 
 
-# --- 1. 页面配置 ---
-st.set_page_config(page_title="视觉基础工场", page_icon="🎨", layout="wide")
+st.set_page_config(page_title="Visual Studio", page_icon="🎨", layout="wide")
 
 if 'auth' in sys.modules:
     if not auth.check_password():
         st.stop()
 
-st.markdown("""
-<style>
-    .stButton button {width: 100%; border-radius: 8px;}
-    .stImage {border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
-</style>
-""", unsafe_allow_html=True)
-
-# --- 2. Keys ---
-if "REPLICATE_API_TOKEN" not in st.secrets:
-    st.error("❌ 未找到 Replicate API Token")
-    st.stop()
+# API Check
+if "REPLICATE_API_TOKEN" in st.secrets:
+    os.environ["REPLICATE_API_TOKEN"] = st.secrets["REPLICATE_API_TOKEN"]
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-UNIVERSAL_QUALITY_PROMPT = ", commercial photography, 8k resolution, photorealistic, highly detailed, cinematic lighting, depth of field"
+st.title("🎨 视觉工场 (Visual Studio)")
+st.caption("Flux Pro 商业级文生图 & 4K 画质增强中心")
 
-def download_image(url, filename):
-    st.markdown(f"### [📥 点击下载 {filename}]({url})")
+tab_txt2img, tab_upscale = st.tabs(["✨ 文生图 (Text-to-Image)", "🔍 画质增强 (Upscale)"])
 
-def get_vision_model():
-    return genai.GenerativeModel('gemini-1.5-flash')
-
-# --- Top Nav ---
-st.title("🎨 亚马逊 AI 视觉工场 (基础版)")
-st.info("👉 想要高级图生图/换场景？请使用左侧菜单的 **「智能图生图」** 模块。")
-
-tabs = st.tabs(["✨ 文生图", "🔍 高清放大"])
-
-# Tab 1: 文生图
-with tabs[0]:
-    st.header("✨ 文生图 (海报)")
-    col1, col2 = st.columns([4, 6])
+# ==========================================
+# Tab 1: 文生图 (Flux Pro)
+# ==========================================
+with tab_txt2img:
+    col1, col2 = st.columns([1, 1.5], gap="large")
+    
     with col1:
-        prompt_text = st.text_area("画面描述", height=100)
-        if st.button("🪄 润色指令"):
-            if prompt_text:
-                with st.spinner("Gemini 构思..."):
-                    model = get_vision_model()
-                    resp = model.generate_content(f"转为Flux绘画提示词(英文): {prompt_text}")
-                    st.session_state["t2i_prompt"] = resp.text
-                    st.rerun()
+        st.subheader("1. 创意描述")
+        prompt_text = st.text_area("画面描述 (中文)", height=120, placeholder="例如：一只穿着宇航服的猫，站在火星表面，电影质感，4k分辨率...")
         
-        final_prompt = st.text_area("最终指令", value=st.session_state.get("t2i_prompt", ""))
-        ar = st.selectbox("比例", ["1:1", "16:9", "9:16"], index=0)
+        # 辅助润色
+        if st.button("🪄 AI 润色指令 (Magic Prompt)"):
+            if prompt_text:
+                with st.spinner("Gemini 正在优化提示词..."):
+                    try:
+                        model = genai.GenerativeModel('models/gemini-1.5-flash')
+                        resp = model.generate_content(f"Translate and optimize this for Flux.1 image generation model (English only, highly detailed): {prompt_text}")
+                        st.session_state["flux_prompt"] = resp.text.strip()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"润色失败: {e}")
+        
+        final_prompt = st.text_area("最终指令 (英文)", value=st.session_state.get("flux_prompt", ""), height=120, help="Flux 模型直接读取此内容")
+        
+        ar = st.selectbox("画幅比例", ["1:1", "16:9", "9:16", "4:3", "3:2"], index=0)
+        
+        if st.button("🚀 生成图片 (Flux 1.1 Pro)", type="primary"):
+            if final_prompt:
+                with st.spinner("Flux 正在绘图 (约 10-15秒)..."):
+                    try:
+                        output = replicate.run(
+                            "black-forest-labs/flux-1.1-pro",
+                            input={
+                                "prompt": final_prompt,
+                                "aspect_ratio": ar,
+                                "output_format": "jpg",
+                                "output_quality": 95,
+                                "safety_tolerance": 2
+                            }
+                        )
+                        st.session_state["flux_result"] = str(output)
+                    except Exception as e:
+                        st.error(f"生成失败: {e}")
 
     with col2:
-        if st.button("🚀 生成", type="primary"):
-            if final_prompt:
-                with st.spinner("生成中..."):
+        st.subheader("2. 生成结果")
+        if "flux_result" in st.session_state:
+            st.image(st.session_state["flux_result"], caption="Flux 生成结果", use_container_width=True)
+            st.markdown(f"**Prompt:** _{final_prompt}_")
+        else:
+            st.info("等待生成...")
+
+# ==========================================
+# Tab 2: 画质增强 (Upscale)
+# ==========================================
+with tab_upscale:
+    st.subheader("🔍 4K/8K 超清修复")
+    st.info("使用 Real-ESRGAN 算法将低清图片无损放大 4 倍。")
+    
+    u_col1, u_col2 = st.columns([1, 1])
+    
+    with u_col1:
+        up_img = st.file_uploader("上传低清图片", type=["jpg", "png", "webp"])
+        if up_img:
+            st.image(up_img, caption="原图", use_container_width=True)
+            
+        if st.button("🚀 开始放大 (4x)"):
+            if up_img:
+                with st.spinner("正在进行超分辨率处理..."):
                     try:
-                        out = replicate.run("black-forest-labs/flux-1.1-pro", input={"prompt": final_prompt + UNIVERSAL_QUALITY_PROMPT, "aspect_ratio": ar})
-                        st.image(str(out))
+                        output = replicate.run(
+                            "nightmareai/real-esrgan",
+                            input={
+                                "image": up_img,
+                                "scale": 4,
+                                "face_enhance": True
+                            }
+                        )
+                        st.session_state["up_result"] = str(output)
                     except Exception as e:
-                        st.error(e)
-
-
-# Tab 4: 高清放大
-with tabs[3]:
-    st.header("🔍 高清放大")
-    img = st.file_uploader("低清图", key="up_img")
-    if st.button("🚀 放大"):
-        if img:
-            with st.spinner("放大中..."):
-                out = replicate.run("nightmareai/real-esrgan", input={"image": img, "scale": 4})
-                st.image(str(out))
-
+                        st.error(f"放大失败: {e}")
+    
+    with u_col2:
+        if "up_result" in st.session_state:
+            st.image(st.session_state["up_result"], caption="4K 增强结果", use_container_width=True)
