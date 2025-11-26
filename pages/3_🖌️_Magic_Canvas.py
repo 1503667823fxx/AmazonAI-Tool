@@ -16,49 +16,49 @@ except ImportError:
     pass 
 
 # ==========================================
-# 🛠️ 核心修复：强力兼容性补丁 (Base64 Version)
+# 🛠️ 核心修复：全方位强力补丁 (Omni-Patch)
 # ==========================================
-# 这里的逻辑是：如果 Streamlit 内部函数失效，我们就自己把图片转成 Base64 字符串
-# 这样浏览器就能直接显示图片，不再依赖服务器路径，彻底解决“不显示”的问题。
-
-import streamlit.elements.image
+# 强制劫持所有可能的图片处理接口，确保图片能传给前端
 
 def custom_image_to_url(image, width=None, clamp=False, channels='RGB', output_format='auto', image_id=None, allow_emoji=False):
     """
-    自定义的图片转URL函数。
-    将 PIL Image 直接转为 Base64 Data URL，确保前端 100% 能显示。
+    通用图片转 Base64 函数。
+    无论 Streamlit 版本如何，这都能保证前端收到有效的图片数据。
     """
     try:
-        # 1. 处理 Numpy 数组 (如果插件传进来的是 array)
+        # 1. 处理 Numpy
         if isinstance(image, np.ndarray):
             image = Image.fromarray(image)
             
-        # 2. 处理 PIL Image
+        # 2. 处理 PIL
         if hasattr(image, "save"):
             buffered = io.BytesIO()
-            # 强制转 RGB 避免 PNG 透明度问题导致保存失败
-            if image.mode in ("RGBA", "P"):
-                save_image = image.copy()
-            else:
-                save_image = image.convert("RGB")
+            # 强制转 RGB (JPEG不支持透明，PNG支持但需防坑)
+            # 为了兼容性，统一转 PNG Base64
+            if image.mode != "RGBA" and image.mode != "RGB":
+                image = image.convert("RGB")
                 
-            save_image.save(buffered, format="PNG")
+            image.save(buffered, format="PNG")
             img_str = base64.b64encode(buffered.getvalue()).decode()
             return f"data:image/png;base64,{img_str}"
-            
     except Exception as e:
-        print(f"Base64 conversion failed: {e}")
-        return ""
+        print(f"Patch Error: {e}")
     return ""
 
-# 检查并注入补丁
-if not hasattr(streamlit.elements.image, "image_to_url"):
-    # 优先尝试导入官方实现
-    try:
-        from streamlit.elements.lib.image_utils import image_to_url
-        streamlit.elements.image.image_to_url = image_to_url
-    except ImportError:
-        # 如果官方实现找不到，使用我们上面的 Base64 强力版
+# 1. 尝试修补旧版接口
+import streamlit.elements.image
+streamlit.elements.image.image_to_url = custom_image_to_url
+
+# 2. 尝试修补新版接口 (Streamlit 1.30+)
+try:
+    from streamlit.elements.lib import image_utils
+    image_utils.image_to_url = custom_image_to_url
+except ImportError:
+    pass
+
+# 3. 再次确认 patch 是否生效 (双重保险)
+if hasattr(streamlit.elements.image, "image_to_url"):
+    if streamlit.elements.image.image_to_url != custom_image_to_url:
         streamlit.elements.image.image_to_url = custom_image_to_url
 
 # --- 安全导入画布 ---
@@ -111,7 +111,7 @@ with tab_inp:
                 try:
                     raw_image = Image.open(uploaded_file).convert("RGB")
                     
-                    # 限制尺寸，保证 base64 字符串不会太长导致卡顿
+                    # 限制尺寸
                     max_canvas_width = 700
                     if raw_image.width > max_canvas_width:
                         ratio = max_canvas_width / raw_image.width
@@ -132,9 +132,11 @@ with tab_inp:
             bg_img = st.session_state["canvas_bg"]
             
             # 调试区域
-            with st.expander("🖼️ 画布底层调试", expanded=False):
-                st.image(bg_img, caption="内存中的底图", width=200)
-                st.caption("如果下方画布显示图片，说明 Base64 补丁生效中。")
+            with st.expander("🛠️ 画布诊断 (如有问题请点此)", expanded=False):
+                st.image(bg_img, caption=f"内存图片 ({bg_img.width}x{bg_img.height})", width=200)
+                patch_status = "✅ 已激活" if streamlit.elements.image.image_to_url == custom_image_to_url else "❌ 未激活"
+                st.caption(f"补丁状态: {patch_status}")
+                st.caption("如果图片显示为灰色背景，说明图片传输失败，请尝试刷新页面。")
 
             stroke_width = st.slider("画笔大小", 5, 50, 20)
             dynamic_key = f"canvas_{st.session_state['original_upload']}"
@@ -145,7 +147,8 @@ with tab_inp:
                     fill_color="rgba(255, 255, 255, 0)",  
                     stroke_width=stroke_width,
                     stroke_color="#FFFFFF", 
-                    background_image=bg_img, 
+                    background_image=bg_img, # 传入 PIL Image，补丁会自动将其转为 Base64
+                    background_color="#EEEEEE", # 浅灰背景，区分“没加载”和“白色图片”
                     update_streamlit=True,
                     height=bg_img.height,
                     width=bg_img.width,
