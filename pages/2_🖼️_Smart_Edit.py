@@ -123,8 +123,7 @@ def sync_bg_zh_to_en():
 with st.sidebar:
     st.title("🗂️ 工作区")
     download_format = st.radio("📥 下载格式", ["PNG", "JPEG"], horizontal=True)
-    # 渲染历史记录
-    st.session_state.history_manager.render_sidebar()
+
 
 # ==========================================
 # 🚀 主界面
