@@ -10,36 +10,44 @@ from collections import deque
 # --- 0. 基础设置与核心库引入 ---
 sys.path.append(os.path.abspath('.'))
 
-# 1. 尝试导入 auth (如果不存在则跳过，不影响核心功能)
+# --- 定义备用（Fallback）类和函数 ---
+# 关键修复：确保这里的参数定义与 core_utils 中完全一致，防止 TypeError
+class MockTranslator:
+    def to_english(self, t): return t
+    def to_chinese(self, t): return t
+
+class MockHistoryManager:
+    def add(self, image_bytes, source, prompt_summary): pass # 接收3个参数
+    def render_sidebar(self): pass
+
+def mock_process_image(image_bytes, format="PNG"): # 接收 format 参数
+    return image_bytes, "image/png"
+
+def mock_create_thumbnail(image_bytes, max_width=800): # 接收 max_width 参数
+    return image_bytes
+
+def mock_show_modal(image_bytes, caption): pass
+
+# --- 尝试导入核心工具 ---
 try:
     import auth
     HAS_AUTH = True
 except ImportError:
     HAS_AUTH = False
 
-# 2. 尝试导入核心工具 (核心依赖，如果失败则使用备用)
 try:
     from core_utils import AITranslator, process_image_for_download, create_preview_thumbnail, HistoryManager, show_preview_modal
 except ImportError:
-    # 备用类定义 (防止报错)
-    class AITranslator:
-        def to_english(self, t): return t
-        def to_chinese(self, t): return t
-    class HistoryManager:
-        def add(self, a, b, c): pass
-        def render_sidebar(self): pass
-    
-    # 修复：备用函数必须接收 format 参数
-    def process_image_for_download(b, format="PNG"): return b, "image/png"
-    
-    # 修复：备用函数必须接收 max_width 参数 (这是之前报错的根源)
-    def create_preview_thumbnail(b, max_width=800): return b
-    
-    def show_preview_modal(b, c): pass
+    # 如果导入失败，使用上面的 Mock 对象
+    AITranslator = MockTranslator
+    HistoryManager = MockHistoryManager
+    process_image_for_download = mock_process_image
+    create_preview_thumbnail = mock_create_thumbnail
+    show_preview_modal = mock_show_modal
 
 st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
 
-# 门禁检查 (仅在 auth 存在时启用)
+# 门禁检查
 if HAS_AUTH and 'auth' in sys.modules:
     if not auth.check_password():
         st.stop()
@@ -137,7 +145,7 @@ st.title("🧬 Fashion AI Core V5.6")
 tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修 (Workstation)", "⚡ 变体改款", "🏞️ 场景置换"])
 
 # ==========================================
-# TAB 1: 标准工作流 (支持多图上传 + 可选拆分 + 权重控制)
+# TAB 1: 标准工作流
 # ==========================================
 with tab_workflow:
     col_main, col_preview = st.columns([1.5, 1], gap="large")
@@ -165,42 +173,25 @@ with tab_workflow:
         task_type = st.selectbox("3. 任务类型", ["场景图 (Lifestyle)", "展示图 (Creative)", "产品图 (Product Only)"])
         user_idea = st.text_area("4. 你的创意", height=80, placeholder="例如：改为极简主义风格，白色背景...")
 
-        # 创意权重滑块
         user_weight = st.slider(
             "5. 创意权重 (User Influence)", 
             0.0, 1.0, 0.6, step=0.1, 
-            help="0.0 = 完全听AI的(忠实原图); 1.0 = 完全听你的(忠实文字); 0.6 = 平衡模式"
+            help="0.0 = 完全听AI的; 1.0 = 完全听你的; 0.6 = 平衡"
         )
 
-        # 拆分任务开关
-        enable_split = st.checkbox("🧩 启用智能任务拆分 (多任务模式)", value=False, help="勾选后，AI 会尝试将复杂需求(如'一张上衣，一张裤子')拆解为多个独立的生图任务。")
+        enable_split = st.checkbox("🧩 启用智能任务拆分 (多任务模式)", value=False)
 
         if st.button("🧠 生成 Prompt", type="primary"):
             if not active_file: st.warning("⚠️ 请先上传或选择图片")
             else:
-                with st.spinner(f"AI 正在分析 (权重: {user_weight})..."):
+                with st.spinner(f"AI 正在分析..."):
                     try:
                         active_file.seek(0)
                         img_obj = Image.open(active_file)
                         model = genai.GenerativeModel(analysis_model)
                         
-                        # 注入高质量摄影指令
-                        special_instruction = ""
-                        if "Product Only" in task_type:
-                            special_instruction = """
-                            SPECIAL INSTRUCTION FOR PRODUCT PHOTOGRAPHY:
-                            1. **Layout**: If user implies 'flat lay' or 'break down', use "Knolling photography", "Neatly arranged".
-                            2. **Realism**: Use "Contact shadows", "Ambient occlusion" to avoid floating look.
-                            3. **Texture**: Emphasize "fabric texture", "material details".
-                            """
-                        
-                        # 核心权重逻辑注入
                         weight_instruction = f"""
-                        WEIGHT CONTROL INSTRUCTION (Important):
-                        The user has set an influence weight of {user_weight} (Range 0.0 to 1.0).
-                        - If weight > 0.7: Prioritize the User's Idea ('{user_idea}') over the visual analysis of the image. Even if it conflicts with the image, follow the text.
-                        - If weight < 0.3: Prioritize the Visual Analysis of the image. Use the User's Idea only as a subtle suggestion.
-                        - If weight is 0.4-0.6: Balance both equally.
+                        WEIGHT CONTROL: {user_weight}.
                         """
 
                         if enable_split:
@@ -208,7 +199,6 @@ with tab_workflow:
                             Role: Art Director. 
                             Task: Create detailed prompts based on User Idea and Image. Type: {task_type}.
                             {weight_instruction}
-                            {special_instruction}
                             IMPORTANT LOGIC: Split distinct outputs into separate prompts using "|||".
                             STRICT OUTPUT FORMAT: Separate prompts with "|||". NO Markdown.
                             User Idea: {user_idea}
@@ -217,9 +207,8 @@ with tab_workflow:
                         else:
                             prompt_req = f"""
                             Role: Art Director. 
-                            Task: Create ONE single, high-quality prompt based on User Idea and Image. Type: {task_type}.
+                            Task: Create ONE single prompt based on User Idea and Image. Type: {task_type}.
                             {weight_instruction}
-                            {special_instruction}
                             STRICT OUTPUT FORMAT: Provide ONE unified prompt. NO "|||". NO Markdown.
                             User Idea: {user_idea}
                             Output: English Prompt Only.
@@ -251,12 +240,13 @@ with tab_workflow:
                     with col_zh:
                         key_zh = f"std_zh_{i}"
                         if key_zh not in st.session_state: st.session_state[key_zh] = p_data["zh"]
-                        # TAB 1 的同步逻辑：更新列表中的数据
+                        
                         def update_en(idx=i):
                             new_zh = st.session_state[f"std_zh_{idx}"]
                             new_en = st.session_state.translator.to_english(new_zh)
                             st.session_state["std_prompt_data"][idx]["zh"] = new_zh
                             st.session_state["std_prompt_data"][idx]["en"] = new_en
+                            
                         st.text_area("中文指令 (可编辑)", key=key_zh, height=100, on_change=update_en)
                     with col_en:
                         st.text_area("English Prompt (只读)", value=st.session_state["std_prompt_data"][i]["en"], height=100, disabled=True, key=f"std_en_view_{i}")
@@ -266,9 +256,6 @@ with tab_workflow:
             with cg2: selected_ratio_key = st.selectbox("比例", list(RATIO_MAP.keys()))
             with cg3: num_images = st.number_input("单任务生成数量", 1, 4, 1)
 
-            if "flash" in google_model and "1:1" not in selected_ratio_key:
-                st.warning("⚠️ 警告：Gemini 2.5 Flash 强制 1:1 输出。")
-
             if st.button("🎨 开始生成", type="primary"):
                 st.session_state["std_images"] = []
                 total_tasks = len(st.session_state["std_prompt_data"]) * num_images
@@ -276,15 +263,12 @@ with tab_workflow:
                 bar = st.progress(0)
                 
                 if active_file:
-                    active_file.seek(0)
-                    img_pil = Image.open(active_file)
                     for task_idx, task_data in enumerate(st.session_state["std_prompt_data"]):
                         prompt_en = task_data["en"]
                         prompt_zh = task_data["zh"]
                         for n in range(num_images):
                             with st.spinner(f"执行任务 {task_idx+1} (第 {n+1} 张)..."):
                                 active_file.seek(0)
-                                # 再次确认读取，防止指针问题
                                 img_pil = Image.open(active_file)
                                 img_data = generate_image_call(google_model, prompt_en, img_pil, RATIO_MAP[selected_ratio_key])
                                 if img_data:
@@ -295,7 +279,7 @@ with tab_workflow:
                                 time.sleep(1)
                     st.success("🎉 执行完毕！")
 
-    # 右侧预览 (TAB 1)
+    # 右侧预览
     with col_preview:
         st.subheader("🖼️ 结果预览")
         if active_file:
@@ -318,14 +302,14 @@ with tab_workflow:
                         show_preview_modal(img_bytes, f"Result {idx+1}")
 
 # ==========================================
-# TAB 2: ⚡ 变体改款 (Restyling) - 优化版
+# TAB 2: ⚡ 变体改款 (Restyling) - 完美修复版
 # ==========================================
 with tab_variants:
     st.markdown("### ⚡ 服装改款工厂")
     
     cv_left, cv_right = st.columns([1.5, 1], gap="large")
 
-    # TAB 2 的同步逻辑：更新全局变量 var_prompt_en
+    # 同步函数：左(中) -> 翻译 -> 右(英)
     def update_var_en():
         val = st.session_state.var_prompt_zh
         if val:
@@ -339,7 +323,7 @@ with tab_variants:
         if st.button("👁️ AI 读图", key="btn_var_ana"):
             if not var_file: st.warning("请先上传")
             else:
-                with st.spinner("提取中..."):
+                with st.spinner("提取特征并翻译中..."):
                     try:
                         var_file.seek(0)
                         v_img = Image.open(var_file)
@@ -348,9 +332,15 @@ with tab_variants:
                         resp = model.generate_content([prompt, v_img])
                         
                         en_text = resp.text.strip()
+                        # 强制翻译为中文
+                        zh_text = st.session_state.translator.to_chinese(en_text)
+                        
+                        # 同时更新中英状态
                         st.session_state["var_prompt_en"] = en_text
-                        st.session_state["var_prompt_zh"] = st.session_state.translator.to_chinese(en_text)
-                        st.success("成功")
+                        st.session_state["var_prompt_zh"] = zh_text
+                        
+                        st.success("特征提取成功！")
+                        st.rerun() # 关键：刷新界面以显示中文
                     except Exception as e: st.error(f"失败: {e}")
 
         # Step 2: 改款设置
@@ -358,9 +348,10 @@ with tab_variants:
         
         vp_col1, vp_col2 = st.columns(2)
         with vp_col1:
-            # 绑定 on_change 事件到同步函数
+            # 左侧显示中文，绑定编辑事件
             st.text_area("🇨🇳 特征描述 (中文 - 可编辑)", key="var_prompt_zh", height=100, on_change=update_var_en)
         with vp_col2:
+            # 右侧显示英文，只读
             st.text_area("🇺🇸 Feature Desc (English - Auto)", key="var_prompt_en", height=100, disabled=True)
 
         CHANGE_LEVELS = {
@@ -394,7 +385,7 @@ with tab_variants:
                 try:
                     var_file.seek(0)
                     v_img = Image.open(var_file)
-                    # AI 读取的是 session_state['var_prompt_en']，它已经被同步函数更新了
+                    # 关键：AI 读取的是 session_state['var_prompt_en'] (英文)
                     prompt = f"Task: Restyling. Base: {st.session_state['var_prompt_en']}. Constraint: {sys_instruct}. Mod Request: {user_mod}. Var ID: {i}"
                     img_data = generate_image_call(var_model, prompt, v_img, "")
                     if img_data:
@@ -402,6 +393,7 @@ with tab_variants:
                         st.session_state.history_manager.add(img_data, f"Restyle {i+1}", user_mod)
                         
                         with grid[i%2]:
+                            # 修复：确保调用参数正确
                             thumb = create_preview_thumbnail(img_data, max_width=300)
                             st.image(thumb, use_container_width=True)
                             if st.button("🔍", key=f"zoom_var_{i}"):
@@ -417,14 +409,13 @@ with tab_variants:
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"var_{idx}.{download_format.lower()}", mime=mime)
 
 # ==========================================
-# TAB 3: 🏞️ 场景置换 (Scene Swap) - 优化版
+# TAB 3: 🏞️ 场景置换 (Scene Swap) - 完美修复版
 # ==========================================
 with tab_background:
     st.markdown("### 🏞️ 场景批量置换")
     
     cb_left, cb_right = st.columns([1.5, 1], gap="large")
 
-    # TAB 3 的同步逻辑：更新全局变量 bg_prompt_en
     def update_bg_en():
         val = st.session_state.bg_prompt_zh
         if val:
@@ -438,7 +429,7 @@ with tab_background:
         if st.button("🔒 锁定产品特征", key="btn_bg_ana"):
             if not bg_file: st.warning("请先上传")
             else:
-                with st.spinner("锁定中..."):
+                with st.spinner("锁定特征并翻译中..."):
                     try:
                         bg_file.seek(0)
                         v_img = Image.open(bg_file)
@@ -447,16 +438,20 @@ with tab_background:
                         resp = model.generate_content([prompt, v_img])
                         
                         en_text = resp.text.strip()
+                        # 强制翻译为中文
+                        zh_text = st.session_state.translator.to_chinese(en_text)
+                        
                         st.session_state["bg_prompt_en"] = en_text
-                        st.session_state["bg_prompt_zh"] = st.session_state.translator.to_chinese(en_text)
-                        st.success("锁定成功")
+                        st.session_state["bg_prompt_zh"] = zh_text
+                        
+                        st.success("锁定成功！")
+                        st.rerun() # 关键：刷新界面
                     except Exception as e: st.error(f"失败: {e}")
 
         # Step 2: 换背景设置
         st.markdown("#### Step 2: 换背景设置")
         bp_col1, bp_col2 = st.columns(2)
         with bp_col1:
-            # 绑定 on_change 事件到同步函数
             st.text_area("🇨🇳 产品特征 (中文 - 可编辑)", key="bg_prompt_zh", height=100, on_change=update_bg_en)
         with bp_col2:
             st.text_area("🇺🇸 Product Features (English - Auto)", key="bg_prompt_en", height=100, disabled=True)
@@ -484,7 +479,6 @@ with tab_background:
                 try:
                     bg_file.seek(0)
                     v_img = Image.open(bg_file)
-                    # AI 读取的是 session_state['bg_prompt_en']
                     prompt = f"Product BG Swap. Product: {st.session_state['bg_prompt_en']}. New BG: {bg_desc}. Constraint: KEEP PRODUCT SAME. Var ID: {i}"
                     img_data = generate_image_call(bg_model, prompt, v_img, "")
                     if img_data:
