@@ -81,49 +81,81 @@ tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修", "⚡ �
 # ... (后面的 Tab 代码逻辑保持不变，不需要动) ...
 
 # ==========================================
-# TAB 1: 标准工作流 (UX 升级版)
+# TAB 1: 标准工作流 (最终优化版)
 # ==========================================
 with tab_workflow:
+    # 状态初始化
     if "std_prompts" not in st.session_state: st.session_state.std_prompts = []
     if "std_results" not in st.session_state: st.session_state.std_results = []
 
     c_main, c_view = st.columns([1.5, 1], gap="large")
     
+    # --- 左侧：配置区 ---
     with c_main:
         st.markdown('<div class="step-header">Step 1: 需求配置</div>', unsafe_allow_html=True)
         
-        # 1. 基础配置
+        # 1. 图片上传与原图预览 (优化点 1)
         uploaded_files = st.file_uploader("上传参考图", type=["jpg","png","webp"], accept_multiple_files=True)
         active_file = None
+        
         if uploaded_files:
+            # 多图选择逻辑
             target_name = st.selectbox("当前处理", [f.name for f in uploaded_files]) if len(uploaded_files) > 1 else uploaded_files[0].name
             active_file = next((f for f in uploaded_files if f.name == target_name), None)
+            
+            # ✨ 新增：原图预览区
+            if active_file:
+                with st.expander("🖼️ 查看当前参考原图", expanded=False):
+                    st.image(active_file, width=300)
 
         col_t1, col_t2 = st.columns(2)
-        task_type = col_t1.selectbox("任务类型", ["展示图 (Creative)", "场景图 (Lifestyle)", "产品图 (Product Only)"])
-        selected_style = col_t2.selectbox("🎨 风格预设", list(PRESETS.keys()), index=0)
+        task_type = col_t1.selectbox(
+            "任务类型", 
+            ["展示图 (Creative)", "场景图 (Lifestyle)", "产品图 (Product Only)"],
+            help="Creative: 艺术感强的广告图; Lifestyle: 带生活场景的实拍感; Product Only: 纯白底或干净背景的产品特写。"
+        )
+        selected_style = col_t2.selectbox(
+            "🎨 风格预设", 
+            list(PRESETS.keys()), 
+            index=0,
+            help="选择预设风格，AI 会自动添加对应的光影、质感描述词。"
+        )
 
         # 2. 创意输入
-        user_idea = st.text_area("你的创意 Prompt", height=80, placeholder="描述你的画面...")
-        st.caption("💡 **高级语法**：`(keyword)` 加权, `[keyword]` 减权")
+        user_idea = st.text_area(
+            "你的创意 Prompt", 
+            height=80, 
+            placeholder="描述你的画面，例如：'放在木质桌面上，阳光洒在产品上'...",
+            help="在这里输入你想要画面呈现的具体内容。支持中英文。"
+        )
+        st.caption("💡 **高级语法**：`(keyword)` 增加权重，`[keyword]` 减小权重。")
         
         # 3. 参数控制
-        user_weight = st.slider("⚖️ AI 参考权重", 0.0, 1.0, 0.6)
-        neg_prompt = st.text_input("🚫 负向提示词", placeholder="例如：low quality, deformed")
-        enable_split = st.checkbox("🧩 启用多任务拆分", value=False)
+        user_weight = st.slider(
+            "⚖️ AI 参考权重", 0.0, 1.0, 0.6,
+            help="0.0 = 完全听图片的（可能会忽略你的文字）；1.0 = 完全听文字的（可能会忽略原图结构）。推荐 0.6。"
+        )
+        neg_prompt = st.text_input(
+            "🚫 负向提示词", 
+            placeholder="low quality, deformed, messy",
+            help="你【不希望】画面中出现的东西，比如 'blur' (模糊), 'dark' (太暗)。"
+        )
+        enable_split = st.checkbox(
+            "🧩 启用多任务拆分", 
+            value=False,
+            help="勾选后，如果你的创意里包含多个不同的场景（用逗号隔开），AI 会尝试把它拆解成多张图分别生成。"
+        )
 
-        # 🧠 生成 Prompt (交互升级：使用 st.status)
+        # 🧠 生成 Prompt 按钮
         if st.button("🧠 AI 思考并生成 Prompt", type="primary"):
             if not active_file: 
-                st.toast("⚠️ 请先上传参考图片", icon="🚨") # Toast 提示
+                st.toast("⚠️ 请先上传参考图片", icon="🚨")
             else:
-                # ✨ 交互升级：使用状态容器代替 Spinner
                 with st.status("🤖 AI 正在进行思维链思考...", expanded=True) as status:
-                    
                     st.write("👀 正在分析图片视觉特征...")
                     active_file.seek(0)
                     img_obj = Image.open(active_file)
-                    time.sleep(0.5) # 模拟一下节奏感
+                    time.sleep(0.5)
                     
                     st.write(f"🎨 正在融合【{selected_style}】风格与光影...")
                     prompts = llm.optimize_art_director_prompt(
@@ -137,13 +169,14 @@ with tab_workflow:
                         st.session_state.std_prompts.append({"en": p_en, "zh": p_zh})
                     
                     status.update(label="✅ Prompt 生成完毕！", state="complete", expanded=False)
-                    st.toast("Prompt 已生成！", icon="✨") # 成功 Toast
+                    st.toast("Prompt 已生成！", icon="✨")
                     st.rerun()
 
-        # 🎨 执行生成
+        # 🎨 执行生成区域
         if st.session_state.std_prompts:
             st.markdown('<div class="step-header">Step 2: 任务执行</div>', unsafe_allow_html=True)
             
+            # Prompt 编辑区
             for i, p_data in enumerate(st.session_state.std_prompts):
                 with st.expander(f"任务 {i+1} 指令", expanded=True):
                     col_zh, col_en = st.columns(2)
@@ -154,22 +187,26 @@ with tab_workflow:
                         st.rerun()
                     col_en.text_area("English", st.session_state.std_prompts[i]["en"], disabled=True, height=80)
 
-            # 高级面板 (保持 Direction B 的代码)
+            # 高级面板
             with st.container(border=True):
                 st.caption("⚙️ **高级生成参数**")
                 cg1, cg2 = st.columns(2)
-                model_name = cg1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS)
+                model_name = cg1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS, help="Flash 速度快但细节少；Pro 质量最高。")
                 ratio_key = cg2.selectbox("📐 画幅比例", list(RATIO_MAP.keys()))
                 
+                # ✨ 优化点 4: Flash 模型比例警告
+                if "flash" in model_name.lower() and "1:1" not in ratio_key:
+                    st.warning("⚠️ 注意：Flash 模型通常强制输出 1:1 方图。如需宽/长图，建议切换到 Pro 模型。", icon="⚠️")
+
                 cg3, cg4 = st.columns(2)
-                safety_level = cg3.selectbox("🛡️ 安全过滤", ["Standard (标准)", "Permissive (宽松 - 适合内衣/泳装)", "Strict (严格)"])
-                creativity = cg4.slider("🎨 创意度", 0.0, 1.0, 0.5)
+                safety_level = cg3.selectbox("🛡️ 安全过滤", ["Standard (标准)", "Permissive (宽松 - 适合内衣/泳装)", "Strict (严格)"], help="如果生成被拦截，请选'宽松'。")
+                creativity = cg4.slider("🎨 创意度", 0.0, 1.0, 0.5, help="值越高，AI 发挥的随机性越大。")
                 
                 cg5, cg6 = st.columns([0.8, 0.2], vertical_alignment="bottom")
-                seed_input = cg5.number_input("🎲 Seed", value=-1, step=1)
+                seed_input = cg5.number_input("🎲 Seed", value=-1, step=1, help="-1 为随机。输入固定数字可复现结果。")
                 real_seed = None if seed_input == -1 else int(seed_input)
 
-            # 生成按钮 (交互升级：Toast 通知)
+            # 生成按钮
             if st.button("🚀 开始生成图片", type="primary", use_container_width=True):
                 st.session_state.std_results = []
                 img_pil = Image.open(active_file) if active_file else None
@@ -177,10 +214,9 @@ with tab_workflow:
                 bar = st.progress(0)
                 total = len(st.session_state.std_prompts)
                 
-                # ✨ 交互升级：使用状态容器
                 with st.status("🎨 正在绘制中...", expanded=True) as status:
                     for idx, task in enumerate(st.session_state.std_prompts):
-                        st.write(f"正在执行任务 {idx+1}/{total}: {task['zh'][:10]}...")
+                        st.write(f"正在执行任务 {idx+1}/{total}...")
                         
                         res_bytes = img_gen.generate(
                             task["en"], model_name, img_pil, RATIO_MAP[ratio_key], 
@@ -196,15 +232,34 @@ with tab_workflow:
                             
                         bar.progress((idx + 1) / total)
                     
-                    status.update(label="🎉 所有任务执行完毕！", state="complete", expanded=False)
-                    st.toast("图片生成完成！请在右侧查看", icon="🖼️")
+                    status.update(label="🎉 执行完毕！", state="complete", expanded=False)
+                    st.toast("图片生成完成！", icon="🖼️")
 
+    # --- 右侧：结果预览区 (优化点 2) ---
     with c_view:
         if st.session_state.std_results:
-            st.subheader("结果预览")
-            for b in st.session_state.std_results:
-                st.image(create_preview_thumbnail(b, 400))
-
+            st.subheader("🖼️ 结果预览")
+            for idx, img_bytes in enumerate(st.session_state.std_results):
+                with st.container(border=True):
+                    # 显示图片
+                    thumb = create_preview_thumbnail(img_bytes, 400)
+                    st.image(thumb, use_container_width=True, caption=f"Result {idx+1}")
+                    
+                    # ✨ 新增：快速操作按钮行
+                    b_col1, b_col2 = st.columns(2)
+                    with b_col1:
+                        if st.button("🔍 放大", key=f"v_zoom_{idx}", use_container_width=True):
+                            show_image_modal(img_bytes, f"Result {idx+1}")
+                    with b_col2:
+                        final_bytes, mime = process_image_for_download(img_bytes, format="JPEG")
+                        st.download_button(
+                            "📥 下载", 
+                            data=final_bytes, 
+                            file_name=f"result_{idx+1}.jpg", 
+                            mime=mime, 
+                            key=f"v_dl_{idx}", 
+                            use_container_width=True
+                        )
 # ==========================================
 # TAB 2: 变体改款 (重构版)
 # ==========================================
