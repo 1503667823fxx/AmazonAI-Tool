@@ -19,7 +19,8 @@ except ImportError:
     class HistoryManager:
         def add(self, a, b, c): pass
         def render_sidebar(self): pass
-    def process_image_for_download(b, f="PNG"): return b, "image/png"
+    # FIX: Changed 'f' to 'format' to match potential keyword usage, though we will use positional args below to be safe.
+    def process_image_for_download(b, format="PNG"): return b, "image/png"
     def create_preview_thumbnail(b): return b
     def show_preview_modal(b, c): pass
     pass 
@@ -305,19 +306,27 @@ with tab_workflow:
                 
                 c_btn1, c_btn2 = st.columns([1.5, 1])
                 with c_btn1:
-                    final_bytes, mime = process_image_for_download(img_bytes, format=download_format)
+                    # FIX: Removed 'format=' keyword argument
+                    final_bytes, mime = process_image_for_download(img_bytes, download_format)
                     st.download_button(f"📥 下载", data=final_bytes, file_name=f"std_{idx}.{download_format.lower()}", mime=mime, use_container_width=True)
                 with c_btn2:
                     if st.button(f"🔍 放大", key=f"zoom_std_{idx}", use_container_width=True):
                         show_preview_modal(img_bytes, f"Result {idx+1}")
 
 # ==========================================
-# TAB 2: ⚡ 变体改款 (Restyling) - 完整实现
+# TAB 2: ⚡ 变体改款 (Restyling) - 已优化
 # ==========================================
 with tab_variants:
     st.markdown("### ⚡ 服装改款工厂")
     
     cv_left, cv_right = st.columns([1.5, 1], gap="large")
+    
+    # 定义局部同步函数 (参考 Tab 1 逻辑)
+    def update_var_en():
+        val = st.session_state.var_prompt_zh
+        if val:
+            st.session_state.var_prompt_en = st.session_state.translator.to_english(val)
+
     with cv_left:
         st.markdown("#### Step 1: AI 读取产品特征")
         var_file = st.file_uploader("上传原版图片", type=["jpg", "png"], key="var_upload")
@@ -345,9 +354,9 @@ with tab_variants:
         
         vp_col1, vp_col2 = st.columns(2)
         with vp_col1:
-            st.text_area("🇨🇳 特征描述 (中文)", key="var_prompt_zh", height=100, on_change=sync_var_zh_to_en)
+            st.text_area("🇨🇳 特征描述 (中文 - 可编辑)", key="var_prompt_zh", height=100, on_change=update_var_en)
         with vp_col2:
-            st.text_area("🇺🇸 Feature Desc (English)", key="var_prompt_en", height=100, disabled=True)
+            st.text_area("🇺🇸 Feature Desc (English - Auto)", key="var_prompt_en", height=100, disabled=True)
 
         CHANGE_LEVELS = {
             "🎨 微调 (纹理/面料)": "Keep silhouette exactly same. Only modify fabric.",
@@ -362,9 +371,17 @@ with tab_variants:
         start_batch = st.button("🚀 启动批量改款", type="primary")
 
     with cv_right:
-        st.subheader("📦 方案预览")
+        st.subheader("🖼️ 结果预览")
+        
+        # --- 新增：原图预览 (参考 Tab 1) ---
+        if var_file:
+            with st.expander("🔍 原图预览", expanded=True):
+                st.image(var_file, use_container_width=True)
+        # --------------------------------
+                
         if start_batch and var_file and st.session_state["var_prompt_en"]:
             st.session_state["batch_results"] = []
+            st.divider() # 分隔线
             grid = st.columns(2)
             sys_instruct = CHANGE_LEVELS[change_level]
             my_bar = st.progress(0)
@@ -394,16 +411,23 @@ with tab_variants:
         if st.session_state["batch_results"]:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["batch_results"]):
-                final_bytes, mime = process_image_for_download(img_bytes, format=download_format)
+                final_bytes, mime = process_image_for_download(img_bytes, download_format)
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"var_{idx}.{download_format.lower()}", mime=mime)
 
 # ==========================================
-# TAB 3: 🏞️ 场景置换 (Scene Swap) - 完整实现
+# TAB 3: 🏞️ 场景置换 (Scene Swap) - 已优化
 # ==========================================
 with tab_background:
     st.markdown("### 🏞️ 场景批量置换")
     
     cb_left, cb_right = st.columns([1.5, 1], gap="large")
+    
+    # 定义局部同步函数 (参考 Tab 1 逻辑)
+    def update_bg_en():
+        val = st.session_state.bg_prompt_zh
+        if val:
+            st.session_state.bg_prompt_en = st.session_state.translator.to_english(val)
+
     with cb_left:
         st.markdown("#### Step 1: AI 锁定产品")
         bg_file = st.file_uploader("上传产品图", type=["jpg", "png"], key="bg_upload")
@@ -430,9 +454,9 @@ with tab_background:
         st.markdown("#### Step 2: 换背景设置")
         bp_col1, bp_col2 = st.columns(2)
         with bp_col1:
-            st.text_area("🇨🇳 产品特征 (中文)", key="bg_prompt_zh", height=100, on_change=sync_bg_zh_to_en)
+            st.text_area("🇨🇳 产品特征 (中文 - 可编辑)", key="bg_prompt_zh", height=100, on_change=update_bg_en)
         with bp_col2:
-            st.text_area("🇺🇸 Product Features", key="bg_prompt_en", height=100, disabled=True)
+            st.text_area("🇺🇸 Product Features (English - Auto)", key="bg_prompt_en", height=100, disabled=True)
         
         bg_desc = st.text_area("新背景描述", height=60, placeholder="例如：放在木质纹理的桌面上...")
         bg_count = st.slider("数量", 1, 20, 4, key="bg_count")
@@ -440,9 +464,17 @@ with tab_background:
         start_bg = st.button("🚀 启动换背景", type="primary")
 
     with cb_right:
-        st.subheader("📦 场景预览")
+        st.subheader("🖼️ 结果预览")
+
+        # --- 新增：原图预览 (参考 Tab 1) ---
+        if bg_file:
+            with st.expander("🔍 原图预览", expanded=True):
+                st.image(bg_file, use_container_width=True)
+        # --------------------------------
+
         if start_bg and bg_file and st.session_state["bg_prompt_en"]:
             st.session_state["bg_results"] = []
+            st.divider() # 分隔线
             bg_grid = st.columns(2)
             bg_bar = st.progress(0)
             
@@ -469,5 +501,5 @@ with tab_background:
         if st.session_state["bg_results"]:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["bg_results"]):
-                final_bytes, mime = process_image_for_download(img_bytes, format=download_format)
+                final_bytes, mime = process_image_for_download(img_bytes, download_format)
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"scene_{idx}.{download_format.lower()}", mime=mime)
