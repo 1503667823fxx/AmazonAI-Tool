@@ -36,7 +36,6 @@ try:
         HistoryManager, show_preview_modal, smart_analyze_image
     )
 except ImportError:
-    # 降级处理
     AITranslator = MockTranslator
     HistoryManager = MockHistoryManager
     process_image_for_download = mock_process_image
@@ -95,6 +94,15 @@ def generate_image_call(model_name, prompt, image_input, ratio_suffix):
     except Exception as e: print(f"Gen Error: {e}")
     return None
 
+# --- 辅助：根据权重生成指令 ---
+def get_weight_instruction(weight):
+    if weight > 0.7:
+        return "Important: Prioritize the text prompt heavily. You may significantly alter the original image structure to fit the description."
+    elif weight < 0.3:
+        return "Important: Strictly preserve the original image structure, composition, and pose. Only apply subtle changes."
+    else:
+        return "Important: Balance the original image structure with the new prompt requirements."
+
 # --- 侧边栏 ---
 with st.sidebar:
     st.title("🗂️ 工作区")
@@ -140,12 +148,11 @@ with tab_workflow:
             for i, p_data in enumerate(st.session_state["std_prompt_data"]):
                 with st.expander(f"任务 {i+1}", expanded=True):
                     cz, ce = st.columns(2)
-                    # 同步逻辑：左改右变 + Toast 反馈
                     def sync_std(idx=i):
                         nz = st.session_state[f"sz_{idx}"]
                         st.session_state["std_prompt_data"][idx]["zh"] = nz
                         st.session_state["std_prompt_data"][idx]["en"] = st.session_state.translator.to_english(nz)
-                        st.toast(f"✅ 任务 {idx+1}：中文已同步翻译为英文") # 增加反馈
+                        st.toast(f"✅ 任务 {idx+1}：中文已同步翻译为英文")
                     
                     cz.text_area("中文", key=f"sz_{i}", value=p_data["zh"], on_change=sync_std, height=100)
                     ce.text_area("英文", value=p_data["en"], disabled=True, height=100)
@@ -155,9 +162,8 @@ with tab_workflow:
             ratio = cg2.selectbox("比例", list(RATIO_MAP.keys()))
             num = cg3.number_input("数量", 1, 4, 1)
 
-            # 画幅友好提示
             if "flash" in gen_model.lower() and "1:1" not in ratio:
-                st.info("💡 提示：您选择了 Flash 模型。该模型目前主要支持 1:1 画幅，选择其他比例可能效果不如 Pro 模型，但速度更快。")
+                st.info("💡 提示：您选择了 Flash 模型，建议使用 1:1 画幅。")
 
             if st.button("🎨 开始生成", type="primary"):
                 st.session_state["std_images"] = []
@@ -183,7 +189,6 @@ with tab_workflow:
             with st.expander("原图", expanded=True):
                 active_file.seek(0)
                 st.image(Image.open(active_file), use_container_width=True)
-        
         if st.session_state["std_images"]:
             st.divider()
             for idx, bits in enumerate(st.session_state["std_images"]):
@@ -193,11 +198,10 @@ with tab_workflow:
                 d_btn.download_button("下载", fb, file_name=f"s_{idx}.{download_format}", mime=fm, use_container_width=True)
                 if z_btn.button("🔍", key=f"zs_{idx}"): show_preview_modal(bits, f"R {idx+1}")
 
-# --- TAB 2: 变体改款 (修复双语同步 + 反馈) ---
+# --- TAB 2: 变体改款 ---
 with tab_variants:
     c1, c2 = st.columns([1.5, 1], gap="large")
     
-    # 同步函数 + 反馈
     def sync_var():
         v = st.session_state.var_prompt_zh
         if v: 
@@ -210,7 +214,6 @@ with tab_variants:
         if st.button("👁️ 读图") and vf:
             with st.spinner("分析中..."):
                 vf.seek(0)
-                # 强化 Prompt：确保输出纯英文，以便后续准确翻译
                 txt = genai.GenerativeModel("models/gemini-flash-latest").generate_content(
                     ["Describe fashion details: Silhouette, Fabric, Color. Output pure English text.", Image.open(vf)]
                 ).text.strip()
@@ -220,30 +223,38 @@ with tab_variants:
 
         st.markdown("#### Step 2: 改款")
         vc1, vc2 = st.columns(2)
-        # 绑定 on_change
+        # 确保左边是中文
         vc1.text_area("中文 (编辑)", key="var_prompt_zh", on_change=sync_var, height=100)
         vc2.text_area("English (Auto)", key="var_prompt_en", disabled=True, height=100)
         
         mode = st.selectbox("模式", ["微调 (Texture)", "中改 (Details)", "大改 (Silhouette)"])
         req = st.text_area("改款指令")
-        cnt = st.slider("数量", 1, 4, 1, key="vc")
+        
+        # 新增：权重控制
+        var_weight = st.slider("创意权重 (0=保真, 1=听你的)", 0.0, 1.0, 0.5, key="vw")
+        
+        # 新增：数量上限提高
+        cnt = st.slider("数量", 1, 20, 1, key="vc")
         vm = st.selectbox("模型", GOOGLE_IMG_MODELS, key="vm")
 
-        # 画幅友好提示 (变体模式通常默认保持比例，但如果模型有特殊限制也可提示)
-        if "flash" in vm.lower():
-             st.caption("ℹ️ Flash 模型处理速度极快，适合快速验证改款创意。")
+        if "flash" in vm.lower(): st.caption("ℹ️ Flash 模型处理速度极快。")
         
         if st.button("🚀 改款") and vf:
             st.session_state.batch_results = []
             vb = st.progress(0)
+            weight_prompt = get_weight_instruction(var_weight)
+            
             for i in range(cnt):
                 vf.seek(0)
-                p = f"Restyle. Base: {st.session_state.var_prompt_en}. Mode: {mode}. Request: {req}."
+                # 将权重指令加入 prompt
+                p = f"Restyle. Base: {st.session_state.var_prompt_en}. Mode: {mode}. Request: {req}. {weight_prompt}"
                 r = generate_image_call(vm, p, Image.open(vf), "")
                 if r:
                     st.session_state.batch_results.append(r)
                     st.session_state.history_manager.add(r, f"Var {i+1}", req)
                 vb.progress((i+1)/cnt)
+                # 批量生成时稍微缓冲，避免 API 拥塞
+                if cnt > 5: time.sleep(1)
 
     with c2:
         if vf:
@@ -257,7 +268,7 @@ with tab_variants:
                 fb, fm = process_image_for_download(b, format=download_format)
                 st.download_button(f"下载 {idx+1}", fb, file_name=f"v_{idx}.{download_format}", mime=fm)
 
-# --- TAB 3: 场景置换 (修复双语同步 + 反馈) ---
+# --- TAB 3: 场景置换 ---
 with tab_background:
     c1, c2 = st.columns([1.5, 1], gap="large")
     
@@ -273,7 +284,6 @@ with tab_background:
         if st.button("🔒 锁定") and bf:
             with st.spinner("分析..."):
                 bf.seek(0)
-                # 强化 Prompt：确保输出纯英文
                 txt = genai.GenerativeModel("models/gemini-flash-latest").generate_content(
                     ["Describe FOREGROUND PRODUCT ONLY. Output pure English text.", Image.open(bf)]
                 ).text.strip()
@@ -287,24 +297,30 @@ with tab_background:
         bc2.text_area("English (Auto)", key="bg_prompt_en", disabled=True, height=100)
         
         bg_req = st.text_area("新背景")
-        bcnt = st.slider("数量", 1, 4, 1, key="bc")
+        
+        # 新增：权重控制
+        bg_weight = st.slider("创意权重 (0=保真, 1=听你的)", 0.0, 1.0, 0.5, key="bw")
+        
+        # 新增：数量上限提高
+        bcnt = st.slider("数量", 1, 20, 1, key="bc")
         bm = st.selectbox("模型", GOOGLE_IMG_MODELS, index=1, key="bm")
 
-        # 画幅友好提示
-        if "flash" in bm.lower():
-             st.caption("ℹ️ Flash 模型在场景置换中表现快速且稳定。")
+        if "flash" in bm.lower(): st.caption("ℹ️ Flash 模型表现稳定。")
         
         if st.button("🚀 换背景") and bf:
             st.session_state.bg_results = []
             bb = st.progress(0)
+            weight_prompt = get_weight_instruction(bg_weight)
+            
             for i in range(bcnt):
                 bf.seek(0)
-                p = f"BG Swap. Product: {st.session_state.bg_prompt_en}. New BG: {bg_req}."
+                p = f"BG Swap. Product: {st.session_state.bg_prompt_en}. New BG: {bg_req}. {weight_prompt}."
                 r = generate_image_call(bm, p, Image.open(bf), "")
                 if r:
                     st.session_state.bg_results.append(r)
                     st.session_state.history_manager.add(r, f"BG {i+1}", bg_req)
                 bb.progress((i+1)/bcnt)
+                if bcnt > 5: time.sleep(1)
 
     with c2:
         if bf:
