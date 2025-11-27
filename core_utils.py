@@ -66,6 +66,7 @@ class HistoryManager:
                         st.download_button("📥", data=final_bytes, file_name=f"history_{item['id']}.jpg", mime=mime, key=f"h_dl_{item['id']}")
                 
                 st.divider()
+
 # ==========================================
 # 🛠️ 图片处理核心 (Image Engine)
 # ==========================================
@@ -162,10 +163,10 @@ class AITranslator:
             return resp.text.strip()
         except:
             return text
-# ... (保留原有的 import)
 
-# --- 在文件末尾添加以下代码 ---
-
+# ==========================================
+# 🖼️ 模态框组件 (Modal Engine) - 新增
+# ==========================================
 @st.dialog("图片预览")
 def show_preview_modal(image_bytes, title="Preview"):
     """
