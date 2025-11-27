@@ -1,6 +1,5 @@
 import streamlit as st
 import google.generativeai as genai
-# 👇 务必确保引入了 styles
 from services.styles import PRESETS
 
 class LLMEngine:
@@ -29,10 +28,10 @@ class LLMEngine:
             return resp.text.strip()
         except Exception as e: return f"Analysis Failed: {e}"
 
-    # 👇 关键看这里：必须有 style_key 参数
-    def optimize_art_director_prompt(self, user_idea, task_type, user_weight, style_key, image_obj=None, enable_split=False):
+    def optimize_art_director_prompt(self, user_idea, task_type, user_weight, style_key, image_input=None, enable_split=False):
         """
-        CoT 核心逻辑：基于用户权重和风格预设，进行链式思考。
+        CoT 核心逻辑 (升级版)：支持多图融合分析。
+        image_input: 可以是单个 PIL.Image，也可以是 List[PIL.Image]
         """
         if not self.valid: return []
 
@@ -41,7 +40,19 @@ class LLMEngine:
         style_desc = style_data["desc"]
         style_light = style_data["lighting"]
 
-        # 2. 构建思维链 Prompt
+        # 2. 智能处理图片输入
+        images = []
+        img_instruction = ""
+        
+        if image_input:
+            if isinstance(image_input, list):
+                images = image_input
+                img_instruction = f"【Visual Input】: {len(images)} images provided. \nLogic: Analyze ALL images. If one looks like a person/product and another looks like a background/scene, FUSE them logically. If they are all products, arrange them together."
+            else:
+                images = [image_input]
+                img_instruction = "【Visual Input】: 1 image provided. Use it as the main visual reference."
+
+        # 3. 构建思维链 Prompt
         cot_instructions = f"""
         Role: Senior Art Director for Amazon Fashion.
         
@@ -49,34 +60,36 @@ class LLMEngine:
         - User Idea: "{user_idea}"
         - Selected Style: "{style_key}" ({style_desc})
         - Task Type: {task_type}
-        - User Control Weight: {user_weight} (0.0=Trust Image, 1.0=Trust User Idea)
+        - User Control Weight: {user_weight} (0.0=Trust Images, 1.0=Trust User Idea)
+        {img_instruction}
         
         【Thinking Process (Internal Monologue)】
-        1. **Analyze Intent**: How much should I listen to the user based on weight {user_weight}? 
-           - If > 0.7: Prioritize user's idea and syntax like (word) or [word].
-           - If < 0.3: Ignore user idea conflicts, prioritize image consistency.
-        2. **Visual Planning**: 
+        1. **Analyze Input Images**: 
+           - Identify main subjects (Models/Products) and Context (Backgrounds).
+           - If multiple images: Infer the user's composition intent (e.g., Person A + Scene B -> Person A standing in Scene B).
+        2. **Analyze Intent**: 
+           - Weight {user_weight}: Balance visual references with user text.
+        3. **Visual Planning**: 
            - Composition: Best angle for {task_type}.
            - Lighting: Apply "{style_light}" logic.
            - Atmosphere: Integrate "{style_desc}".
-        3. **Refinement**: Ensure commercial quality (8k, highly detailed).
+        4. **Refinement**: Ensure commercial quality (8k, highly detailed).
         
         【Output Requirement】
         - Output English Prompts ONLY.
         - If {enable_split} is True, split distinct variations with "|||".
-        - NO explanation, NO "Here is the prompt". Just the raw prompt string.
+        - NO explanation. Just the raw prompt string.
         """
 
         try:
             model = genai.GenerativeModel("models/gemini-flash-latest")
-            inputs = [cot_instructions, image_obj] if image_obj else [cot_instructions]
+            # 拼接：指令 + 图片列表
+            inputs = [cot_instructions] + images
             
             response = model.generate_content(inputs)
             raw_text = response.text.strip()
             
-            # 清洗
             raw_text = raw_text.replace("Prompt:", "").replace("Here is the prompt:", "").strip()
-            
             prompts = [p.strip() for p in raw_text.split("|||") if p.strip()]
             return prompts
         except Exception as e:
