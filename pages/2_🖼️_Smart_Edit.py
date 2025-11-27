@@ -9,7 +9,7 @@ sys.path.append(os.path.abspath('.'))
 try:
     import auth
     from core_utils import AITranslator, HistoryManager
-    from tab1_work import render_tab1
+    from tab1_workflow import render_tab1
     from tab2_restyling import render_tab2
     from tab3_background import render_tab3
     HAS_IMPORTS = True
