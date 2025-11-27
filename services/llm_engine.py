@@ -21,17 +21,19 @@ class LLMEngine:
         except: return text
 
     def analyze_image_style(self, image, prompt_instruction):
-        if not self.valid: return "Error: API Key missing"
+        # 此函数保留备用
+        if not self.valid: return "Error"
         try:
             model = genai.GenerativeModel("models/gemini-flash-latest")
             resp = model.generate_content([prompt_instruction, image])
             return resp.text.strip()
-        except Exception as e: return f"Analysis Failed: {e}"
+        except Exception as e: return str(e)
 
     def optimize_art_director_prompt(self, user_idea, task_type, user_weight, style_key, image_input=None, enable_split=False):
         """
-        CoT 核心逻辑 (升级版)：支持多图融合分析。
-        image_input: 可以是单个 PIL.Image，也可以是 List[PIL.Image]
+        CoT 核心逻辑 (V3 听话版)：
+        1. 移除冗余描述。
+        2. 强制优先响应用户指令。
         """
         if not self.valid: return []
 
@@ -40,58 +42,51 @@ class LLMEngine:
         style_desc = style_data["desc"]
         style_light = style_data["lighting"]
 
-        # 2. 智能处理图片输入
+        # 2. 处理图片输入
         images = []
         img_instruction = ""
-        
         if image_input:
             if isinstance(image_input, list):
                 images = image_input
-                img_instruction = f"【Visual Input】: {len(images)} images provided. \nLogic: Analyze ALL images. If one looks like a person/product and another looks like a background/scene, FUSE them logically. If they are all products, arrange them together."
+                img_instruction = f"【Visual Context】: {len(images)} reference images provided. Use them for Composition and Lighting reference ONLY."
             else:
                 images = [image_input]
-                img_instruction = "【Visual Input】: 1 image provided. Use it as the main visual reference."
+                img_instruction = "【Visual Context】: 1 reference image provided. Use it for Composition/Lighting reference ONLY."
 
-        # 3. 构建思维链 Prompt
+        # 3. 构建强指令 Prompt (针对痛点优化)
         cot_instructions = f"""
-        Role: Senior Art Director for Amazon Fashion.
+        Role: Expert Prompt Engineer for Google Imagen.
         
         【Input Data】
-        - User Idea: "{user_idea}"
-        - Selected Style: "{style_key}" ({style_desc})
-        - Task Type: {task_type}
-        - User Control Weight: {user_weight} (0.0=Trust Images, 1.0=Trust User Idea)
-        {img_instruction}
+        - User Intent: "{user_idea}"
+        - Style Preset: "{style_key}" ({style_desc})
+        - Reference Image: Provided.
         
-        【Thinking Process (Internal Monologue)】
-        1. **Analyze Input Images**: 
-           - Identify main subjects (Models/Products) and Context (Backgrounds).
-           - If multiple images: Infer the user's composition intent (e.g., Person A + Scene B -> Person A standing in Scene B).
-        2. **Analyze Intent**: 
-           - Weight {user_weight}: Balance visual references with user text.
-        3. **Visual Planning**: 
-           - Composition: Best angle for {task_type}.
-           - Lighting: Apply "{style_light}" logic.
-           - Atmosphere: Integrate "{style_desc}".
-        4. **Refinement**: Ensure commercial quality (8k, highly detailed).
+        【CRITICAL RULES】
+        1. **USER IS KING**: If User Intent conflicts with the Reference Image (e.g., image shows a man, user says "female model"), **OBEY THE USER**. Ignore the image content for the subject.
+        2. **NO CAPTIONING**: Do NOT describe the reference image content unless the user asks to "keep original". The image will be passed to the generation model directly ("img2img"), so we don't need to describe it in words.
+        3. **FOCUS ON QUALITY**: Your job is to ADD quality boosters (e.g., "8k, commercial lighting, {style_light}") and Style keywords.
+        4. **KEEP IT CONCISE**: Output clean, keyword-rich prompts.
         
         【Output Requirement】
         - Output English Prompts ONLY.
         - If {enable_split} is True, split distinct variations with "|||".
-        - NO explanation. Just the raw prompt string.
+        - Just the raw prompt string.
         """
 
         try:
             model = genai.GenerativeModel("models/gemini-flash-latest")
-            # 拼接：指令 + 图片列表
             inputs = [cot_instructions] + images
-            
             response = model.generate_content(inputs)
             raw_text = response.text.strip()
             
             raw_text = raw_text.replace("Prompt:", "").replace("Here is the prompt:", "").strip()
             prompts = [p.strip() for p in raw_text.split("|||") if p.strip()]
+            
+            # 兜底：如果AI没生成，至少把用户的话传回去
+            if not prompts: return [user_idea]
             return prompts
+            
         except Exception as e:
             print(f"CoT Error: {e}")
             return [f"{user_idea}, {style_desc}"]
