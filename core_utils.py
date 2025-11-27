@@ -45,24 +45,21 @@ def analyze_image_bilingual(model_name, image_file, prompt_type="fashion"):
         # 生成并解析
         response = model.generate_content([sys_prompt, img_obj])
         txt = response.text.strip()
-        
-        # 清洗 JSON 格式 (去除 ```json 等包裹)
         txt = clean_json_string(txt)
         
         data = json.loads(txt)
         return data.get("en", ""), data.get("zh", "")
 
     except Exception as e:
-        # 如果 JSON 解析失败，尝试用正则提取或者降级处理
         st.error(f"AI 分析格式异常，正在重试... ({str(e)})")
         return "", "分析失败，请重试"
 
 # ==========================================
-# 🧠 Tab 1: 智能创意分析 (强制 JSON 列表)
+# 🧠 Tab 1: 智能创意分析 (单任务模式)
 # ==========================================
-def smart_analyze_image(model_name, image_file, task_type, user_idea, user_weight, enable_split):
+def smart_analyze_image(model_name, image_file, task_type, user_idea, user_weight):
     """
-    Tab 1 的复杂创意生成，同样强制双语 JSON 输出。
+    Tab 1 的复杂创意生成，移除拆分功能，强制单任务双语 JSON 输出。
     """
     try:
         image_file.seek(0)
@@ -71,46 +68,34 @@ def smart_analyze_image(model_name, image_file, task_type, user_idea, user_weigh
         
         weight_desc = f"User Weight: {user_weight} (1.0=User Idea dominant, 0.0=Image dominant)."
         
-        # 构造强制 JSON 的 Prompt
+        # 构造强制 JSON 的 Prompt (单对象)
         prompt_req = f"""
-        Role: Art Director. Task: Create prompt(s) for {task_type}.
+        Role: Art Director. Task: Create ONE single, high-quality prompt for {task_type}.
         User Idea: {user_idea}
         {weight_desc}
         
-        Output a JSON LIST of objects. Each object must have "zh" and "en" keys.
-        Example:
-        [
-            {{ "zh": "中文提示词1...", "en": "English prompt 1..." }},
-            {{ "zh": "中文提示词2...", "en": "English prompt 2..." }}
-        ]
+        Output a JSON object with exactly two keys:
+        {{
+            "zh": "Detailed prompt in Simplified Chinese",
+            "en": "Detailed prompt in English"
+        }}
         
         IMPORTANT: 
-        1. If 'enable_split' is true, allow multiple objects. If false, return list with 1 object.
-        2. Ensure "zh" is Simplified Chinese and "en" is English.
-        3. Output JSON ONLY.
+        1. Ensure "zh" is Simplified Chinese and "en" is English.
+        2. Output JSON ONLY.
         """
 
         response = model.generate_content([prompt_req, img_obj])
         txt = response.text.strip()
-        
         txt = clean_json_string(txt)
-        result_list = json.loads(txt)
         
-        # 格式化为标准格式
-        final_data = []
-        if isinstance(result_list, list):
-            for item in result_list:
-                final_data.append({
-                    "en": item.get("en", ""),
-                    "zh": item.get("zh", "")
-                })
-        elif isinstance(result_list, dict):
-            final_data.append({
-                "en": result_list.get("en", ""),
-                "zh": result_list.get("zh", "")
-            })
-            
-        return final_data
+        data = json.loads(txt)
+        
+        # 统一返回列表格式以兼容前端循环
+        return [{
+            "en": data.get("en", ""),
+            "zh": data.get("zh", "")
+        }]
 
     except Exception as e:
         st.error(f"创意分析失败: {str(e)}")
@@ -203,8 +188,9 @@ class AITranslator:
         """将中文翻译成英文，用于同步逻辑"""
         if not text or not self.valid: return text
         try:
-            prompt = f"Translate the following Chinese text to English for an AI image generator prompt. Output ONLY the English text.\nText: {text}"
+            # 强化 Prompt：确保只输出英文翻译，不做其他解释
+            prompt = f"Translate the following text to English. Output ONLY the English translation.\nText: {text}"
             return self.model.generate_content(prompt).text.strip()
         except: return text
 
-    def to_chinese(self, text): return text # 占位，新逻辑主要依赖 to_english
+    def to_chinese(self, text): return text
