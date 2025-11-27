@@ -1,8 +1,8 @@
 import streamlit as st
 import time
 from collections import deque
+# 👇 确保这里引用的是 app_utils
 from app_utils.image_processing import create_preview_thumbnail, process_image_for_download
-# 也可以在这里引入 show_preview_modal，或者在 UI 层处理
 
 class HistoryManager:
     """
@@ -35,8 +35,6 @@ class HistoryManager:
     def render_sidebar_ui(self, show_modal_callback=None):
         """
         直接在 Sidebar 渲染 UI。
-        Args:
-            show_modal_callback: 一个回调函数，用于在点击放大镜时显示模态框
         """
         with st.expander("🕒 历史记录 (History)", expanded=False):
             items = self.get_all()
@@ -48,6 +46,7 @@ class HistoryManager:
                 col_thumb, col_info = st.columns([1, 2])
                 
                 with col_thumb:
+                    # 调用缩略图工具
                     thumb = create_preview_thumbnail(item['image'], max_width=150)
                     st.image(thumb, use_container_width=True)
                 
@@ -58,15 +57,17 @@ class HistoryManager:
                     
                     b1, b2 = st.columns(2)
                     with b1:
-                        # 放大按钮
                         if st.button("🔍", key=f"h_zoom_{item['id']}"):
                             if show_modal_callback:
                                 show_modal_callback(item['image'], item['source'])
                     with b2:
-                        # 下载按钮
+                        # 调用下载工具
                         final_bytes, mime = process_image_for_download(item['image'], format="JPEG")
                         st.download_button(
                             "📥", 
                             data=final_bytes, 
                             file_name=f"hist_{item['id']}.jpg", 
-                            mime
+                            mime=mime, 
+                            key=f"h_dl_{item['id']}"
+                        )
+                st.divider()
