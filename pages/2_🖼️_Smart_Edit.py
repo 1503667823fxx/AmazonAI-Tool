@@ -2,58 +2,50 @@ import streamlit as st
 from PIL import Image
 import sys
 import os
-import time
 
-# --- 🚀 核心修复：强制添加根目录到系统路径 ---
-# 1. 获取当前脚本的绝对路径 (.../pages/2_🖼️_Smart_Edit.py)
+# --- 路径修复 ---
 current_script_path = os.path.abspath(__file__)
-# 2. 获取父目录 (.../pages)
 pages_dir = os.path.dirname(current_script_path)
-# 3. 获取根目录 (即 pages 的上一级，项目根目录)
 root_dir = os.path.dirname(pages_dir)
-
-# 4. 如果根目录不在系统路径中，强制加进去
 if root_dir not in sys.path:
     sys.path.append(root_dir)
-# -------------------------------------------
 
 try:
-    # 这里的 import 应该就能找到了，因为我们已经把 root_dir 加到了 sys.path
     import auth
+    # 👇 引入纯逻辑
+    from app_utils.history_manager import HistoryManager
+    # 👇 引入纯 UI 组件
+    from app_utils.ui_components import render_history_sidebar, show_image_modal
+    from app_utils.image_processing import create_preview_thumbnail
+    
     from services.llm_engine import LLMEngine
     from services.image_engine import ImageGenEngine
-    from app_utils.history_manager import HistoryManager
-    from app_utils.image_processing import process_image_for_download, create_preview_thumbnail
 except ImportError as e:
-    st.error(f"❌ 模块导入失败。调试信息：\n项目根目录: {root_dir}\n错误详情: {e}")
+    st.error(f"❌ 模块导入失败: {e}")
     st.stop()
-
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
 
-# --- 2. 鉴权与初始化 ---
+# --- 2. 初始化 ---
 if 'auth' in sys.modules and not auth.check_password():
     st.stop()
 
-# 初始化服务 (单例模式：只实例化一次)
 if "services_ready" not in st.session_state:
     api_key = st.secrets.get("GOOGLE_API_KEY")
     if not api_key:
         st.error("❌ 未找到 GOOGLE_API_KEY")
         st.stop()
-        
     st.session_state.llm = LLMEngine(api_key)
     st.session_state.img_gen = ImageGenEngine(api_key)
-    st.session_state.history = HistoryManager() # 使用默认 key="history_queue"
+    st.session_state.history = HistoryManager()
     st.session_state.services_ready = True
 
-# 简化引用
 llm = st.session_state.llm
 img_gen = st.session_state.img_gen
 history = st.session_state.history
 
-# --- 3. 样式与常量 ---
+# --- 3. 样式 ---
 st.markdown("""
 <style>
     .step-header {
@@ -73,21 +65,18 @@ RATIO_MAP = {
     "21:9 (Cinematic)": ", cinematic 21:9 ultrawide"
 }
 
-# --- 4. 定义 UI 辅助函数 ---
-@st.dialog("图片预览")
-def show_preview_modal(image_bytes, title):
-    st.image(image_bytes, caption=title, use_container_width=True)
-
-# --- 5. 侧边栏 ---
+# --- 4. 侧边栏 ---
 with st.sidebar:
     st.title("🗂️ 工作区")
-    # 直接调用 history 里的渲染方法，并传入回调函数用于预览
-    history.render_sidebar_ui(show_modal_callback=show_preview_modal)
+    # 👇 使用新分离出来的 UI 组件
+    render_history_sidebar(history) 
     download_format = st.radio("📥 下载格式", ["PNG", "JPEG"], horizontal=True)
 
-# --- 6. 主界面 ---
-st.title("🧬 Fashion AI Core V6.0 (Refactored)")
+# --- 5. 主界面 ---
+st.title("🧬 Fashion AI Core V6.1 (Modular UI)")
 tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修", "⚡ 变体改款", "🏞️ 场景置换"])
+
+# ... (后面的 Tab 代码逻辑保持不变，不需要动) ...
 
 # ==========================================
 # TAB 1: 标准工作流 (重构版)
