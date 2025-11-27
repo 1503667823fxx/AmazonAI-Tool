@@ -79,7 +79,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 常量 ---
-ANALYSIS_MODELS = ["models/gemini-flash-latest", "models/gemini-1.5-pro", "models/gemini-1.5-flash"]
+ANALYSIS_MODELS = ["models/gemini-flash-latest", "models/gemini-3-pro-preview"]
 GOOGLE_IMG_MODELS = ["models/gemini-2.5-flash-image", "models/gemini-3-pro-image-preview"]
 RATIO_MAP = {
     "1:1 (正方形电商图)": ", crop and center composition to 1:1 square aspect ratio",
