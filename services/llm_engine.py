@@ -1,9 +1,10 @@
 import streamlit as st
 import google.generativeai as genai
+# 👇 引入风格库
+from services.styles import PRESETS
 
 class LLMEngine:
     def __init__(self, api_key=None):
-        # 优先使用传入的 Key，否则从 secrets 读取
         self.api_key = api_key or st.secrets.get("GOOGLE_API_KEY")
         if self.api_key:
             genai.configure(api_key=self.api_key)
@@ -12,75 +13,72 @@ class LLMEngine:
             self.valid = False
             
     def translate(self, text, target_lang="English"):
-        """通用翻译功能"""
         if not text or not self.valid: return text
         try:
             model = genai.GenerativeModel("models/gemini-flash-latest")
-            prompt = f"Translate the following text to {target_lang}. Output ONLY the translation without any explanation. Text: {text}"
+            prompt = f"Translate to {target_lang}. Output ONLY translation. Text: {text}"
             resp = model.generate_content(prompt)
             return resp.text.strip()
-        except Exception as e:
-            print(f"Translation Error: {e}")
-            return text
+        except: return text
 
     def analyze_image_style(self, image, prompt_instruction):
-        """图生文：分析图片特征"""
         if not self.valid: return "Error: API Key missing"
         try:
             model = genai.GenerativeModel("models/gemini-flash-latest")
             resp = model.generate_content([prompt_instruction, image])
             return resp.text.strip()
-        except Exception as e:
-            return f"Analysis Failed: {e}"
+        except Exception as e: return f"Analysis Failed: {e}"
 
-    def optimize_art_director_prompt(self, user_idea, task_type, user_weight, image_obj=None, enable_split=False):
+    def optimize_art_director_prompt(self, user_idea, task_type, user_weight, style_key, image_obj=None, enable_split=False):
         """
-        核心逻辑：根据用户权重生成 Art Director 提示词。
-        这是从 Smart_Edit Tab 1 中提取出来的复杂逻辑。
+        CoT 核心逻辑：基于用户权重和风格预设，进行链式思考。
         """
         if not self.valid: return []
 
-        # 1. 构建特殊的指令
-        special_instruction = ""
-        if "Product Only" in task_type:
-            special_instruction = """
-            SPECIAL INSTRUCTION FOR PRODUCT PHOTOGRAPHY:
-            1. Layout: Use "Knolling photography", "Neatly arranged".
-            2. Realism: Use "Contact shadows", "Ambient occlusion".
-            3. Texture: Emphasize "fabric texture", "material details".
-            """
+        # 1. 获取风格数据
+        style_data = PRESETS.get(style_key, PRESETS["💡 默认 (None)"])
+        style_desc = style_data["desc"]
+        style_light = style_data["lighting"]
 
-        weight_instruction = f"""
-        WEIGHT CONTROL INSTRUCTION:
-        User Weight: {user_weight} (0.0=Image Priority, 1.0=Text Priority).
-        - If > 0.7: Follow User Idea strictly.
-        - If < 0.3: Follow Image Visuals strictly.
-        - 0.4-0.6: Balance both.
-        """
-
-        split_instruction = "IMPORTANT: Split distinct outputs into separate prompts using '|||'." if enable_split else "Output ONE unified prompt. NO '|||'."
-
-        full_prompt = f"""
-        Role: Art Director. 
-        Task: Create detailed prompts based on User Idea and Image. Type: {task_type}.
-        {weight_instruction}
-        {special_instruction}
-        {split_instruction}
-        STRICT OUTPUT FORMAT: English Prompts Only. NO Markdown.
-        User Idea: {user_idea}
+        # 2. 构建思维链 Prompt
+        # 我们告诉 AI：不要急着输出，先思考(Thinking Process)，最后再输出 Prompt。
+        cot_instructions = f"""
+        Role: Senior Art Director for Amazon Fashion.
+        
+        【Input Data】
+        - User Idea: "{user_idea}"
+        - Selected Style: "{style_key}" ({style_desc})
+        - Task Type: {task_type}
+        - User Control Weight: {user_weight} (0.0=Trust Image, 1.0=Trust User Idea)
+        
+        【Thinking Process (Internal Monologue)】
+        1. **Analyze Intent**: How much should I listen to the user based on weight {user_weight}? 
+           - If > 0.7: Prioritize user's idea and syntax like (word) or [word].
+           - If < 0.3: Ignore user idea conflicts, prioritize image consistency.
+        2. **Visual Planning**: 
+           - Composition: Best angle for {task_type}.
+           - Lighting: Apply "{style_light}" logic.
+           - Atmosphere: Integrate "{style_desc}".
+        3. **Refinement**: Ensure commercial quality (8k, highly detailed).
+        
+        【Output Requirement】
+        - Output English Prompts ONLY.
+        - If {enable_split} is True, split distinct variations with "|||".
+        - NO explanation, NO "Here is the prompt". Just the raw prompt string.
         """
 
         try:
             model = genai.GenerativeModel("models/gemini-flash-latest")
-            # 如果有图片就一起发过去
-            inputs = [full_prompt, image_obj] if image_obj else [full_prompt]
+            inputs = [cot_instructions, image_obj] if image_obj else [cot_instructions]
             
             response = model.generate_content(inputs)
             raw_text = response.text.strip()
             
-            # 解析返回结果
+            # 清洗一下可能带出的 "Prompt: " 前缀
+            raw_text = raw_text.replace("Prompt:", "").replace("Here is the prompt:", "").strip()
+            
             prompts = [p.strip() for p in raw_text.split("|||") if p.strip()]
             return prompts
         except Exception as e:
-            print(f"Prompt Gen Error: {e}")
-            return [user_idea] # 降级返回原输入
+            print(f"CoT Error: {e}")
+            return [f"{user_idea}, {style_desc}"]
