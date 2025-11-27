@@ -204,7 +204,8 @@ with t2:
         with tz:
             st.text_area("特征描述 (中文)", key="var_prompt_zh", on_change=sync_var, height=120)
         with te:
-            st.text_area("AI Used Features", value=st.session_state.var_prompt_en, disabled=True, height=120)
+            # FIX: Added unique key to prevent DuplicateIdError
+            st.text_area("AI Used Features", value=st.session_state.var_prompt_en, disabled=True, height=120, key="var_used_features_en")
 
         md = st.selectbox("模式", ["微调 (Texture)", "中改 (Details)", "大改 (Silhouette)"])
         req = st.text_area("改款指令")
@@ -268,7 +269,8 @@ with t3:
         with tz:
             st.text_area("产品特征 (中文)", key="bg_prompt_zh", on_change=sync_bg, height=120)
         with te:
-            st.text_area("AI Used Features", value=st.session_state.bg_prompt_en, disabled=True, height=120)
+            # FIX: Added unique key to prevent DuplicateIdError
+            st.text_area("AI Used Features", value=st.session_state.bg_prompt_en, disabled=True, height=120, key="bg_used_features_en")
             
         breq = st.text_area("新背景")
         bw = st.slider("权重", 0.0, 1.0, 0.5, key="bw")
