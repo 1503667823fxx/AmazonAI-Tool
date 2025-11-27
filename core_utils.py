@@ -2,70 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 import io
-import time
-from collections import deque
 
-# ==========================================
-# 🗂️ 历史记录核心 (History Manager)
-# ==========================================
-class HistoryManager:
-    """
-    专门负责管理、渲染侧边栏历史记录的组件。
-    支持：预览、放大、下载、自动缩略图。
-    """
-    def __init__(self):
-        # 初始化队列，最大保留 20 条
-        if "history_queue" not in st.session_state:
-            st.session_state["history_queue"] = deque(maxlen=20)
-
-    def add(self, image_bytes, source, prompt_summary):
-        """添加一条新记录"""
-        timestamp = time.strftime("%H:%M")
-        # 生成唯一 ID (用于控件 key)
-        unique_id = f"{int(time.time()*1000)}"
-        
-        # 存入队列
-        st.session_state["history_queue"].appendleft({
-            "id": unique_id,
-            "image": image_bytes,
-            "source": source,
-            "time": timestamp,
-            "desc": prompt_summary
-        })
-
-    def render_sidebar(self):
-        """在侧边栏渲染历史记录列表"""
-        with st.expander("🕒 历史记录 (History)", expanded=False):
-            if not st.session_state["history_queue"]:
-                st.caption("暂无生成记录")
-                return
-
-            # 遍历显示
-            for item in st.session_state["history_queue"]:
-                col_thumb, col_info = st.columns([1, 2])
-                
-                with col_thumb:
-                    # 生成极速缩略图
-                    thumb = create_preview_thumbnail(item['image'], max_width=150)
-                    st.image(thumb, use_container_width=True)
-                
-                with col_info:
-                    st.caption(f"**{item['source']}** ({item['time']})")
-                    # 简略描述
-                    st.caption(f"_{item['desc'][:15]}..._")
-                    
-                    # 功能区：放大 & 下载
-                    b1, b2 = st.columns(2)
-                    with b1:
-                        # 放大预览按钮
-                        if st.button("🔍", key=f"h_zoom_{item['id']}", help="放大预览"):
-                            show_preview_modal(item['image'], f"{item['source']} - {item['time']}")
-                    with b2:
-                        # 下载按钮
-                        final_bytes, mime = process_image_for_download(item['image'], format="JPEG")
-                        st.download_button("📥", data=final_bytes, file_name=f"history_{item['id']}.jpg", mime=mime, key=f"h_dl_{item['id']}")
-                
-                st.divider()
 # ==========================================
 # 🛠️ 图片处理核心 (Image Engine)
 # ==========================================
