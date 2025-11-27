@@ -81,44 +81,56 @@ tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修", "⚡ �
 # ... (后面的 Tab 代码逻辑保持不变，不需要动) ...
 
 # ==========================================
-# TAB 1: 标准工作流 (重构版)
+# TAB 1: 标准工作流 (Prompt 引擎升级版)
 # ==========================================
 with tab_workflow:
-    # 状态初始化
     if "std_prompts" not in st.session_state: st.session_state.std_prompts = []
     if "std_results" not in st.session_state: st.session_state.std_results = []
 
     c_main, c_view = st.columns([1.5, 1], gap="large")
     
     with c_main:
-        st.markdown('<div class="step-header">Step 1: 需求分析</div>', unsafe_allow_html=True)
-        uploaded_files = st.file_uploader("上传参考图", type=["jpg","png","webp"], accept_multiple_files=True)
+        st.markdown('<div class="step-header">Step 1: 需求配置</div>', unsafe_allow_html=True)
         
-        # 选图逻辑
+        # 1. 图片与任务
+        uploaded_files = st.file_uploader("上传参考图", type=["jpg","png","webp"], accept_multiple_files=True)
         active_file = None
         if uploaded_files:
             target_name = st.selectbox("当前处理", [f.name for f in uploaded_files]) if len(uploaded_files) > 1 else uploaded_files[0].name
             active_file = next((f for f in uploaded_files if f.name == target_name), None)
 
-        task_type = st.selectbox("任务类型", ["展示图 (Creative)", "场景图 (Lifestyle)", "产品图 (Product Only)"])
-        user_idea = st.text_area("你的创意", height=70, placeholder="例如：改为极简主义风格...")
-        user_weight = st.slider("创意权重 (User vs Image)", 0.0, 1.0, 0.6)
+        col_t1, col_t2 = st.columns(2)
+        task_type = col_t1.selectbox("任务类型", ["展示图 (Creative)", "场景图 (Lifestyle)", "产品图 (Product Only)"])
+        # ✨ 新增：风格选择器
+        selected_style = col_t2.selectbox("🎨 风格预设", list(PRESETS.keys()), index=0)
+
+        # 2. 创意与权重
+        user_idea = st.text_area("你的创意 Prompt", height=80, placeholder="描述你的画面...")
+        
+        # ✨ 新增：语法提示
+        st.caption("💡 **高级语法提示**：使用 `(keyword)` 增加权重，`[keyword]` 减小权重。例如：`(red dress), [blue sky]`")
+        
+        # ✨ 权重条 (已存在，逻辑已在 LLM 中强化)
+        user_weight = st.slider("⚖️ AI 参考权重 (User vs Image)", 0.0, 1.0, 0.6, help="0.0: 完全听图片的; 1.0: 完全听你的 Prompt; 0.6: 平衡")
+        
+        # ✨ 新增：负向提示词
+        neg_prompt = st.text_input("🚫 负向提示词 (Negative Prompt)", placeholder="例如：low quality, deformed, messy background")
+        
         enable_split = st.checkbox("🧩 启用多任务拆分", value=False)
 
-        # 🧠 生成 Prompt
-        if st.button("🧠 生成 Prompt", type="primary"):
+        # 🧠 生成 Prompt (AI 思考过程)
+        if st.button("🧠 AI 思考并生成 Prompt", type="primary"):
             if not active_file: st.warning("请先上传图片")
             else:
-                with st.spinner("AI 正在思考..."):
+                with st.spinner(f"AI 正在运用【{selected_style}】风格进行构图思考..."):
                     active_file.seek(0)
                     img_obj = Image.open(active_file)
                     
-                    # 调用 LLM 服务 -> 获取 Prompt 列表
+                    # 调用 LLM 服务 (传入了 style_key)
                     prompts = llm.optimize_art_director_prompt(
-                        user_idea, task_type, user_weight, img_obj, enable_split
+                        user_idea, task_type, user_weight, selected_style, img_obj, enable_split
                     )
                     
-                    # 存入 Session 并翻译
                     st.session_state.std_prompts = []
                     for p_en in prompts:
                         p_zh = llm.translate(p_en, "Simplified Chinese")
@@ -129,18 +141,16 @@ with tab_workflow:
         if st.session_state.std_prompts:
             st.markdown('<div class="step-header">Step 2: 任务执行</div>', unsafe_allow_html=True)
             
-            # 显示可编辑的 Prompts
             for i, p_data in enumerate(st.session_state.std_prompts):
                 with st.expander(f"任务 {i+1} 指令", expanded=True):
                     col_zh, col_en = st.columns(2)
                     new_zh = col_zh.text_area("中文", p_data["zh"], key=f"p_zh_{i}", height=80)
-                    if new_zh != p_data["zh"]: # 监听修改并同步翻译
+                    if new_zh != p_data["zh"]: 
                         st.session_state.std_prompts[i]["zh"] = new_zh
                         st.session_state.std_prompts[i]["en"] = llm.translate(new_zh, "English")
                         st.rerun()
                     col_en.text_area("English", st.session_state.std_prompts[i]["en"], disabled=True, height=80)
 
-            # 生成配置
             cg1, cg2 = st.columns(2)
             model_name = cg1.selectbox("模型", GOOGLE_IMG_MODELS)
             ratio_key = cg2.selectbox("比例", list(RATIO_MAP.keys()))
@@ -154,13 +164,14 @@ with tab_workflow:
                 
                 for idx, task in enumerate(st.session_state.std_prompts):
                     with st.spinner(f"生成中 ({idx+1}/{total})..."):
-                        # 调用 ImageGen 服务
+                        # ✨ 传入 negative_prompt
                         res_bytes = img_gen.generate(
-                            task["en"], model_name, img_pil, RATIO_MAP[ratio_key]
+                            task["en"], model_name, img_pil, RATIO_MAP[ratio_key], 
+                            negative_prompt=neg_prompt
                         )
                         if res_bytes:
                             st.session_state.std_results.append(res_bytes)
-                            history.add(res_bytes, f"Task {idx+1}", task["zh"]) # 存入历史
+                            history.add(res_bytes, f"Task {idx+1}", task["zh"]) 
                     bar.progress((idx + 1) / total)
                 st.success("完成！")
 
@@ -169,7 +180,6 @@ with tab_workflow:
             st.subheader("结果预览")
             for b in st.session_state.std_results:
                 st.image(create_preview_thumbnail(b, 400))
-                # 这里可以复用下载逻辑
 
 # ==========================================
 # TAB 2: 变体改款 (重构版)
