@@ -4,17 +4,30 @@ import sys
 import os
 import time
 
-# --- 引入我们刚写好的模块 ---
-sys.path.append(os.path.abspath('.'))
+# --- 🚀 核心修复：强制添加根目录到系统路径 ---
+# 1. 获取当前脚本的绝对路径 (.../pages/2_🖼️_Smart_Edit.py)
+current_script_path = os.path.abspath(__file__)
+# 2. 获取父目录 (.../pages)
+pages_dir = os.path.dirname(current_script_path)
+# 3. 获取根目录 (即 pages 的上一级，项目根目录)
+root_dir = os.path.dirname(pages_dir)
+
+# 4. 如果根目录不在系统路径中，强制加进去
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+# -------------------------------------------
+
 try:
+    # 这里的 import 应该就能找到了，因为我们已经把 root_dir 加到了 sys.path
     import auth
     from services.llm_engine import LLMEngine
     from services.image_engine import ImageGenEngine
     from utils.history_manager import HistoryManager
     from utils.image_processing import process_image_for_download, create_preview_thumbnail
 except ImportError as e:
-    st.error(f"模块导入失败，请检查文件结构: {e}")
+    st.error(f"❌ 模块导入失败。调试信息：\n项目根目录: {root_dir}\n错误详情: {e}")
     st.stop()
+
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
