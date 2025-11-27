@@ -81,7 +81,7 @@ tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修", "⚡ �
 # ... (后面的 Tab 代码逻辑保持不变，不需要动) ...
 
 # ==========================================
-# TAB 1: 标准工作流 (Prompt 引擎升级版)
+# TAB 1: 标准工作流 (UX 升级版)
 # ==========================================
 with tab_workflow:
     if "std_prompts" not in st.session_state: st.session_state.std_prompts = []
@@ -92,7 +92,7 @@ with tab_workflow:
     with c_main:
         st.markdown('<div class="step-header">Step 1: 需求配置</div>', unsafe_allow_html=True)
         
-        # 1. 图片与任务
+        # 1. 基础配置
         uploaded_files = st.file_uploader("上传参考图", type=["jpg","png","webp"], accept_multiple_files=True)
         active_file = None
         if uploaded_files:
@@ -101,52 +101,51 @@ with tab_workflow:
 
         col_t1, col_t2 = st.columns(2)
         task_type = col_t1.selectbox("任务类型", ["展示图 (Creative)", "场景图 (Lifestyle)", "产品图 (Product Only)"])
-        # ✨ 新增：风格选择器
         selected_style = col_t2.selectbox("🎨 风格预设", list(PRESETS.keys()), index=0)
 
-        # 2. 创意与权重
+        # 2. 创意输入
         user_idea = st.text_area("你的创意 Prompt", height=80, placeholder="描述你的画面...")
+        st.caption("💡 **高级语法**：`(keyword)` 加权, `[keyword]` 减权")
         
-        # ✨ 新增：语法提示
-        st.caption("💡 **高级语法提示**：使用 `(keyword)` 增加权重，`[keyword]` 减小权重。例如：`(red dress), [blue sky]`")
-        
-        # ✨ 权重条 (已存在，逻辑已在 LLM 中强化)
-        user_weight = st.slider("⚖️ AI 参考权重 (User vs Image)", 0.0, 1.0, 0.6, help="0.0: 完全听图片的; 1.0: 完全听你的 Prompt; 0.6: 平衡")
-        
-        # ✨ 新增：负向提示词
-        neg_prompt = st.text_input("🚫 负向提示词 (Negative Prompt)", placeholder="例如：low quality, deformed, messy background")
-        
+        # 3. 参数控制
+        user_weight = st.slider("⚖️ AI 参考权重", 0.0, 1.0, 0.6)
+        neg_prompt = st.text_input("🚫 负向提示词", placeholder="例如：low quality, deformed")
         enable_split = st.checkbox("🧩 启用多任务拆分", value=False)
 
-        # 🧠 生成 Prompt (AI 思考过程)
+        # 🧠 生成 Prompt (交互升级：使用 st.status)
         if st.button("🧠 AI 思考并生成 Prompt", type="primary"):
-            if not active_file: st.warning("请先上传图片")
+            if not active_file: 
+                st.toast("⚠️ 请先上传参考图片", icon="🚨") # Toast 提示
             else:
-                with st.spinner(f"AI 正在运用【{selected_style}】风格进行构图思考..."):
+                # ✨ 交互升级：使用状态容器代替 Spinner
+                with st.status("🤖 AI 正在进行思维链思考...", expanded=True) as status:
+                    
+                    st.write("👀 正在分析图片视觉特征...")
                     active_file.seek(0)
                     img_obj = Image.open(active_file)
+                    time.sleep(0.5) # 模拟一下节奏感
                     
-                    # 调用 LLM 服务 (传入了 style_key)
+                    st.write(f"🎨 正在融合【{selected_style}】风格与光影...")
                     prompts = llm.optimize_art_director_prompt(
                         user_idea, task_type, user_weight, selected_style, img_obj, enable_split
                     )
                     
+                    st.write("📝 正在撰写最终 Prompt 并翻译...")
                     st.session_state.std_prompts = []
                     for p_en in prompts:
                         p_zh = llm.translate(p_en, "Simplified Chinese")
                         st.session_state.std_prompts.append({"en": p_en, "zh": p_zh})
+                    
+                    status.update(label="✅ Prompt 生成完毕！", state="complete", expanded=False)
+                    st.toast("Prompt 已生成！", icon="✨") # 成功 Toast
                     st.rerun()
 
-# ... (Step 2 之前的代码保持不变) ...
-
-        # 🎨 执行生成 (Step 2 UI 更新)
+        # 🎨 执行生成
         if st.session_state.std_prompts:
             st.markdown('<div class="step-header">Step 2: 任务执行</div>', unsafe_allow_html=True)
             
-            # (Prompt 显示区域代码保持不变，省略...)
             for i, p_data in enumerate(st.session_state.std_prompts):
                 with st.expander(f"任务 {i+1} 指令", expanded=True):
-                    # ... (这部分代码保持你原来的样子) ...
                     col_zh, col_en = st.columns(2)
                     new_zh = col_zh.text_area("中文", p_data["zh"], key=f"p_zh_{i}", height=80)
                     if new_zh != p_data["zh"]: 
@@ -155,78 +154,50 @@ with tab_workflow:
                         st.rerun()
                     col_en.text_area("English", st.session_state.std_prompts[i]["en"], disabled=True, height=80)
 
-            # --- ✨ 核心新增：高级控制面板 ---
+            # 高级面板 (保持 Direction B 的代码)
             with st.container(border=True):
-                st.caption("⚙️ **高级生成参数 (Advanced Controls)**")
-                
-                # 第一行：模型与比例
+                st.caption("⚙️ **高级生成参数**")
                 cg1, cg2 = st.columns(2)
                 model_name = cg1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS)
                 ratio_key = cg2.selectbox("📐 画幅比例", list(RATIO_MAP.keys()))
                 
-                # 第二行：安全与创意
                 cg3, cg4 = st.columns(2)
-                safety_level = cg3.selectbox(
-                    "🛡️ 安全过滤等级 (Safety Filter)", 
-                    ["Standard (标准)", "Permissive (宽松 - 适合内衣/泳装)", "Strict (严格)"],
-                    index=0,
-                    help="【真实生效】如果生成内衣或泳装模特时提示错误，请选择'宽松'模式。这将降低 Google 的 NSFW 拦截阈值。"
-                )
-                creativity = cg4.slider(
-                    "🎨 创意度 (Temperature)", 0.0, 1.0, 0.5,
-                    help="【真实生效】0.0: 严谨、更忠实于原图构图; 1.0: 狂野、更多随机细节。"
-                )
-
-                # 第三行：Seed 控制
-                cg5, cg6 = st.columns([0.8, 0.2], gap="small", vertical_alignment="bottom")
-                seed_input = cg5.number_input(
-                    "🎲 随机种子 (Seed)", value=-1, step=1,
-                    help="【尝试生效】输入固定数字(如 42)可尝试固定画面特征。输入 -1 代表完全随机。"
-                )
-                if cg6.button("🎲", help="随机生成一个 Seed"):
-                    # 这是一个小技巧：通过 rerun 来刷新 number_input 的默认值比较麻烦
-                    # 我们这里简单提示用户手动改，或者配合 session state 做（为保持简单暂不展开）
-                    pass
+                safety_level = cg3.selectbox("🛡️ 安全过滤", ["Standard (标准)", "Permissive (宽松 - 适合内衣/泳装)", "Strict (严格)"])
+                creativity = cg4.slider("🎨 创意度", 0.0, 1.0, 0.5)
                 
+                cg5, cg6 = st.columns([0.8, 0.2], vertical_alignment="bottom")
+                seed_input = cg5.number_input("🎲 Seed", value=-1, step=1)
                 real_seed = None if seed_input == -1 else int(seed_input)
 
-            # --- 生成按钮 ---
-            btn_col1, btn_col2 = st.columns([3, 1])
-            with btn_col1:
-                start_btn = st.button("🚀 开始生成图片 (Batch Run)", type="primary", use_container_width=True)
-            
-            if start_btn:
+            # 生成按钮 (交互升级：Toast 通知)
+            if st.button("🚀 开始生成图片", type="primary", use_container_width=True):
                 st.session_state.std_results = []
                 img_pil = Image.open(active_file) if active_file else None
                 
                 bar = st.progress(0)
                 total = len(st.session_state.std_prompts)
                 
-                for idx, task in enumerate(st.session_state.std_prompts):
-                    with st.spinner(f"生成中 ({idx+1}/{total}) | 🛡️安全: {safety_level.split()[0]} | 🎲Seed: {real_seed if real_seed else 'Random'}..."):
+                # ✨ 交互升级：使用状态容器
+                with st.status("🎨 正在绘制中...", expanded=True) as status:
+                    for idx, task in enumerate(st.session_state.std_prompts):
+                        st.write(f"正在执行任务 {idx+1}/{total}: {task['zh'][:10]}...")
                         
-                        # ✨ 调用升级版 generate 接口
                         res_bytes = img_gen.generate(
-                            prompt=task["en"], 
-                            model_name=model_name, 
-                            ref_image=img_pil, 
-                            ratio_suffix=RATIO_MAP[ratio_key], 
-                            negative_prompt=neg_prompt, # 记得确保 neg_prompt 变量在上面定义了(Tab 1 Step 1里)
-                            seed=real_seed,
-                            creativity=creativity,
-                            safety_level=safety_level.split()[0] # 传入 'Permissive' 等关键词
+                            task["en"], model_name, img_pil, RATIO_MAP[ratio_key], 
+                            negative_prompt=neg_prompt,
+                            seed=real_seed, creativity=creativity, safety_level=safety_level.split()[0]
                         )
                         
                         if res_bytes:
                             st.session_state.std_results.append(res_bytes)
-                            history.add(res_bytes, f"Task {idx+1}", task["zh"]) 
+                            history.add(res_bytes, f"Task {idx+1}", task["zh"])
                         else:
-                            st.error(f"任务 {idx+1} 生成失败，已自动重试。请检查 Prompt 是否违规。")
+                            st.error(f"任务 {idx+1} 生成失败")
                             
-                    bar.progress((idx + 1) / total)
-                st.success("🎉 队列执行完毕！")
-
-        # ... (后续预览代码不变) ...
+                        bar.progress((idx + 1) / total)
+                    
+                    status.update(label="🎉 所有任务执行完毕！", state="complete", expanded=False)
+                    st.toast("图片生成完成！请在右侧查看", icon="🖼️")
 
     with c_view:
         if st.session_state.std_results:
