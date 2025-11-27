@@ -162,3 +162,13 @@ class AITranslator:
             return resp.text.strip()
         except:
             return text
+# ... (保留原有的 import)
+
+# --- 在文件末尾添加以下代码 ---
+
+@st.dialog("图片预览")
+def show_preview_modal(image_bytes, title="Preview"):
+    """
+    弹出模态框展示大图
+    """
+    st.image(image_bytes, caption=title, use_container_width=True)
