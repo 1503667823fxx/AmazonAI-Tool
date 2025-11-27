@@ -5,14 +5,15 @@ import io
 import sys
 import os
 import time
-from collections import deque 
 
 # --- 0. 基础设置与核心库引入 ---
 sys.path.append(os.path.abspath('.'))
 try:
     import auth
+    # 引入核心库
     from core_utils import AITranslator, process_image_for_download, create_preview_thumbnail, HistoryManager, show_preview_modal
 except ImportError:
+    # 降级处理 (防止本地环境缺少核心库时报错)
     class AITranslator:
         def to_english(self, t): return t
         def to_chinese(self, t): return t
@@ -69,7 +70,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 常量 ---
-ANALYSIS_MODELS = ["models/gemini-flash-latest", "models/gemini-3-pro-preview"]
+ANALYSIS_MODELS = ["models/gemini-flash-latest", "models/gemini-2.5-pro", "models/gemini-3-pro-preview"]
 GOOGLE_IMG_MODELS = ["models/gemini-2.5-flash-image", "models/gemini-3-pro-image-preview"]
 RATIO_MAP = {
     "1:1 (正方形电商图)": ", crop and center composition to 1:1 square aspect ratio",
@@ -129,11 +130,11 @@ with st.sidebar:
 # ==========================================
 # 🚀 主界面
 # ==========================================
-st.title("🧬 Fashion AI Core V5.6")
-tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修 (Workstation)", "⚡ 变体改款", "🏞️ 场景置换"])
+st.title("🧬 Fashion AI Core V6.0")
+tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修 (多任务)", "⚡ 变体改款", "🏞️ 场景置换"])
 
 # ==========================================
-# TAB 1: 标准工作流 (支持多图上传 + 可选拆分 + 权重控制)
+# TAB 1: 标准工作流 (支持多图上传 + 任务拆分)
 # ==========================================
 with tab_workflow:
     col_main, col_preview = st.columns([1.5, 1], gap="large")
@@ -159,73 +160,27 @@ with tab_workflow:
                 active_file = uploaded_files[0]
         
         task_type = st.selectbox("3. 任务类型", ["场景图 (Lifestyle)", "展示图 (Creative)", "产品图 (Product Only)"])
-        user_idea = st.text_area("4. 你的创意", height=80, placeholder="例如：改为极简主义风格，白色背景...")
+        user_idea = st.text_area("4. 你的创意 (支持拆分任务)", height=80, placeholder="例如：做一张展示上衣细节的图，再做一张展示裤子版型的图...")
 
-        # 新增：创意权重滑块
-        user_weight = st.slider(
-            "5. 创意权重 (User Influence)", 
-            0.0, 1.0, 0.6, step=0.1, 
-            help="0.0 = 完全听AI的(忠实原图); 1.0 = 完全听你的(忠实文字); 0.6 = 平衡模式"
-        )
-
-        # 拆分任务开关
-        enable_split = st.checkbox("🧩 启用智能任务拆分 (多任务模式)", value=False, help="勾选后，AI 会尝试将复杂需求(如'一张上衣，一张裤子')拆解为多个独立的生图任务。")
-
-        if st.button("🧠 生成 Prompt", type="primary"):
+        if st.button("🧠 智能拆解任务 & 生成 Prompt", type="primary"):
             if not active_file: st.warning("⚠️ 请先上传或选择图片")
             else:
-                with st.spinner(f"AI 正在分析 (权重: {user_weight})..."):
+                with st.spinner("AI 正在分析并拆解任务..."):
                     try:
                         active_file.seek(0)
                         img_obj = Image.open(active_file)
                         model = genai.GenerativeModel(analysis_model)
                         
-                        # 注入高质量摄影指令
-                        special_instruction = ""
-                        if "Product Only" in task_type:
-                            special_instruction = """
-                            SPECIAL INSTRUCTION FOR PRODUCT PHOTOGRAPHY:
-                            1. **Layout**: If user implies 'flat lay' or 'break down', use "Knolling photography", "Neatly arranged".
-                            2. **Realism**: Use "Contact shadows", "Ambient occlusion" to avoid floating look.
-                            3. **Texture**: Emphasize "fabric texture", "material details".
-                            """
-                        
-                        # 核心权重逻辑注入
-                        weight_instruction = f"""
-                        WEIGHT CONTROL INSTRUCTION (Important):
-                        The user has set an influence weight of {user_weight} (Range 0.0 to 1.0).
-                        - If weight > 0.7: Prioritize the User's Idea ('{user_idea}') over the visual analysis of the image. Even if it conflicts with the image, follow the text.
-                        - If weight < 0.3: Prioritize the Visual Analysis of the image. Use the User's Idea only as a subtle suggestion.
-                        - If weight is 0.4-0.6: Balance both equally.
+                        prompt_req = f"""
+                        Role: Art Director. 
+                        Task: Create detailed prompts based on User Idea: '{user_idea}'. Type: {task_type}.
+                        IMPORTANT LOGIC: If user asks for MULTIPLE distinct outputs, split them into separate prompts.
+                        STRICT OUTPUT FORMAT: Separate different prompts with "|||" string. NO Markdown.
+                        Input Idea: {user_idea}
+                        Output: English Prompts Only.
                         """
-
-                        if enable_split:
-                            # 拆分模式逻辑
-                            prompt_req = f"""
-                            Role: Art Director. 
-                            Task: Create detailed prompts based on User Idea and Image. Type: {task_type}.
-                            {weight_instruction}
-                            {special_instruction}
-                            IMPORTANT LOGIC: Split distinct outputs into separate prompts using "|||".
-                            STRICT OUTPUT FORMAT: Separate prompts with "|||". NO Markdown.
-                            User Idea: {user_idea}
-                            Output: English Prompts Only.
-                            """
-                        else:
-                            # 单任务模式逻辑 (默认)
-                            prompt_req = f"""
-                            Role: Art Director. 
-                            Task: Create ONE single, high-quality prompt based on User Idea and Image. Type: {task_type}.
-                            {weight_instruction}
-                            {special_instruction}
-                            STRICT OUTPUT FORMAT: Provide ONE unified prompt. NO "|||". NO Markdown.
-                            User Idea: {user_idea}
-                            Output: English Prompt Only.
-                            """
-
                         response = model.generate_content([prompt_req, img_obj])
                         raw_text = response.text.strip()
-                        
                         prompt_list = raw_text.split("|||")
                         
                         st.session_state["std_prompt_data"] = []
@@ -237,14 +192,12 @@ with tab_workflow:
                         st.rerun()
                     except Exception as e: st.error(f"分析失败: {e}")
 
-        # Step 2: 任务渲染区
+        # Step 2: 多任务渲染区
         if st.session_state["std_prompt_data"]:
-            st.markdown('<div class="step-header">Step 2: 任务执行</div>', unsafe_allow_html=True)
+            st.markdown('<div class="step-header">Step 2: 任务队列 (自动拆分)</div>', unsafe_allow_html=True)
             
             for i, p_data in enumerate(st.session_state["std_prompt_data"]):
-                expander_label = f"📝 任务 {i+1}" if len(st.session_state["std_prompt_data"]) > 1 else "📝 生成指令微调"
-                
-                with st.expander(expander_label, expanded=True):
+                with st.expander(f"📝 任务 {i+1}", expanded=True):
                     col_zh, col_en = st.columns(2)
                     with col_zh:
                         key_zh = f"std_zh_{i}"
@@ -266,7 +219,7 @@ with tab_workflow:
             if "flash" in google_model and "1:1" not in selected_ratio_key:
                 st.warning("⚠️ 警告：Gemini 2.5 Flash 强制 1:1 输出。")
 
-            if st.button("🎨 开始生成", type="primary"):
+            if st.button("🎨 执行所有任务", type="primary"):
                 st.session_state["std_images"] = []
                 total_tasks = len(st.session_state["std_prompt_data"]) * num_images
                 current_progress = 0
