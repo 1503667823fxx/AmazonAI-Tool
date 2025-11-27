@@ -19,7 +19,7 @@ except ImportError:
     class HistoryManager:
         def add(self, a, b, c): pass
         def render_sidebar(self): pass
-    # FIX: Changed 'f' to 'format' to match potential keyword usage, though we will use positional args below to be safe.
+    # FIX: 统一参数名为 format，以防万一
     def process_image_for_download(b, format="PNG"): return b, "image/png"
     def create_preview_thumbnail(b): return b
     def show_preview_modal(b, c): pass
@@ -111,14 +111,8 @@ def generate_image_call(model_name, prompt, image_input, ratio_suffix):
         return None
     return None
 
-# 双语同步回调函数
-def sync_var_zh_to_en():
-    val = st.session_state.var_prompt_zh
-    if val: st.session_state.var_prompt_en = st.session_state.translator.to_english(val)
-
-def sync_bg_zh_to_en():
-    val = st.session_state.bg_prompt_zh
-    if val: st.session_state.bg_prompt_en = st.session_state.translator.to_english(val)
+# 双语同步回调函数 (Tab 1用)
+# Tab 2 和 Tab 3 使用内部定义的函数以获得更好的局部状态控制
 
 # --- 侧边栏 ---
 with st.sidebar:
@@ -162,7 +156,7 @@ with tab_workflow:
         task_type = st.selectbox("3. 任务类型", ["场景图 (Lifestyle)", "展示图 (Creative)", "产品图 (Product Only)"])
         user_idea = st.text_area("4. 你的创意", height=80, placeholder="例如：改为极简主义风格，白色背景...")
 
-        # 新增：创意权重滑块
+        # 创意权重滑块
         user_weight = st.slider(
             "5. 创意权重 (User Influence)", 
             0.0, 1.0, 0.6, step=0.1, 
@@ -201,7 +195,6 @@ with tab_workflow:
                         """
 
                         if enable_split:
-                            # 拆分模式逻辑
                             prompt_req = f"""
                             Role: Art Director. 
                             Task: Create detailed prompts based on User Idea and Image. Type: {task_type}.
@@ -213,7 +206,6 @@ with tab_workflow:
                             Output: English Prompts Only.
                             """
                         else:
-                            # 单任务模式逻辑 (默认)
                             prompt_req = f"""
                             Role: Art Director. 
                             Task: Create ONE single, high-quality prompt based on User Idea and Image. Type: {task_type}.
@@ -282,6 +274,8 @@ with tab_workflow:
                         for n in range(num_images):
                             with st.spinner(f"执行任务 {task_idx+1} (第 {n+1} 张)..."):
                                 active_file.seek(0)
+                                # 再次确认读取
+                                img_pil = Image.open(active_file)
                                 img_data = generate_image_call(google_model, prompt_en, img_pil, RATIO_MAP[selected_ratio_key])
                                 if img_data:
                                     st.session_state["std_images"].append(img_data)
@@ -291,13 +285,14 @@ with tab_workflow:
                                 time.sleep(1)
                     st.success("🎉 执行完毕！")
 
-    # 右侧预览
+    # 右侧预览 (TAB 1)
     with col_preview:
         st.subheader("🖼️ 结果预览")
         if active_file:
             with st.expander("🔍 当前参考图", expanded=True):
+                # FIX: 强壮的预览逻辑 - seek(0) + Image.open
                 active_file.seek(0)
-                st.image(active_file, use_container_width=True)
+                st.image(Image.open(active_file), use_container_width=True)
 
         if st.session_state["std_images"]:
             st.divider()
@@ -307,7 +302,7 @@ with tab_workflow:
                 
                 c_btn1, c_btn2 = st.columns([1.5, 1])
                 with c_btn1:
-                    # FIX: Removed 'format=' keyword argument
+                    # FIX: 使用位置参数，避免 format= 报错
                     final_bytes, mime = process_image_for_download(img_bytes, download_format)
                     st.download_button(f"📥 下载", data=final_bytes, file_name=f"std_{idx}.{download_format.lower()}", mime=mime, use_container_width=True)
                 with c_btn2:
@@ -315,19 +310,18 @@ with tab_workflow:
                         show_preview_modal(img_bytes, f"Result {idx+1}")
 
 # ==========================================
-# TAB 2: ⚡ 变体改款 (Restyling) - 已优化
+# TAB 2: ⚡ 变体改款 (Restyling) - 优化版
 # ==========================================
 with tab_variants:
     st.markdown("### ⚡ 服装改款工厂")
     
     cv_left, cv_right = st.columns([1.5, 1], gap="large")
-    
-    # 定义局部同步函数 (参考 Tab 1 逻辑)
+
     def update_var_en():
         val = st.session_state.var_prompt_zh
         if val:
             st.session_state.var_prompt_en = st.session_state.translator.to_english(val)
-
+    
     with cv_left:
         st.markdown("#### Step 1: AI 读取产品特征")
         var_file = st.file_uploader("上传原版图片", type=["jpg", "png"], key="var_upload")
@@ -350,7 +344,7 @@ with tab_variants:
                         st.success("成功")
                     except Exception as e: st.error(f"失败: {e}")
 
-        # Step 2: 改款设置 (双语同步)
+        # Step 2: 改款设置
         st.markdown("#### Step 2: 改款设置")
         
         vp_col1, vp_col2 = st.columns(2)
@@ -374,16 +368,16 @@ with tab_variants:
     with cv_right:
         st.subheader("🖼️ 结果预览")
         
-        # --- 新增：原图预览 (参考 Tab 1) ---
+        # --- FIX: 强壮的原图预览 ---
         if var_file:
             with st.expander("🔍 原图预览", expanded=True):
                 var_file.seek(0)
-                st.image(var_file, use_container_width=True)
-        # --------------------------------
-                
+                st.image(Image.open(var_file), use_container_width=True)
+        # ------------------------
+
         if start_batch and var_file and st.session_state["var_prompt_en"]:
             st.session_state["batch_results"] = []
-            st.divider() # 分隔线
+            st.divider()
             grid = st.columns(2)
             sys_instruct = CHANGE_LEVELS[change_level]
             my_bar = st.progress(0)
@@ -392,12 +386,10 @@ with tab_variants:
                 try:
                     var_file.seek(0)
                     v_img = Image.open(var_file)
-                    # 使用翻译后的英文特征 st.session_state['var_prompt_en']
                     prompt = f"Task: Restyling. Base: {st.session_state['var_prompt_en']}. Constraint: {sys_instruct}. Mod Request: {user_mod}. Var ID: {i}"
                     img_data = generate_image_call(var_model, prompt, v_img, "")
                     if img_data:
                         st.session_state["batch_results"].append(img_data)
-                        # 存入历史记录
                         st.session_state.history_manager.add(img_data, f"Restyle {i+1}", user_mod)
                         
                         with grid[i%2]:
@@ -409,22 +401,21 @@ with tab_variants:
                 my_bar.progress((i+1)/batch_count)
                 time.sleep(1)
         
-        # 批量结果下载
         if st.session_state["batch_results"]:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["batch_results"]):
+                # FIX: 使用位置参数
                 final_bytes, mime = process_image_for_download(img_bytes, download_format)
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"var_{idx}.{download_format.lower()}", mime=mime)
 
 # ==========================================
-# TAB 3: 🏞️ 场景置换 (Scene Swap) - 已优化
+# TAB 3: 🏞️ 场景置换 (Scene Swap) - 优化版
 # ==========================================
 with tab_background:
     st.markdown("### 🏞️ 场景批量置换")
     
     cb_left, cb_right = st.columns([1.5, 1], gap="large")
-    
-    # 定义局部同步函数 (参考 Tab 1 逻辑)
+
     def update_bg_en():
         val = st.session_state.bg_prompt_zh
         if val:
@@ -452,7 +443,7 @@ with tab_background:
                         st.success("锁定成功")
                     except Exception as e: st.error(f"失败: {e}")
 
-        # Step 2: 换背景设置 (双语同步)
+        # Step 2: 换背景设置
         st.markdown("#### Step 2: 换背景设置")
         bp_col1, bp_col2 = st.columns(2)
         with bp_col1:
@@ -468,16 +459,16 @@ with tab_background:
     with cb_right:
         st.subheader("🖼️ 结果预览")
 
-        # --- 新增：原图预览 (参考 Tab 1) ---
+        # --- FIX: 强壮的原图预览 ---
         if bg_file:
             with st.expander("🔍 原图预览", expanded=True):
                 bg_file.seek(0)
-                st.image(bg_file, use_container_width=True)
-        # --------------------------------
+                st.image(Image.open(bg_file), use_container_width=True)
+        # ------------------------
 
         if start_bg and bg_file and st.session_state["bg_prompt_en"]:
             st.session_state["bg_results"] = []
-            st.divider() # 分隔线
+            st.divider()
             bg_grid = st.columns(2)
             bg_bar = st.progress(0)
             
@@ -489,7 +480,6 @@ with tab_background:
                     img_data = generate_image_call(bg_model, prompt, v_img, "")
                     if img_data:
                         st.session_state["bg_results"].append(img_data)
-                        # 存入历史记录
                         st.session_state.history_manager.add(img_data, f"BG Swap {i+1}", bg_desc)
                         
                         with bg_grid[i%2]:
@@ -504,5 +494,6 @@ with tab_background:
         if st.session_state["bg_results"]:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["bg_results"]):
+                # FIX: 使用位置参数
                 final_bytes, mime = process_image_for_download(img_bytes, download_format)
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"scene_{idx}.{download_format.lower()}", mime=mime)
