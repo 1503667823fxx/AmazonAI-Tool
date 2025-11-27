@@ -296,6 +296,7 @@ with tab_workflow:
         st.subheader("🖼️ 结果预览")
         if active_file:
             with st.expander("🔍 当前参考图", expanded=True):
+                active_file.seek(0)
                 st.image(active_file, use_container_width=True)
 
         if st.session_state["std_images"]:
@@ -376,6 +377,7 @@ with tab_variants:
         # --- 新增：原图预览 (参考 Tab 1) ---
         if var_file:
             with st.expander("🔍 原图预览", expanded=True):
+                var_file.seek(0)
                 st.image(var_file, use_container_width=True)
         # --------------------------------
                 
@@ -469,6 +471,7 @@ with tab_background:
         # --- 新增：原图预览 (参考 Tab 1) ---
         if bg_file:
             with st.expander("🔍 原图预览", expanded=True):
+                bg_file.seek(0)
                 st.image(bg_file, use_container_width=True)
         # --------------------------------
 
