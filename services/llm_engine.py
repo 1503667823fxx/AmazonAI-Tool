@@ -14,7 +14,7 @@ class LLMEngine:
     def translate(self, text, target_lang="English"):
         if not text or not self.valid: return text
         try:
-            model = genai.GenerativeModel("models/gemini-flash-latest")
+            model = genai.GenerativeModel("models/gemini-3-pro-preview") # 建议尝试更聪明的模型，或者回退到 gemini-1.5-flash
             prompt = f"Translate to {target_lang}. Output ONLY translation. Text: {text}"
             resp = model.generate_content(prompt)
             return resp.text.strip()
@@ -23,86 +23,95 @@ class LLMEngine:
     def analyze_image_style(self, image, prompt_instruction):
         if not self.valid: return "Error"
         try:
-            model = genai.GenerativeModel("models/gemini-flash-latest")
+            model = genai.GenerativeModel("models/gemini-3-pro-preview")
             resp = model.generate_content([prompt_instruction, image])
             return resp.text.strip()
         except Exception as e: return str(e)
 
     def optimize_art_director_prompt(self, user_idea, task_type, user_weight, style_key, image_input=None, enable_split=False):
         """
-        V4 强力意图理解版：
-        解决“听不懂人话”的问题。强制 AI 将用户的抽象修改要求（如‘换成好莱坞模特’）
-        转化为具体的视觉描述（如‘Caucasian female, blonde hair, western facial features’），
-        从而在生图时覆盖原图的特征。
+        V5 激进覆写版 (Aggressive Overwrite Edition)：
+        解决“换脸/换人失败”的核心痛点。
+        核心逻辑：当检测到用户想要“换人”时，强制 AI 编造具体的面部/身体特征，
+        以物理描述的冲突（Physical Conflict）来强迫生图模型放弃原图特征。
         """
         if not self.valid: return []
 
-        # 1. 获取风格数据
+        # 1. 样式上下文
         style_data = PRESETS.get(style_key, PRESETS["💡 默认 (None)"])
         style_desc = style_data["desc"]
 
-        # 2. 构建输入数据
+        # 2. 视觉输入处理
         inputs = []
-        img_context = ""
+        img_context_str = "No reference image."
         if image_input:
             if isinstance(image_input, list):
                 inputs.extend(image_input)
-                img_context = f"provided {len(image_input)} reference images"
+                img_context_str = f"User provided {len(image_input)} reference images."
             else:
                 inputs.append(image_input)
-                img_context = "provided 1 reference image"
+                img_context_str = "User provided 1 reference image."
 
-        # 3. 构建 CoT (思维链) 系统指令
-        # 核心改动：要求 AI 先检测冲突，再重写描述
+        # 3. 核心 System Prompt (重写重点：特征注入)
         system_prompt = f"""
-        Role: Senior Visual Prompt Engineer.
+        Role: Aggressive Visual Director for AI Image Generation.
         
-        【Goal】
-        Transform the User's Request into a HIGHLY DESCRIPTIVE English prompt for image generation.
-        You are looking at {img_context}.
+        【Context】
+        You are looking at a Reference Image ({img_context_str}).
+        The User wants to generate a NEW image based on this, but with specific changes.
         
-        【User Request】: "{user_idea}"
-        【Target Style】: "{style_key}" ({style_desc})
+        【User Command】: "{user_idea}"
+        【Style】: "{style_key}" ({style_desc})
         
-        【CRITICAL THINKING PROCESS】
-        1. **ANALYZE DELTA**: Compare User Request vs. Reference Image. 
-           - Does user want to change the Subject? (e.g. "change model", "swap into dog")
-           - Does user want to change the Background? (e.g. "at a party", "on beach")
-           - Does user want to change the Clothes?
-           
-        2. **OVERRIDE RULE (The most important rule)**: 
-           - If user asks to CHANGE something, you MUST describe the NEW element in EXTREME DETAIL.
-           - Example: User says "Hollywood Model". You write: "A glamorous Hollywood supermodel, Caucasian female, American facial features, blonde wavy hair, blue eyes, confident smile, western aesthetic." 
-           - **DO NOT** just say "Hollywood model". The AI needs VISUAL ADJECTIVES to override the reference image.
-           
-        3. **COMPOSITION**: Keep the pose/composition from reference image unless told otherwise.
+        【CRITICAL RULES FOR "CHANGING THE MODEL"】
+        If the user says "Change model", "Don't use this person", "Foreigner", "Hollywood model", or implies a change in identity:
+        
+        1. **STOP CAPTIONING THE FACE**: Do NOT describe the face you see in the reference image.
+        2. **INVENT CONTRADICTORY TRAITS**: You MUST invent specific physical traits that correspond to the user's request to FORCE the AI to draw someone else.
+           - "Hollywood/Western Model" -> Translate to: "Caucasian female, platinum blonde wavy hair, icy blue eyes, sharp jawline, fair skin, high fashion makeup."
+           - "Black Model" -> Translate to: "African American female, dark skin tone, curly hair, full lips."
+           - "Plus Size" -> Translate to: "Curvy plus size model, full figured."
+        
+        3. **BE EXPLICIT**: 
+           - BAD: "A Hollywood style model..." (Too weak, AI will keep the original face).
+           - GOOD: "Close up of a stunning Caucasian supermodel with blonde hair and blue eyes..." (Strong visual instructions).
 
-        【Output Format】
-        - Output ONLY the final English prompt string. 
-        - Include high quality tags: 8k, photorealistic, masterpiece, {style_desc}.
-        - Do not output explanations.
+        4. **PRESERVE CLOTHING?**: 
+           - If user ONLY says "change model", keep the clothing description from the reference image, but attach it to the NEW body/face description.
+           - If user says "change clothing" too, describe new clothing.
+
+        【Output Structure】
+        Output a single paragraph English prompt.
+        Structure: [Subject Physical Description] + [Clothing/Action Details] + [Background/Context] + [Style/Lighting tags].
+        Start with the Subject Description immediately.
         """
         
         inputs.insert(0, system_prompt)
 
         try:
-            model = genai.GenerativeModel("models/gemini-flash-latest") 
-            
-            # 设置生成配置，降低随机性，提高遵从度
+            # 优先使用 2.0-flash-exp (如果你的 key 支持)，它的指令遵循能力最强
+            # 如果报错，请改回 models/gemini-1.5-flash
+            model_name = "models/gemini-3-pro-preview" 
+            try:
+                model = genai.GenerativeModel(model_name)
+            except:
+                model = genai.GenerativeModel("models/gemini-3-pro-preview")
+
+            # 降低 Temperature，让它严格执行"覆写"逻辑，不要随意发挥
             config = genai.types.GenerationConfig(
-                temperature=0.4, 
+                temperature=0.3, 
                 candidate_count=1
             )
             
             response = model.generate_content(inputs, generation_config=config)
             raw_text = response.text.strip()
             
-            # 清理可能产生的 markdown 格式
-            final_prompt = raw_text.replace("```text", "").replace("```", "").strip()
+            # 清理格式
+            final_prompt = raw_text.replace("```text", "").replace("```", "").replace("Prompt:", "").strip()
             
             return [final_prompt]
             
         except Exception as e:
-            print(f"Prompt Optimization Error: {e}")
-            # 降级处理：简单的拼接
-            return [f"{user_idea}, {style_desc}, high quality, 8k"]
+            print(f"Prompt Gen Error: {e}")
+            # 降级：直接把用户的话加重权拼上去
+            return [f"(({user_idea})), {style_desc}, detailed face, high quality"]
