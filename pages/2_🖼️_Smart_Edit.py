@@ -462,12 +462,16 @@ with tab_background:
             bg_grid = st.columns(2)
             bg_bar = st.progress(0)
             
-            for i in range(bg_count):
+  for i in range(bg_count):
+                # 移除了外层的 try...except，或者至少打印错误
                 try:
                     bg_file.seek(0)
                     v_img = Image.open(bg_file)
                     prompt = f"Product BG Swap. Product: {st.session_state['bg_prompt_en']}. New BG: {bg_desc}. Constraint: KEEP PRODUCT SAME. Var ID: {i}"
+                    
+                    # 生成图片
                     img_data = generate_image_call(bg_model, prompt, v_img, "")
+                    
                     if img_data:
                         st.session_state["bg_results"].append(img_data)
                         # 存入历史记录
@@ -476,9 +480,15 @@ with tab_background:
                         with bg_grid[i%2]:
                             thumb = create_preview_thumbnail(img_data, max_width=300)
                             st.image(thumb, use_container_width=True)
+                            # 这里调用 modal，确保 core_utils 已更新
                             if st.button("🔍", key=f"zoom_bg_{i}"):
                                 show_preview_modal(img_data, f"Scene {i+1}")
-                except: pass
+                    else:
+                        st.error(f"第 {i+1} 张生成返回为空，可能是 API 拒绝了请求。")
+                        
+                except Exception as e:
+                    st.error(f"生成出错: {e}") # 显式打印错误信息
+                
                 bg_bar.progress((i+1)/bg_count)
                 time.sleep(1)
         
