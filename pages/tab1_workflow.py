@@ -4,6 +4,7 @@ from core_utils import smart_analyze_image, generate_image_call, create_preview_
 
 def render_tab1(ANALYSIS_MODELS, GOOGLE_IMG_MODELS, RATIO_MAP, download_format):
     c_main, c_prev = st.columns([1.5, 1], gap="large")
+
     
     with c_main:
         st.markdown('<div class="step-header">Step 1: 需求分析</div>', unsafe_allow_html=True)
