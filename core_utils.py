@@ -6,19 +6,14 @@ import time
 from collections import deque
 
 # ==========================================
-# 🧠 智能分析核心 (Smart Analysis Engine) [NEW]
+# 🧠 智能分析核心 (Smart Analysis Engine)
 # ==========================================
 def smart_analyze_image(model_name, image_file, task_type, user_idea, user_weight, enable_split, translator):
     """
-    封装了复杂的 Prompt 工程逻辑：
-    1. 接收图片和用户需求
-    2. 根据权重 (user_weight) 动态构建 System Prompt
-    3. 调用 Vision Model 分析
-    4. 处理拆分逻辑 (|||)
-    5. 自动翻译并返回结构化数据 [{'en':..., 'zh':...}]
+    执行智能图片分析，生成中英文对照的 Prompt 数据
     """
     try:
-        # 重置文件指针，确保读取完整
+        # 重置文件指针
         image_file.seek(0)
         img_obj = Image.open(image_file)
         
@@ -43,12 +38,16 @@ def smart_analyze_image(model_name, image_file, task_type, user_idea, user_weigh
         - If weight is 0.4-0.6: Balance both.
         """
 
+        # 强制英文输出指令
+        lang_instruction = "STRICT FORMAT: Output MUST be in ENGLISH. Do not output Chinese directly."
+
         if enable_split:
             prompt_req = f"""
             Role: Art Director. 
             Task: Create detailed prompts based on User Idea and Image. Type: {task_type}.
             {weight_instruction}
             {special_instruction}
+            {lang_instruction}
             IMPORTANT LOGIC: Split distinct outputs into separate prompts using "|||".
             STRICT OUTPUT FORMAT: Separate prompts with "|||". NO Markdown.
             User Idea: {user_idea}
@@ -60,6 +59,7 @@ def smart_analyze_image(model_name, image_file, task_type, user_idea, user_weigh
             Task: Create ONE single, high-quality prompt based on User Idea and Image. Type: {task_type}.
             {weight_instruction}
             {special_instruction}
+            {lang_instruction}
             STRICT OUTPUT FORMAT: Provide ONE unified prompt. NO "|||". NO Markdown.
             User Idea: {user_idea}
             Output: English Prompt Only.
@@ -73,9 +73,17 @@ def smart_analyze_image(model_name, image_file, task_type, user_idea, user_weigh
         result_data = []
         
         for p in prompt_list:
-            p_en = p.strip()
+            # 清洗文本：去除开头的 =、-、空格
+            p_en = p.strip().lstrip("=- ").strip()
+            
             if p_en:
+                # 翻译为中文
                 p_zh = translator.to_chinese(p_en)
+                
+                # 兜底：如果翻译回来还是空的（极少情况），用英文填充
+                if not p_zh: 
+                    p_zh = p_en
+                
                 result_data.append({"en": p_en, "zh": p_zh})
         
         return result_data
@@ -113,7 +121,6 @@ class HistoryManager:
             for item in st.session_state["history_queue"]:
                 col_thumb, col_info = st.columns([1, 2])
                 with col_thumb:
-                    # 确保这里调用正确
                     thumb = create_preview_thumbnail(item['image'], max_width=150)
                     st.image(thumb, use_container_width=True)
                 with col_info:
@@ -168,7 +175,6 @@ def create_preview_thumbnail(image_bytes, max_width=800):
         return image_bytes
 
 def show_preview_modal(image_bytes, caption):
-    # 简单的模态框模拟
     st.toast(f"正在全屏预览: {caption}")
     st.image(image_bytes, caption=caption, use_container_width=True)
 
@@ -186,6 +192,7 @@ class AITranslator:
 
     def to_chinese(self, text):
         if not text or not self.valid: return text
+        # 优化提示词，强制中文输出
         return self._run(text, "Simplified Chinese")
 
     def to_english(self, text):
@@ -193,9 +200,23 @@ class AITranslator:
         return self._run(text, "English")
 
     def _run(self, text, lang):
+        # 增加安全设置，防止因“误判”导致翻译被拦截（返回空）
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+        
         try:
-            prompt = f"Translate to {lang}. Output ONLY the translation. Text: {text}"
-            resp = self.model.generate_content(prompt)
+            prompt = f"Translate the following text to {lang}. Output ONLY the translation without any explanation. Text: {text}"
+            resp = self.model.generate_content(prompt, safety_settings=safety_settings)
             return resp.text.strip()
-        except:
-            return text
+        except Exception:
+            # 简单的重试机制
+            try:
+                time.sleep(0.5)
+                resp = self.model.generate_content(prompt)
+                return resp.text.strip()
+            except:
+                return text # 最终兜底：返回原文
