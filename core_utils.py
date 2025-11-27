@@ -8,12 +8,11 @@ import re
 from collections import deque
 
 # ==========================================
-# 🧠 双语智能分析 (Bilingual Analysis) [NEW]
+# 🧠 Tab 2 & 3: 双语基底分析 (强制 JSON)
 # ==========================================
 def analyze_image_bilingual(model_name, image_file, prompt_type="fashion"):
     """
-    专门用于 Tab 2 和 Tab 3 的双语读图函数。
-    强制 AI 输出 JSON 格式，同时包含英文和中文描述。
+    一次性让 AI 输出中文和英文描述，解决“中文框显示英文”的问题。
     """
     try:
         image_file.seek(0)
@@ -21,95 +20,110 @@ def analyze_image_bilingual(model_name, image_file, prompt_type="fashion"):
         model = genai.GenerativeModel(model_name)
 
         if prompt_type == "fashion":
-            # Tab 2: 改款分析 Prompt
+            # Tab 2: 改款分析
             sys_prompt = """
-            Analyze the fashion image. Describe the Silhouette, Fabric, Color, and Pattern in detail.
-            Output a JSON object with two keys:
-            1. "en": The description in English.
-            2. "zh": The description in Simplified Chinese (简体中文).
-            ENSURE the Chinese translation is accurate and natural fashion terminology.
+            Analyze the fashion image details (Silhouette, Fabric, Color, Pattern).
+            Output a JSON object with exactly two keys:
+            {
+                "zh": "此处填写详细的中文描述(Simplified Chinese)",
+                "en": "Detailed description in English"
+            }
             Output JSON ONLY. No markdown blocks.
             """
         else:
-            # Tab 3: 背景置换分析 Prompt
+            # Tab 3: 背景锁定分析
             sys_prompt = """
-            Describe the FOREGROUND PRODUCT ONLY in detail. Ignore the background.
-            Output a JSON object with two keys:
-            1. "en": The description in English.
-            2. "zh": The description in Simplified Chinese (简体中文).
-            ENSURE the Chinese translation is accurate.
+            Describe the FOREGROUND PRODUCT ONLY. Ignore background.
+            Output a JSON object with exactly two keys:
+            {
+                "zh": "此处填写产品的详细中文描述(Simplified Chinese)",
+                "en": "Detailed description in English"
+            }
             Output JSON ONLY. No markdown blocks.
             """
 
-        # 生成内容
+        # 生成并解析
         response = model.generate_content([sys_prompt, img_obj])
         txt = response.text.strip()
         
-        # 清洗 Markdown 标记 (如果 AI 加了 ```json ... ```)
-        if txt.startswith("```"):
-            txt = re.sub(r"^```json\s*", "", txt)
-            txt = re.sub(r"^```\s*", "", txt)
-            txt = re.sub(r"\s*```$", "", txt)
+        # 清洗 JSON 格式 (去除 ```json 等包裹)
+        txt = clean_json_string(txt)
         
-        # 解析 JSON
-        try:
-            data = json.loads(txt)
-            return data.get("en", ""), data.get("zh", "")
-        except json.JSONDecodeError:
-            # 兜底：如果 JSON 解析失败，尝试用简单的规则分割或直接返回原文本
-            st.warning("AI 输出格式轻微异常，正在尝试修复...")
-            return txt, "自动翻译失败，请参考英文版"
+        data = json.loads(txt)
+        return data.get("en", ""), data.get("zh", "")
 
     except Exception as e:
-        st.error(f"双语分析失败: {str(e)}")
-        return "", ""
+        # 如果 JSON 解析失败，尝试用正则提取或者降级处理
+        st.error(f"AI 分析格式异常，正在重试... ({str(e)})")
+        return "", "分析失败，请重试"
 
 # ==========================================
-# 🧠 智能分析核心 (Smart Analysis Engine - Tab 1)
+# 🧠 Tab 1: 智能创意分析 (强制 JSON 列表)
 # ==========================================
-def smart_analyze_image(model_name, image_file, task_type, user_idea, user_weight, enable_split, translator):
+def smart_analyze_image(model_name, image_file, task_type, user_idea, user_weight, enable_split):
     """
-    Tab 1 的复杂分析逻辑 (保持原样，微调稳定性)
+    Tab 1 的复杂创意生成，同样强制双语 JSON 输出。
     """
     try:
         image_file.seek(0)
         img_obj = Image.open(image_file)
         model = genai.GenerativeModel(model_name)
         
-        special_instruction = ""
-        if "Product Only" in task_type:
-            special_instruction = "Focus on product details, lighting, and texture."
+        weight_desc = f"User Weight: {user_weight} (1.0=User Idea dominant, 0.0=Image dominant)."
         
-        weight_instruction = f"User Weight: {user_weight}. (1.0 = Follow User Idea strictly, 0.0 = Follow Image strictly)."
-        lang_instruction = "Output strictly in English. Use '|||' to separate multiple prompts if needed."
-
+        # 构造强制 JSON 的 Prompt
         prompt_req = f"""
         Role: Art Director. Task: Create prompt(s) for {task_type}.
         User Idea: {user_idea}
-        {weight_instruction}
-        {special_instruction}
-        {lang_instruction}
-        Output pure text, no markdown.
+        {weight_desc}
+        
+        Output a JSON LIST of objects. Each object must have "zh" and "en" keys.
+        Example:
+        [
+            {{ "zh": "中文提示词1...", "en": "English prompt 1..." }},
+            {{ "zh": "中文提示词2...", "en": "English prompt 2..." }}
+        ]
+        
+        IMPORTANT: 
+        1. If 'enable_split' is true, allow multiple objects. If false, return list with 1 object.
+        2. Ensure "zh" is Simplified Chinese and "en" is English.
+        3. Output JSON ONLY.
         """
 
         response = model.generate_content([prompt_req, img_obj])
-        raw_text = response.text.strip()
+        txt = response.text.strip()
         
-        prompt_list = raw_text.split("|||")
-        result_data = []
+        txt = clean_json_string(txt)
+        result_list = json.loads(txt)
         
-        for p in prompt_list:
-            p_en = p.strip().lstrip("=- ").strip()
-            if p_en:
-                p_zh = translator.to_chinese(p_en)
-                if not p_zh: p_zh = p_en
-                result_data.append({"en": p_en, "zh": p_zh})
-        
-        return result_data
+        # 格式化为标准格式
+        final_data = []
+        if isinstance(result_list, list):
+            for item in result_list:
+                final_data.append({
+                    "en": item.get("en", ""),
+                    "zh": item.get("zh", "")
+                })
+        elif isinstance(result_list, dict):
+            final_data.append({
+                "en": result_list.get("en", ""),
+                "zh": result_list.get("zh", "")
+            })
+            
+        return final_data
 
     except Exception as e:
-        st.error(f"Tab 1 分析模块出错: {str(e)}")
+        st.error(f"创意分析失败: {str(e)}")
         return []
+
+# --- 辅助工具 ---
+def clean_json_string(txt):
+    """清洗 AI 输出的 JSON 字符串"""
+    if txt.startswith("```"):
+        txt = re.sub(r"^```json\s*", "", txt)
+        txt = re.sub(r"^```\s*", "", txt)
+        txt = re.sub(r"\s*```$", "", txt)
+    return txt
 
 # ==========================================
 # 🗂️ 历史记录核心
@@ -143,7 +157,7 @@ class HistoryManager:
                 st.divider()
 
 # ==========================================
-# 🛠️ 图片/工具核心
+# 🛠️ 图片/翻译工具
 # ==========================================
 @st.cache_data(show_spinner=False)
 def process_image_for_download(image_bytes, format="PNG", quality=95):
@@ -184,8 +198,13 @@ class AITranslator:
             self.model = genai.GenerativeModel("models/gemini-flash-latest")
             self.valid = True
         else: self.valid = False
-    def to_chinese(self, t): return self._run(t, "Simplified Chinese") if self.valid and t else t
-    def to_english(self, t): return self._run(t, "English") if self.valid and t else t
-    def _run(self, text, lang):
-        try: return self.model.generate_content(f"Translate to {lang}. Output ONLY text: {text}").text.strip()
+    
+    def to_english(self, text):
+        """将中文翻译成英文，用于同步逻辑"""
+        if not text or not self.valid: return text
+        try:
+            prompt = f"Translate the following Chinese text to English for an AI image generator prompt. Output ONLY the English text.\nText: {text}"
+            return self.model.generate_content(prompt).text.strip()
         except: return text
+
+    def to_chinese(self, text): return text # 占位，新逻辑主要依赖 to_english
