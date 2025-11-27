@@ -9,26 +9,38 @@ from collections import deque
 
 # --- 0. 基础设置与核心库引入 ---
 sys.path.append(os.path.abspath('.'))
+
+# 1. 尝试导入 auth (如果不存在则跳过，不影响核心功能)
 try:
     import auth
+    HAS_AUTH = True
+except ImportError:
+    HAS_AUTH = False
+
+# 2. 尝试导入核心工具 (核心依赖，如果失败则使用备用)
+try:
     from core_utils import AITranslator, process_image_for_download, create_preview_thumbnail, HistoryManager, show_preview_modal
 except ImportError:
+    # 备用类定义 (防止报错)
     class AITranslator:
         def to_english(self, t): return t
         def to_chinese(self, t): return t
     class HistoryManager:
         def add(self, a, b, c): pass
         def render_sidebar(self): pass
-    # FIX: 统一参数名为 format，以防万一
+    
+    # 修复：备用函数必须接收 format 参数
     def process_image_for_download(b, format="PNG"): return b, "image/png"
-    def create_preview_thumbnail(b): return b
+    
+    # 修复：备用函数必须接收 max_width 参数 (这是之前报错的根源)
+    def create_preview_thumbnail(b, max_width=800): return b
+    
     def show_preview_modal(b, c): pass
-    pass 
 
 st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
 
-# 门禁检查
-if 'auth' in sys.modules:
+# 门禁检查 (仅在 auth 存在时启用)
+if HAS_AUTH and 'auth' in sys.modules:
     if not auth.check_password():
         st.stop()
 
@@ -110,9 +122,6 @@ def generate_image_call(model_name, prompt, image_input, ratio_suffix):
         print(f"Error: {e}")
         return None
     return None
-
-# 双语同步回调函数 (Tab 1用)
-# Tab 2 和 Tab 3 使用内部定义的函数以获得更好的局部状态控制
 
 # --- 侧边栏 ---
 with st.sidebar:
@@ -242,6 +251,7 @@ with tab_workflow:
                     with col_zh:
                         key_zh = f"std_zh_{i}"
                         if key_zh not in st.session_state: st.session_state[key_zh] = p_data["zh"]
+                        # TAB 1 的同步逻辑：更新列表中的数据
                         def update_en(idx=i):
                             new_zh = st.session_state[f"std_zh_{idx}"]
                             new_en = st.session_state.translator.to_english(new_zh)
@@ -274,7 +284,7 @@ with tab_workflow:
                         for n in range(num_images):
                             with st.spinner(f"执行任务 {task_idx+1} (第 {n+1} 张)..."):
                                 active_file.seek(0)
-                                # 再次确认读取
+                                # 再次确认读取，防止指针问题
                                 img_pil = Image.open(active_file)
                                 img_data = generate_image_call(google_model, prompt_en, img_pil, RATIO_MAP[selected_ratio_key])
                                 if img_data:
@@ -290,7 +300,6 @@ with tab_workflow:
         st.subheader("🖼️ 结果预览")
         if active_file:
             with st.expander("🔍 当前参考图", expanded=True):
-                # FIX: 强壮的预览逻辑 - seek(0) + Image.open
                 active_file.seek(0)
                 st.image(Image.open(active_file), use_container_width=True)
 
@@ -302,8 +311,7 @@ with tab_workflow:
                 
                 c_btn1, c_btn2 = st.columns([1.5, 1])
                 with c_btn1:
-                    # FIX: 使用位置参数，避免 format= 报错
-                    final_bytes, mime = process_image_for_download(img_bytes, download_format)
+                    final_bytes, mime = process_image_for_download(img_bytes, format=download_format)
                     st.download_button(f"📥 下载", data=final_bytes, file_name=f"std_{idx}.{download_format.lower()}", mime=mime, use_container_width=True)
                 with c_btn2:
                     if st.button(f"🔍 放大", key=f"zoom_std_{idx}", use_container_width=True):
@@ -317,6 +325,7 @@ with tab_variants:
     
     cv_left, cv_right = st.columns([1.5, 1], gap="large")
 
+    # TAB 2 的同步逻辑：更新全局变量 var_prompt_en
     def update_var_en():
         val = st.session_state.var_prompt_zh
         if val:
@@ -349,6 +358,7 @@ with tab_variants:
         
         vp_col1, vp_col2 = st.columns(2)
         with vp_col1:
+            # 绑定 on_change 事件到同步函数
             st.text_area("🇨🇳 特征描述 (中文 - 可编辑)", key="var_prompt_zh", height=100, on_change=update_var_en)
         with vp_col2:
             st.text_area("🇺🇸 Feature Desc (English - Auto)", key="var_prompt_en", height=100, disabled=True)
@@ -368,12 +378,10 @@ with tab_variants:
     with cv_right:
         st.subheader("🖼️ 结果预览")
         
-        # --- FIX: 强壮的原图预览 ---
         if var_file:
             with st.expander("🔍 原图预览", expanded=True):
                 var_file.seek(0)
                 st.image(Image.open(var_file), use_container_width=True)
-        # ------------------------
 
         if start_batch and var_file and st.session_state["var_prompt_en"]:
             st.session_state["batch_results"] = []
@@ -386,6 +394,7 @@ with tab_variants:
                 try:
                     var_file.seek(0)
                     v_img = Image.open(var_file)
+                    # AI 读取的是 session_state['var_prompt_en']，它已经被同步函数更新了
                     prompt = f"Task: Restyling. Base: {st.session_state['var_prompt_en']}. Constraint: {sys_instruct}. Mod Request: {user_mod}. Var ID: {i}"
                     img_data = generate_image_call(var_model, prompt, v_img, "")
                     if img_data:
@@ -397,15 +406,14 @@ with tab_variants:
                             st.image(thumb, use_container_width=True)
                             if st.button("🔍", key=f"zoom_var_{i}"):
                                 show_preview_modal(img_data, f"Var {i+1}")
-                except: pass
+                except Exception as e: print(f"VarGen Error: {e}")
                 my_bar.progress((i+1)/batch_count)
                 time.sleep(1)
         
         if st.session_state["batch_results"]:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["batch_results"]):
-                # FIX: 使用位置参数
-                final_bytes, mime = process_image_for_download(img_bytes, download_format)
+                final_bytes, mime = process_image_for_download(img_bytes, format=download_format)
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"var_{idx}.{download_format.lower()}", mime=mime)
 
 # ==========================================
@@ -416,6 +424,7 @@ with tab_background:
     
     cb_left, cb_right = st.columns([1.5, 1], gap="large")
 
+    # TAB 3 的同步逻辑：更新全局变量 bg_prompt_en
     def update_bg_en():
         val = st.session_state.bg_prompt_zh
         if val:
@@ -447,6 +456,7 @@ with tab_background:
         st.markdown("#### Step 2: 换背景设置")
         bp_col1, bp_col2 = st.columns(2)
         with bp_col1:
+            # 绑定 on_change 事件到同步函数
             st.text_area("🇨🇳 产品特征 (中文 - 可编辑)", key="bg_prompt_zh", height=100, on_change=update_bg_en)
         with bp_col2:
             st.text_area("🇺🇸 Product Features (English - Auto)", key="bg_prompt_en", height=100, disabled=True)
@@ -459,12 +469,10 @@ with tab_background:
     with cb_right:
         st.subheader("🖼️ 结果预览")
 
-        # --- FIX: 强壮的原图预览 ---
         if bg_file:
             with st.expander("🔍 原图预览", expanded=True):
                 bg_file.seek(0)
                 st.image(Image.open(bg_file), use_container_width=True)
-        # ------------------------
 
         if start_bg and bg_file and st.session_state["bg_prompt_en"]:
             st.session_state["bg_results"] = []
@@ -476,6 +484,7 @@ with tab_background:
                 try:
                     bg_file.seek(0)
                     v_img = Image.open(bg_file)
+                    # AI 读取的是 session_state['bg_prompt_en']
                     prompt = f"Product BG Swap. Product: {st.session_state['bg_prompt_en']}. New BG: {bg_desc}. Constraint: KEEP PRODUCT SAME. Var ID: {i}"
                     img_data = generate_image_call(bg_model, prompt, v_img, "")
                     if img_data:
@@ -487,13 +496,12 @@ with tab_background:
                             st.image(thumb, use_container_width=True)
                             if st.button("🔍", key=f"zoom_bg_{i}"):
                                 show_preview_modal(img_data, f"Scene {i+1}")
-                except: pass
+                except Exception as e: print(f"BGGen Error: {e}")
                 bg_bar.progress((i+1)/bg_count)
                 time.sleep(1)
         
         if st.session_state["bg_results"]:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["bg_results"]):
-                # FIX: 使用位置参数
-                final_bytes, mime = process_image_for_download(img_bytes, download_format)
+                final_bytes, mime = process_image_for_download(img_bytes, format=download_format)
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"scene_{idx}.{download_format.lower()}", mime=mime)
