@@ -10,20 +10,22 @@ from collections import deque
 # --- 0. 基础设置与核心库引入 ---
 sys.path.append(os.path.abspath('.'))
 
-# 1. 单独尝试导入鉴权模块 (如果缺失不影响核心功能)
+# 设置页面配置
+st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
+
+# 1. 尝试导入鉴权模块 (可选)
 try:
     import auth
     auth_available = True
 except ImportError:
     auth_available = False
 
-# 2. 单独导入核心工具 (必须成功，否则报错或是使用降级版)
+# 2. 尝试导入核心工具 (必须)
 try:
     from core_utils import AITranslator, process_image_for_download, create_preview_thumbnail, HistoryManager, show_preview_modal
 except ImportError as e:
-    # 打印错误以便调试，而不是静默失败
-    print(f"Core Utils Import Error: {e}")
-    # 定义降级类以防止程序直接崩溃
+    st.error(f"核心模块导入失败: {e}")
+    # 降级类定义，防止直接崩溃
     class AITranslator:
         def to_english(self, t): return t
         def to_chinese(self, t): return t
@@ -32,19 +34,10 @@ except ImportError as e:
         def render_sidebar(self): pass
     def process_image_for_download(b, f="PNG"): return b, "image/png"
     def create_preview_thumbnail(b): return b
-    def show_preview_modal(b, c): st.warning("预览功能未正确加载")
-
-st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
-
-# 门禁检查 (使用新的 auth_available 标志)
-if auth_available:
-    if not auth.check_password():
-        st.stop()
-
-st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
+    def show_preview_modal(b, c): st.warning("预览功能不可用")
 
 # 门禁检查
-if 'auth' in sys.modules:
+if auth_available:
     if not auth.check_password():
         st.stop()
 
@@ -139,6 +132,7 @@ def sync_bg_zh_to_en():
 # --- 侧边栏 ---
 with st.sidebar:
     st.title("🗂️ 工作区")
+    st.session_state.history_manager.render_sidebar()
     download_format = st.radio("📥 下载格式", ["PNG", "JPEG"], horizontal=True)
 
 
@@ -328,7 +322,7 @@ with tab_workflow:
                         show_preview_modal(img_bytes, f"Result {idx+1}")
 
 # ==========================================
-# TAB 2: ⚡ 变体改款 (Restyling) - 完整实现
+# TAB 2: ⚡ 变体改款 (Restyling)
 # ==========================================
 with tab_variants:
     st.markdown("### ⚡ 服装改款工厂")
@@ -414,7 +408,7 @@ with tab_variants:
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"var_{idx}.{download_format.lower()}", mime=mime)
 
 # ==========================================
-# TAB 3: 🏞️ 场景置换 (Scene Swap) - 完整实现
+# TAB 3: 🏞️ 场景置换 (Scene Swap)
 # ==========================================
 with tab_background:
     st.markdown("### 🏞️ 场景批量置换")
@@ -462,16 +456,12 @@ with tab_background:
             bg_grid = st.columns(2)
             bg_bar = st.progress(0)
             
-  for i in range(bg_count):
-                # 移除了外层的 try...except，或者至少打印错误
+            for i in range(bg_count):
                 try:
                     bg_file.seek(0)
                     v_img = Image.open(bg_file)
                     prompt = f"Product BG Swap. Product: {st.session_state['bg_prompt_en']}. New BG: {bg_desc}. Constraint: KEEP PRODUCT SAME. Var ID: {i}"
-                    
-                    # 生成图片
                     img_data = generate_image_call(bg_model, prompt, v_img, "")
-                    
                     if img_data:
                         st.session_state["bg_results"].append(img_data)
                         # 存入历史记录
@@ -480,14 +470,10 @@ with tab_background:
                         with bg_grid[i%2]:
                             thumb = create_preview_thumbnail(img_data, max_width=300)
                             st.image(thumb, use_container_width=True)
-                            # 这里调用 modal，确保 core_utils 已更新
                             if st.button("🔍", key=f"zoom_bg_{i}"):
                                 show_preview_modal(img_data, f"Scene {i+1}")
-                    else:
-                        st.error(f"第 {i+1} 张生成返回为空，可能是 API 拒绝了请求。")
-                        
                 except Exception as e:
-                    st.error(f"生成出错: {e}") # 显式打印错误信息
+                    st.error(f"生成错误: {e}")
                 
                 bg_bar.progress((i+1)/bg_count)
                 time.sleep(1)
