@@ -10,7 +10,6 @@ import time
 sys.path.append(os.path.abspath('.'))
 
 # --- 定义备用（Fallback）类和函数 ---
-# 关键修复：确保 Mock 函数的参数签名与 core_utils 完全一致！
 class MockTranslator:
     def to_english(self, t): return t
     def to_chinese(self, t): return t
@@ -20,8 +19,8 @@ class MockHistoryManager:
     def render_sidebar(self): pass
 
 def mock_process_image(image_bytes, format="PNG"): return image_bytes, "image/png"
-def mock_create_thumbnail(image_bytes, max_width=800): return image_bytes # 修复：加上 max_width
-def mock_analyze(model, img, type, idea, weight, split, trans): return [] # Mock 智能分析
+def mock_create_thumbnail(image_bytes, max_width=800): return image_bytes
+def mock_analyze(model, img, type, idea, weight, split, trans): return []
 def mock_show_modal(b, c): pass
 
 # --- 尝试导入核心工具 ---
@@ -130,7 +129,6 @@ with tab_workflow:
             if not active_file: st.warning("请上传图片")
             else:
                 with st.spinner("AI 正在分析..."):
-                    # 调用 core_utils 中的新函数，大大简化此处代码
                     res = smart_analyze_image(
                         ana_model, active_file, task_type, user_idea, user_weight, enable_split, st.session_state.translator
                     )
@@ -142,11 +140,12 @@ with tab_workflow:
             for i, p_data in enumerate(st.session_state["std_prompt_data"]):
                 with st.expander(f"任务 {i+1}", expanded=True):
                     cz, ce = st.columns(2)
-                    # 同步逻辑：左改右变
+                    # 同步逻辑：左改右变 + Toast 反馈
                     def sync_std(idx=i):
                         nz = st.session_state[f"sz_{idx}"]
                         st.session_state["std_prompt_data"][idx]["zh"] = nz
                         st.session_state["std_prompt_data"][idx]["en"] = st.session_state.translator.to_english(nz)
+                        st.toast(f"✅ 任务 {idx+1}：中文已同步翻译为英文") # 增加反馈
                     
                     cz.text_area("中文", key=f"sz_{i}", value=p_data["zh"], on_change=sync_std, height=100)
                     ce.text_area("英文", value=p_data["en"], disabled=True, height=100)
@@ -155,6 +154,10 @@ with tab_workflow:
             gen_model = cg1.selectbox("生成模型", GOOGLE_IMG_MODELS)
             ratio = cg2.selectbox("比例", list(RATIO_MAP.keys()))
             num = cg3.number_input("数量", 1, 4, 1)
+
+            # 画幅友好提示
+            if "flash" in gen_model.lower() and "1:1" not in ratio:
+                st.info("💡 提示：您选择了 Flash 模型。该模型目前主要支持 1:1 画幅，选择其他比例可能效果不如 Pro 模型，但速度更快。")
 
             if st.button("🎨 开始生成", type="primary"):
                 st.session_state["std_images"] = []
@@ -166,7 +169,6 @@ with tab_workflow:
                         for _ in range(num):
                             active_file.seek(0)
                             img = Image.open(active_file)
-                            # 使用最新的英文 Prompt
                             res_img = generate_image_call(gen_model, t_data["en"], img, RATIO_MAP[ratio])
                             if res_img:
                                 st.session_state["std_images"].append(res_img)
@@ -191,14 +193,16 @@ with tab_workflow:
                 d_btn.download_button("下载", fb, file_name=f"s_{idx}.{download_format}", mime=fm, use_container_width=True)
                 if z_btn.button("🔍", key=f"zs_{idx}"): show_preview_modal(bits, f"R {idx+1}")
 
-# --- TAB 2: 变体改款 (修复双语同步) ---
+# --- TAB 2: 变体改款 (修复双语同步 + 反馈) ---
 with tab_variants:
     c1, c2 = st.columns([1.5, 1], gap="large")
     
-    # 同步函数
+    # 同步函数 + 反馈
     def sync_var():
         v = st.session_state.var_prompt_zh
-        if v: st.session_state.var_prompt_en = st.session_state.translator.to_english(v)
+        if v: 
+            st.session_state.var_prompt_en = st.session_state.translator.to_english(v)
+            st.toast("✅ 中文已同步翻译为英文")
 
     with c1:
         st.markdown("#### Step 1: 读取")
@@ -206,8 +210,9 @@ with tab_variants:
         if st.button("👁️ 读图") and vf:
             with st.spinner("分析中..."):
                 vf.seek(0)
+                # 强化 Prompt：确保输出纯英文，以便后续准确翻译
                 txt = genai.GenerativeModel("models/gemini-flash-latest").generate_content(
-                    ["Describe fashion details: Silhouette, Fabric, Color. Pure text.", Image.open(vf)]
+                    ["Describe fashion details: Silhouette, Fabric, Color. Output pure English text.", Image.open(vf)]
                 ).text.strip()
                 st.session_state.var_prompt_en = txt
                 st.session_state.var_prompt_zh = st.session_state.translator.to_chinese(txt)
@@ -223,13 +228,16 @@ with tab_variants:
         req = st.text_area("改款指令")
         cnt = st.slider("数量", 1, 4, 1, key="vc")
         vm = st.selectbox("模型", GOOGLE_IMG_MODELS, key="vm")
+
+        # 画幅友好提示 (变体模式通常默认保持比例，但如果模型有特殊限制也可提示)
+        if "flash" in vm.lower():
+             st.caption("ℹ️ Flash 模型处理速度极快，适合快速验证改款创意。")
         
         if st.button("🚀 改款") and vf:
             st.session_state.batch_results = []
             vb = st.progress(0)
             for i in range(cnt):
                 vf.seek(0)
-                # 读取更新后的英文 Prompt
                 p = f"Restyle. Base: {st.session_state.var_prompt_en}. Mode: {mode}. Request: {req}."
                 r = generate_image_call(vm, p, Image.open(vf), "")
                 if r:
@@ -249,13 +257,15 @@ with tab_variants:
                 fb, fm = process_image_for_download(b, format=download_format)
                 st.download_button(f"下载 {idx+1}", fb, file_name=f"v_{idx}.{download_format}", mime=fm)
 
-# --- TAB 3: 场景置换 (修复双语同步) ---
+# --- TAB 3: 场景置换 (修复双语同步 + 反馈) ---
 with tab_background:
     c1, c2 = st.columns([1.5, 1], gap="large")
     
     def sync_bg():
         v = st.session_state.bg_prompt_zh
-        if v: st.session_state.bg_prompt_en = st.session_state.translator.to_english(v)
+        if v: 
+            st.session_state.bg_prompt_en = st.session_state.translator.to_english(v)
+            st.toast("✅ 中文已同步翻译为英文")
 
     with c1:
         st.markdown("#### Step 1: 锁定")
@@ -263,8 +273,9 @@ with tab_background:
         if st.button("🔒 锁定") and bf:
             with st.spinner("分析..."):
                 bf.seek(0)
+                # 强化 Prompt：确保输出纯英文
                 txt = genai.GenerativeModel("models/gemini-flash-latest").generate_content(
-                    ["Describe FOREGROUND PRODUCT ONLY. Pure text.", Image.open(bf)]
+                    ["Describe FOREGROUND PRODUCT ONLY. Output pure English text.", Image.open(bf)]
                 ).text.strip()
                 st.session_state.bg_prompt_en = txt
                 st.session_state.bg_prompt_zh = st.session_state.translator.to_chinese(txt)
@@ -278,6 +289,10 @@ with tab_background:
         bg_req = st.text_area("新背景")
         bcnt = st.slider("数量", 1, 4, 1, key="bc")
         bm = st.selectbox("模型", GOOGLE_IMG_MODELS, index=1, key="bm")
+
+        # 画幅友好提示
+        if "flash" in bm.lower():
+             st.caption("ℹ️ Flash 模型在场景置换中表现快速且稳定。")
         
         if st.button("🚀 换背景") and bf:
             st.session_state.bg_results = []
