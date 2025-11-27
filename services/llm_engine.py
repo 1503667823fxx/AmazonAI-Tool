@@ -21,7 +21,6 @@ class LLMEngine:
         except: return text
 
     def analyze_image_style(self, image, prompt_instruction):
-        # 此函数保留备用
         if not self.valid: return "Error"
         try:
             model = genai.GenerativeModel("models/gemini-flash-latest")
@@ -31,62 +30,79 @@ class LLMEngine:
 
     def optimize_art_director_prompt(self, user_idea, task_type, user_weight, style_key, image_input=None, enable_split=False):
         """
-        CoT 核心逻辑 (V3 听话版)：
-        1. 移除冗余描述。
-        2. 强制优先响应用户指令。
+        V4 强力意图理解版：
+        解决“听不懂人话”的问题。强制 AI 将用户的抽象修改要求（如‘换成好莱坞模特’）
+        转化为具体的视觉描述（如‘Caucasian female, blonde hair, western facial features’），
+        从而在生图时覆盖原图的特征。
         """
         if not self.valid: return []
 
         # 1. 获取风格数据
         style_data = PRESETS.get(style_key, PRESETS["💡 默认 (None)"])
         style_desc = style_data["desc"]
-        style_light = style_data["lighting"]
 
-        # 2. 处理图片输入
-        images = []
-        img_instruction = ""
+        # 2. 构建输入数据
+        inputs = []
+        img_context = ""
         if image_input:
             if isinstance(image_input, list):
-                images = image_input
-                img_instruction = f"【Visual Context】: {len(images)} reference images provided. Use them for Composition and Lighting reference ONLY."
+                inputs.extend(image_input)
+                img_context = f"provided {len(image_input)} reference images"
             else:
-                images = [image_input]
-                img_instruction = "【Visual Context】: 1 reference image provided. Use it for Composition/Lighting reference ONLY."
+                inputs.append(image_input)
+                img_context = "provided 1 reference image"
 
-        # 3. 构建强指令 Prompt (针对痛点优化)
-        cot_instructions = f"""
-        Role: Expert Prompt Engineer for Google Imagen.
+        # 3. 构建 CoT (思维链) 系统指令
+        # 核心改动：要求 AI 先检测冲突，再重写描述
+        system_prompt = f"""
+        Role: Senior Visual Prompt Engineer.
         
-        【Input Data】
-        - User Intent: "{user_idea}"
-        - Style Preset: "{style_key}" ({style_desc})
-        - Reference Image: Provided.
+        【Goal】
+        Transform the User's Request into a HIGHLY DESCRIPTIVE English prompt for image generation.
+        You are looking at {img_context}.
         
-        【CRITICAL RULES】
-        1. **USER IS KING**: If User Intent conflicts with the Reference Image (e.g., image shows a man, user says "female model"), **OBEY THE USER**. Ignore the image content for the subject.
-        2. **NO CAPTIONING**: Do NOT describe the reference image content unless the user asks to "keep original". The image will be passed to the generation model directly ("img2img"), so we don't need to describe it in words.
-        3. **FOCUS ON QUALITY**: Your job is to ADD quality boosters (e.g., "8k, commercial lighting, {style_light}") and Style keywords.
-        4. **KEEP IT CONCISE**: Output clean, keyword-rich prompts.
+        【User Request】: "{user_idea}"
+        【Target Style】: "{style_key}" ({style_desc})
         
-        【Output Requirement】
-        - Output English Prompts ONLY.
-        - If {enable_split} is True, split distinct variations with "|||".
-        - Just the raw prompt string.
+        【CRITICAL THINKING PROCESS】
+        1. **ANALYZE DELTA**: Compare User Request vs. Reference Image. 
+           - Does user want to change the Subject? (e.g. "change model", "swap into dog")
+           - Does user want to change the Background? (e.g. "at a party", "on beach")
+           - Does user want to change the Clothes?
+           
+        2. **OVERRIDE RULE (The most important rule)**: 
+           - If user asks to CHANGE something, you MUST describe the NEW element in EXTREME DETAIL.
+           - Example: User says "Hollywood Model". You write: "A glamorous Hollywood supermodel, Caucasian female, American facial features, blonde wavy hair, blue eyes, confident smile, western aesthetic." 
+           - **DO NOT** just say "Hollywood model". The AI needs VISUAL ADJECTIVES to override the reference image.
+           
+        3. **COMPOSITION**: Keep the pose/composition from reference image unless told otherwise.
+
+        【Output Format】
+        - Output ONLY the final English prompt string. 
+        - Include high quality tags: 8k, photorealistic, masterpiece, {style_desc}.
+        - Do not output explanations.
         """
+        
+        inputs.insert(0, system_prompt)
 
         try:
-            model = genai.GenerativeModel("models/gemini-flash-latest")
-            inputs = [cot_instructions] + images
-            response = model.generate_content(inputs)
+            model = genai.GenerativeModel("models/gemini-1.5-flash") # 建议使用 1.5 flash，理解力更好
+            
+            # 设置生成配置，降低随机性，提高遵从度
+            config = genai.types.GenerationConfig(
+                temperature=0.4, 
+                candidate_count=1
+            )
+            
+            response = model.generate_content(inputs, generation_config=config)
             raw_text = response.text.strip()
             
-            raw_text = raw_text.replace("Prompt:", "").replace("Here is the prompt:", "").strip()
-            prompts = [p.strip() for p in raw_text.split("|||") if p.strip()]
+            # 清理可能产生的 markdown 格式
+            final_prompt = raw_text.replace("```text", "").replace("```", "").strip()
             
-            # 兜底：如果AI没生成，至少把用户的话传回去
-            if not prompts: return [user_idea]
-            return prompts
+            return [final_prompt]
             
         except Exception as e:
-            print(f"CoT Error: {e}")
-            return [f"{user_idea}, {style_desc}"]
+            print(f"Prompt Optimization Error: {e}")
+            # 降级处理：简单的拼接
+            return [f"{user_idea}, {style_desc}, high quality, 8k"]
