@@ -9,10 +9,21 @@ from collections import deque
 
 # --- 0. 基础设置与核心库引入 ---
 sys.path.append(os.path.abspath('.'))
+
+# 1. 单独尝试导入鉴权模块 (如果缺失不影响核心功能)
 try:
     import auth
-    from core_utils import AITranslator, process_image_for_download, create_preview_thumbnail, HistoryManager, show_preview_modal
+    auth_available = True
 except ImportError:
+    auth_available = False
+
+# 2. 单独导入核心工具 (必须成功，否则报错或是使用降级版)
+try:
+    from core_utils import AITranslator, process_image_for_download, create_preview_thumbnail, HistoryManager, show_preview_modal
+except ImportError as e:
+    # 打印错误以便调试，而不是静默失败
+    print(f"Core Utils Import Error: {e}")
+    # 定义降级类以防止程序直接崩溃
     class AITranslator:
         def to_english(self, t): return t
         def to_chinese(self, t): return t
@@ -21,8 +32,14 @@ except ImportError:
         def render_sidebar(self): pass
     def process_image_for_download(b, f="PNG"): return b, "image/png"
     def create_preview_thumbnail(b): return b
-    def show_preview_modal(b, c): pass
-    pass 
+    def show_preview_modal(b, c): st.warning("预览功能未正确加载")
+
+st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
+
+# 门禁检查 (使用新的 auth_available 标志)
+if auth_available:
+    if not auth.check_password():
+        st.stop()
 
 st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
 
