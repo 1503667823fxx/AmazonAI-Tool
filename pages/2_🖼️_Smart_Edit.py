@@ -145,7 +145,7 @@ with t1:
             
             # 画幅警告
             if "flash" in gm.lower() and "1:1" not in rt:
-                st.warning("⚠️ 注意：您选择了 Flash 模型但画幅非 1:1。Flash 模型在非正方形画幅下可能会自动裁剪或产生黑边，建议切换为 Pro 模型或使用 1:1 画幅。")
+                st.warning("⚠️ 注意：Flash 模型建议使用正方形构图，非 1:1 图片可能会被裁剪。")
 
             if st.button("🎨 生成", key="btn1"):
                 st.session_state["std_images"] = []
@@ -200,10 +200,13 @@ with t2:
                     st.rerun()
 
         st.markdown("#### Step 2: 改款")
-        tz, te = st.tabs(["🇨🇳 中文版 (编辑)", "🇺🇸 英文版 (只读)"])
-        with tz:
+        
+        # 修复 Tab2 双语框显示逻辑
+        t2_zh, t2_en = st.tabs(["🇨🇳 中文版 (编辑)", "🇺🇸 英文版 (只读)"])
+        
+        with t2_zh:
             st.text_area("特征描述 (中文)", key="var_prompt_zh", on_change=sync_var, height=120)
-        with te:
+        with t2_en:
             st.text_area("AI Used Features", value=st.session_state.var_prompt_en, disabled=True, height=120, key="var_used_features_en")
 
         md = st.selectbox("模式", ["微调 (Texture)", "中改 (Details)", "大改 (Silhouette)"])
@@ -269,10 +272,13 @@ with t3:
                     st.rerun()
 
         st.markdown("#### Step 2: 换背景")
-        tz, te = st.tabs(["🇨🇳 中文版 (编辑)", "🇺🇸 英文版 (只读)"])
-        with tz:
+        
+        # 修复 Tab3 双语框显示逻辑
+        t3_zh, t3_en = st.tabs(["🇨🇳 中文版 (编辑)", "🇺🇸 英文版 (只读)"])
+        
+        with t3_zh:
             st.text_area("产品特征 (中文)", key="bg_prompt_zh", on_change=sync_bg, height=120)
-        with te:
+        with t3_en:
             st.text_area("AI Used Features", value=st.session_state.bg_prompt_en, disabled=True, height=120, key="bg_used_features_en")
             
         breq = st.text_area("新背景")
