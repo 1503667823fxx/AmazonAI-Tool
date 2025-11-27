@@ -4,7 +4,8 @@ from collections import deque
 
 class HistoryManager:
     """
-    [纯逻辑层] 只负责管理 Session State 中的数据，不包含任何 UI 代码。
+    [纯逻辑层] 管理 Session State 中的数据。
+    新增：删除指定记录、清空记录的功能。
     """
     def __init__(self, key="history_queue", max_len=20):
         self.key = key
@@ -27,3 +28,14 @@ class HistoryManager:
     def get_all(self):
         """获取所有数据"""
         return list(st.session_state[self.key])
+
+    def delete(self, item_id):
+        """删除指定 ID 的记录"""
+        # deque 不支持直接 remove by key，需重建
+        current_list = list(st.session_state[self.key])
+        new_list = [item for item in current_list if item['id'] != item_id]
+        st.session_state[self.key] = deque(new_list, maxlen=st.session_state[self.key].maxlen)
+
+    def clear(self):
+        """清空所有记录"""
+        st.session_state[self.key].clear()
