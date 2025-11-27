@@ -9,13 +9,13 @@ import time
 # --- 0. 基础设置 ---
 sys.path.append(os.path.abspath('.'))
 
-# --- Mock ---
+# --- Mock Fallback ---
 class Mock:
     def to_english(self, t): return t
     def add(self, a, b, c): pass
     def render_sidebar(self): pass
 def mock_bi(m, i, t): return "Mock English", "Mock Chinese"
-def mock_smart(m, i, t, ui, uw, es): return []
+def mock_smart(m, i, t, ui, uw): return [] # Removed enable_split arg
 def mock_img(b, f="PNG"): return b, "image/png"
 def mock_th(b, w=800): return b
 def mock_mo(b, c): pass
@@ -112,16 +112,15 @@ with t1:
         tt = st.selectbox("3. 类型", ["场景图", "展示图", "产品图"])
         idea = st.text_area("4. 创意", height=80)
         wt = st.slider("5. 权重", 0.0, 1.0, 0.6)
-        esp = st.checkbox("🧩 拆分任务")
+        # Removed "Enable Split" checkbox
 
         if st.button("🧠 生成指令", type="primary"):
             if not af: st.warning("请上传")
             else:
                 with st.spinner("AI 分析中..."):
-                    # 1. 彻底清空旧数据
                     st.session_state["std_prompt_data"] = []
-                    # 2. 调用新逻辑（强制 JSON 双语）
-                    res = smart_analyze_image(am, af, tt, idea, wt, esp)
+                    # 调用新逻辑 (无需 enable_split 参数)
+                    res = smart_analyze_image(am, af, tt, idea, wt)
                     st.session_state["std_prompt_data"] = res
                     st.rerun()
 
@@ -131,12 +130,13 @@ with t1:
                 with st.expander(f"任务 {i+1}", expanded=True):
                     tz, te = st.tabs(["🇨🇳 中文 (编辑)", "🇺🇸 英文 (只读结果)"])
                     
-                    # 同步逻辑：中文改变 -> 翻译 -> 更新英文
+                    # 强同步逻辑：ZH -> EN
                     def sync1(idx=i):
-                        nz = st.session_state[f"z_{idx}"]
+                        nz = st.session_state[f"z_{idx}"] # 获取中文框最新值
                         st.session_state["std_prompt_data"][idx]["zh"] = nz
-                        # 翻译
-                        st.session_state["std_prompt_data"][idx]["en"] = st.session_state.translator.to_english(nz)
+                        # 调用翻译：将新的中文翻译成英文
+                        trans_en = st.session_state.translator.to_english(nz)
+                        st.session_state["std_prompt_data"][idx]["en"] = trans_en
                         st.toast("✅ 英文底稿已更新")
                         
                     with tz: st.text_area("中文提示词", key=f"z_{i}", value=d["zh"], on_change=sync1, height=100)
@@ -155,7 +155,7 @@ with t1:
                 for task in st.session_state["std_prompt_data"]:
                     for _ in range(nm):
                         af.seek(0); im = Image.open(af)
-                        # 使用英文版 prompt
+                        # 使用最新的英文 prompt
                         r = generate_image_call(gm, task["en"], im, RATIO_MAP[rt])
                         if r: 
                             st.session_state["std_images"].append(r)
@@ -178,7 +178,9 @@ with t2:
     def sync_var():
         v = st.session_state.var_prompt_zh
         if v: 
-            st.session_state.var_prompt_en = st.session_state.translator.to_english(v)
+            # 翻译：中文 -> 英文
+            trans = st.session_state.translator.to_english(v)
+            st.session_state.var_prompt_en = trans
             st.toast("✅ 英文底稿已更新")
 
     with c1:
@@ -189,10 +191,8 @@ with t2:
         if st.button("👁️ 双语读图", key="vbtn"):
             if vf:
                 with st.spinner("AI 正在同时生成中英文描述..."):
-                    # 1. 彻底清空旧数据
                     st.session_state.var_prompt_en = ""
                     st.session_state.var_prompt_zh = ""
-                    # 2. 调用双语分析
                     en, zh = analyze_image_bilingual(vam, vf, "fashion")
                     st.session_state.var_prompt_en = en
                     st.session_state.var_prompt_zh = zh
@@ -218,7 +218,6 @@ with t2:
             wp = get_weight_instruction(vw)
             for i in range(vc):
                 vf.seek(0)
-                # 组合最终 Prompt
                 p = f"Restyle. Base: {st.session_state.var_prompt_en}. Mode: {md}. Request: {req}. {wp}"
                 r = generate_image_call(vm, p, Image.open(vf), "")
                 if r: 
@@ -243,7 +242,9 @@ with t3:
     def sync_bg():
         v = st.session_state.bg_prompt_zh
         if v: 
-            st.session_state.bg_prompt_en = st.session_state.translator.to_english(v)
+            # 翻译：中文 -> 英文
+            trans = st.session_state.translator.to_english(v)
+            st.session_state.bg_prompt_en = trans
             st.toast("✅ 英文底稿已更新")
 
     with c1:
@@ -254,10 +255,8 @@ with t3:
         if st.button("🔒 双语锁定", key="bbtn"):
             if bf:
                 with st.spinner("AI 正在分析..."):
-                    # 1. 彻底清空
                     st.session_state.bg_prompt_en = ""
                     st.session_state.bg_prompt_zh = ""
-                    # 2. 调用双语分析
                     en, zh = analyze_image_bilingual(bam, bf, "product")
                     st.session_state.bg_prompt_en = en
                     st.session_state.bg_prompt_zh = zh
@@ -282,7 +281,6 @@ with t3:
             wp = get_weight_instruction(bw)
             for i in range(bc):
                 bf.seek(0)
-                # 组合最终 Prompt
                 p = f"BG Swap. Product: {st.session_state.bg_prompt_en}. New BG: {breq}. {wp}"
                 r = generate_image_call(bm, p, Image.open(bf), "")
                 if r: 
