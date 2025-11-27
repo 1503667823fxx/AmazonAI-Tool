@@ -29,6 +29,37 @@ if 'auth' in sys.modules:
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
+    st.error("❌ 错误：未找到 GOOGLE_API_KEY")import streamlit as st
+import google.generativeai as genai
+from PIL import Image
+import io
+import sys
+import os
+import time
+from collections import deque 
+
+# --- 0. 基础设置与门禁系统 ---
+sys.path.append(os.path.abspath('.'))
+try:
+    import auth
+    from translator import AITranslator 
+except ImportError:
+    class AITranslator:
+        def to_english(self, text): return text
+        def to_chinese(self, text): return text
+    pass 
+
+st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
+
+# 执行安全检查
+if 'auth' in sys.modules:
+    if not auth.check_password():
+        st.stop()
+
+# --- 1. 鉴权配置 ---
+if "GOOGLE_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+else:
     st.error("❌ 错误：未找到 GOOGLE_API_KEY")
     st.stop()
 
