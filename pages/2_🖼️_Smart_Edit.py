@@ -7,17 +7,15 @@ import os
 import time
 from collections import deque 
 
-# --- 0. 基础设置与核心库引入 ---
+# --- 0. 基础设置与门禁系统 ---
 sys.path.append(os.path.abspath('.'))
 try:
     import auth
-    from core_utils import AITranslator, process_image_for_download, create_preview_thumbnail
+    from translator import AITranslator 
 except ImportError:
     class AITranslator:
-        def to_english(self, t): return t
-        def to_chinese(self, t): return t
-    def process_image_for_download(b, f="PNG"): return b, "image/png"
-    def create_preview_thumbnail(b): return b
+        def to_english(self, text): return text
+        def to_chinese(self, text): return text
     pass 
 
 st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
@@ -38,7 +36,7 @@ else:
 if "translator" not in st.session_state:
     st.session_state.translator = AITranslator()
 
-# --- 2. 样式优化 ---
+# --- 2. 样式优化 (CSS) ---
 st.markdown("""
 <style>
     .step-header {
@@ -75,12 +73,20 @@ RATIO_MAP = {
 # --- 4. 状态管理 ---
 if "history_queue" not in st.session_state: st.session_state["history_queue"] = deque(maxlen=10)
 
-# Tab States
-for key in ["std_prompt_en", "std_prompt_zh", "var_prompt_en", "var_prompt_zh", "bg_prompt_en", "bg_prompt_zh"]:
-    if key not in st.session_state: st.session_state[key] = ""
-    
-for key in ["std_images", "batch_results", "bg_results"]:
-    if key not in st.session_state: st.session_state[key] = []
+# Tab 1 States
+if "std_prompt_en" not in st.session_state: st.session_state["std_prompt_en"] = ""
+if "std_prompt_zh" not in st.session_state: st.session_state["std_prompt_zh"] = "" 
+if "std_images" not in st.session_state: st.session_state["std_images"] = []
+
+# Tab 2 States
+if "var_prompt_en" not in st.session_state: st.session_state["var_prompt_en"] = ""
+if "var_prompt_zh" not in st.session_state: st.session_state["var_prompt_zh"] = ""
+if "batch_results" not in st.session_state: st.session_state["batch_results"] = []
+
+# Tab 3 States
+if "bg_prompt_en" not in st.session_state: st.session_state["bg_prompt_en"] = ""
+if "bg_prompt_zh" not in st.session_state: st.session_state["bg_prompt_zh"] = ""
+if "bg_results" not in st.session_state: st.session_state["bg_results"] = []
 
 # --- 5. 辅助函数 ---
 def update_history(image_data, source="AI", prompt_summary=""):
@@ -89,12 +95,42 @@ def update_history(image_data, source="AI", prompt_summary=""):
         "image": image_data, "source": source, "time": timestamp, "desc": prompt_summary[:30] + "..."
     })
 
+@st.cache_data(show_spinner=False)
+def convert_image_format(image_bytes, format="PNG"):
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        buf = io.BytesIO()
+        if format.upper() == "JPEG":
+            if image.mode in ("RGBA", "P"): image = image.convert("RGB")
+        image.save(buf, format=format, quality=95)
+        return buf.getvalue(), f"image/{format.lower()}"
+    except Exception as e:
+        return image_bytes, "image/png"
+
+# 【新增】快速预览压缩引擎
+@st.cache_data(show_spinner=False)
+def create_preview_image(image_bytes, max_width=1024, quality=70):
+    """生成轻量级预览图 (压缩至 1024px JPEG)"""
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        # 调整尺寸
+        if image.width > max_width:
+            ratio = max_width / image.width
+            new_height = int(image.height * ratio)
+            image = image.resize((max_width, new_height), Image.Resampling.LANCZOS)
+        
+        buf = io.BytesIO()
+        # 强制转 RGB 并压缩
+        if image.mode in ("RGBA", "P"): 
+            image = image.convert("RGB")
+        image.save(buf, format="JPEG", quality=quality)
+        return buf.getvalue()
+    except Exception:
+        return image_bytes # 失败则返回原图
+
 def generate_image_call(model_name, prompt, image_input, ratio_suffix):
-    # 净化 Prompt，移除可能干扰的词
     clean_prompt = prompt.replace("16:9", "").replace("4:3", "").replace("1:1", "").replace("Aspect Ratio", "")
-    # 强制加入真实感和光影关键词
-    final_prompt = clean_prompt + ratio_suffix + ", high quality, 8k resolution, photorealistic, commercial lighting, highly detailed texture"
-    
+    final_prompt = clean_prompt + ratio_suffix + ", high quality, 8k resolution, photorealistic"
     gen_model = genai.GenerativeModel(model_name)
     try:
         response = gen_model.generate_content([final_prompt, image_input], stream=True)
@@ -121,17 +157,18 @@ def sync_bg_zh_to_en():
     val = st.session_state.bg_prompt_zh
     if val: st.session_state.bg_prompt_en = st.session_state.translator.to_english(val)
 
-# --- 弹窗预览 ---
+# --- 弹窗预览函数 (使用轻量图) ---
 if hasattr(st, "dialog"):
     @st.dialog("快速效果预览", width="large")
     def show_preview_modal(image_bytes, caption):
-        preview_bytes = create_preview_thumbnail(image_bytes, max_width=1024)
-        st.image(preview_bytes, caption=f"{caption} (预览模式)", use_container_width=True)
+        # 实时生成/获取轻量预览图
+        preview_bytes = create_preview_image(image_bytes)
+        st.image(preview_bytes, caption=f"{caption} (预览画质 - 请下载查看原图)", use_container_width=True)
 else:
     def show_preview_modal(image_bytes, caption):
-        preview_bytes = create_preview_thumbnail(image_bytes, max_width=1024)
-        with st.expander("🔍 快速预览", expanded=True):
-            st.image(preview_bytes, caption=caption, use_container_width=True)
+        preview_bytes = create_preview_image(image_bytes)
+        with st.expander("🔍 快速预览 (点击展开)", expanded=True):
+            st.image(preview_bytes, caption=f"{caption} (预览画质)", use_container_width=True)
 
 # ==========================================
 # 🚀 侧边栏
@@ -145,18 +182,17 @@ with st.sidebar:
         else:
             for item in st.session_state["history_queue"]:
                 st.markdown(f"**{item['source']}**")
-                thumb = create_preview_thumbnail(item['image'], max_width=200)
-                st.image(thumb, width=150)
+                st.image(item['image'], width=150)
                 st.divider()
 
 # ==========================================
 # 🚀 主界面
 # ==========================================
-st.title("🧬 Fashion AI Core V5.5")
+st.title("🧬 Fashion AI Core V5.3")
 tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修", "⚡ 变体改款", "🏞️ 场景置换"])
 
 # ==========================================
-# TAB 1: 标准工作流
+# TAB 1: 标准工作流 (Standard)
 # ==========================================
 with tab_workflow:
     col_main, col_preview = st.columns([1.5, 1], gap="large")
@@ -169,51 +205,23 @@ with tab_workflow:
         with c2: uploaded_file = st.file_uploader("2. 上传参考图", type=["jpg", "png", "webp"], key="std_upload")
 
         task_type = st.selectbox("3. 任务类型", ["场景图 (Lifestyle)", "展示图 (Creative)", "产品图 (Product Only)"])
-        user_idea = st.text_area("4. 你的创意", height=80, placeholder="例如：改为极简主义风格，或者把模特身上的衣服拆解下来平铺...")
+        user_idea = st.text_area("4. 你的创意", height=80, placeholder="例如：改为极简主义风格，白色背景...")
 
         if st.button("🧠 生成 Prompt", type="primary"):
             if not uploaded_file: st.warning("⚠️ 请先上传图片")
             else:
-                with st.spinner("AI 正在分析构图与光影..."):
+                with st.spinner("AI 正在构思..."):
                     try:
                         uploaded_file.seek(0)
                         img_obj = Image.open(uploaded_file)
                         model = genai.GenerativeModel(analysis_model)
                         
-                        # --- 核心优化：根据任务类型注入专业的摄影指导 ---
-                        special_instruction = ""
-                        if "Product Only" in task_type:
-                            special_instruction = """
-                            SPECIAL INSTRUCTION FOR PRODUCT PHOTOGRAPHY:
-                            1. **Layout & Composition**: If user asks to 'lay out', 'break down' or 'flat lay' the outfit:
-                               - Use keywords: "Knolling photography", "Flat lay arrangement", "Neatly arranged on surface", "Deconstructed fashion".
-                               - Ensure items look naturally placed, NOT floating.
-                            2. **Realism & Shadows**: 
-                               - CRITICAL: Use "Contact shadows", "Natural drop shadows", "Ambient occlusion". 
-                               - Avoid "bad photoshop cut-out look". The object must look like it is physically sitting on the background.
-                            3. **Texture**: Emphasize "fabric texture", "material details", "natural folds".
-                            """
-                        else:
-                            special_instruction = """
-                            SPECIAL INSTRUCTION FOR LIFESTYLE/CREATIVE:
-                            - Focus on "Atmosphere", "Cinematic lighting", "Depth of field".
-                            - Ensure the subject blends naturally with the environment (matching lighting direction and color temperature).
-                            """
-
                         prompt_req = f"""
-                        Role: Expert Commercial Art Director & Photographer. 
-                        Task: Create a highly detailed prompt based on User Idea: '{user_idea}'. Type: {task_type}.
-                        
-                        {special_instruction}
-                        
-                        STRICT CONSTRAINTS: 
-                        - Output ONLY visual keywords (comma separated or sentences). 
-                        - NO Markdown. NO Aspect Ratio numbers.
-                        - Focus heavily on lighting and texture keywords to ensure realism.
-                        
+                        Role: Art Director. 
+                        Task: Create a prompt based on User Idea: '{user_idea}'. Type: {task_type}.
+                        STRICT CONSTRAINTS: Output ONLY visual keywords. NO Markdown. NO Ratio.
                         Output: English Prompt Only.
                         """
-                        
                         response = model.generate_content([prompt_req, img_obj])
                         
                         en_text = response.text.strip()
@@ -267,22 +275,23 @@ with tab_workflow:
             st.divider()
             st.markdown("#### ✨ 生成结果")
             for idx, img_bytes in enumerate(st.session_state["std_images"]):
-                thumb = create_preview_thumbnail(img_bytes, max_width=400)
-                st.image(thumb, caption=f"Result {idx+1}", width=350)
+                st.image(img_bytes, caption=f"Result {idx+1}", width=350)
                 
                 c_btn1, c_btn2 = st.columns([1.5, 1])
                 with c_btn1:
-                    final_bytes, mime = process_image_for_download(img_bytes, format=download_format)
+                    final_bytes, mime = convert_image_format(img_bytes, download_format)
                     st.download_button(f"📥 下载", data=final_bytes, file_name=f"std_{idx}.{download_format.lower()}", mime=mime, use_container_width=True)
                 with c_btn2:
+                    # 现在的放大预览会加载轻量图，秒开
                     if st.button(f"🔍 放大", key=f"zoom_std_{idx}", use_container_width=True):
                         show_preview_modal(img_bytes, f"Result {idx+1}")
 
 # ==========================================
-# TAB 2: ⚡ 变体改款
+# TAB 2: ⚡ 变体改款 (Restyling)
 # ==========================================
 with tab_variants:
     st.markdown("### ⚡ 服装改款工厂")
+    
     cv_left, cv_right = st.columns([1.5, 1], gap="large")
     with cv_left:
         st.markdown("#### Step 1: AI 读取产品特征")
@@ -290,7 +299,7 @@ with tab_variants:
         var_ana_model = st.selectbox("分析模型", ANALYSIS_MODELS, index=0, key="var_ana_model")
         
         if st.button("👁️ AI 读图", key="btn_var_ana"):
-            if not var_file: st.warning("请先上传")
+            if not var_file: st.warning("请先上传图片")
             else:
                 with st.spinner("提取中..."):
                     try:
@@ -299,6 +308,7 @@ with tab_variants:
                         model = genai.GenerativeModel(var_ana_model)
                         prompt = "Describe the main fashion product details: Silhouette, Fabric, Color, Pattern. Output pure text."
                         resp = model.generate_content([prompt, v_img])
+                        
                         en_text = resp.text.strip()
                         st.session_state["var_prompt_en"] = en_text
                         st.session_state["var_prompt_zh"] = st.session_state.translator.to_chinese(en_text)
@@ -341,8 +351,7 @@ with tab_variants:
                     if img_data:
                         st.session_state["batch_results"].append(img_data)
                         with grid[i%2]:
-                            thumb = create_preview_thumbnail(img_data, max_width=300)
-                            st.image(thumb, use_container_width=True)
+                            st.image(img_data, use_container_width=True)
                             if st.button("🔍", key=f"zoom_var_{i}"):
                                 show_preview_modal(img_data, f"Var {i+1}")
                 except: pass
@@ -352,14 +361,15 @@ with tab_variants:
         if st.session_state["batch_results"]:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["batch_results"]):
-                final_bytes, mime = process_image_for_download(img_bytes, format=download_format)
+                final_bytes, mime = convert_image_format(img_bytes, download_format)
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"var_{idx}.{download_format.lower()}", mime=mime)
 
 # ==========================================
-# TAB 3: 🏞️ 场景置换
+# TAB 3: 🏞️ 场景置换 (Background)
 # ==========================================
 with tab_background:
     st.markdown("### 🏞️ 场景批量置换")
+    
     cb_left, cb_right = st.columns([1.5, 1], gap="large")
     with cb_left:
         st.markdown("#### Step 1: AI 锁定产品")
@@ -374,8 +384,9 @@ with tab_background:
                         bg_file.seek(0)
                         v_img = Image.open(bg_file)
                         model = genai.GenerativeModel(bg_ana_model)
-                        prompt = "Describe FOREGROUND PRODUCT ONLY in detail. Ignore background. Output pure text."
+                        prompt = "Describe FOREGROUND PRODUCT ONLY in detail. Ignore background."
                         resp = model.generate_content([prompt, v_img])
+                        
                         en_text = resp.text.strip()
                         st.session_state["bg_prompt_en"] = en_text
                         st.session_state["bg_prompt_zh"] = st.session_state.translator.to_chinese(en_text)
@@ -410,8 +421,7 @@ with tab_background:
                     if img_data:
                         st.session_state["bg_results"].append(img_data)
                         with bg_grid[i%2]:
-                            thumb = create_preview_thumbnail(img_data, max_width=300)
-                            st.image(thumb, use_container_width=True)
+                            st.image(img_data, use_container_width=True)
                             if st.button("🔍", key=f"zoom_bg_{i}"):
                                 show_preview_modal(img_data, f"Scene {i+1}")
                 except: pass
@@ -421,5 +431,5 @@ with tab_background:
         if st.session_state["bg_results"]:
             st.divider()
             for idx, img_bytes in enumerate(st.session_state["bg_results"]):
-                final_bytes, mime = process_image_for_download(img_bytes, format=download_format)
+                final_bytes, mime = convert_image_format(img_bytes, download_format)
                 st.download_button(f"📥 下载 {idx+1}", final_bytes, file_name=f"scene_{idx}.{download_format.lower()}", mime=mime)
