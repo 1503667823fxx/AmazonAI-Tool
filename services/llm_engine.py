@@ -86,7 +86,7 @@ class LLMEngine:
         inputs.insert(0, system_prompt)
 
         try:
-            model = genai.GenerativeModel("models/gemini-1.5-flash") # 建议使用 1.5 flash，理解力更好
+            model = genai.GenerativeModel("models/gemini-flash-latest") 
             
             # 设置生成配置，降低随机性，提高遵从度
             config = genai.types.GenerationConfig(
