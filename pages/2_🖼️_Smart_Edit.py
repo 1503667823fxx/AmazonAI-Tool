@@ -62,6 +62,9 @@ st.markdown("""
 <style>
     .step-header { background: #f0f8ff; padding: 10px; border-left: 5px solid #2196F3; margin: 20px 0; font-weight: bold; }
     .stButton button { font-weight: bold; }
+    /* 优化 Tab 样式，使其更紧凑 */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { height: 40px; white-space: pre-wrap; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -146,16 +149,23 @@ with tab_workflow:
         if st.session_state["std_prompt_data"]:
             st.markdown('<div class="step-header">Step 2: 任务执行</div>', unsafe_allow_html=True)
             for i, p_data in enumerate(st.session_state["std_prompt_data"]):
-                with st.expander(f"任务 {i+1}", expanded=True):
-                    cz, ce = st.columns(2)
+                # 使用 Tabs 替换左右分栏，实现“合并”效果
+                # 默认显示第一个 Tab (中文)
+                with st.expander(f"📝 任务 {i+1} 指令管理", expanded=True):
+                    t_zh, t_en = st.tabs(["🇨🇳 中文版 (可编辑)", "🇺🇸 英文版 (底稿)"])
+                    
                     def sync_std(idx=i):
                         nz = st.session_state[f"sz_{idx}"]
                         st.session_state["std_prompt_data"][idx]["zh"] = nz
+                        # 自动翻译并更新英文版
                         st.session_state["std_prompt_data"][idx]["en"] = st.session_state.translator.to_english(nz)
-                        st.toast(f"✅ 任务 {idx+1}：中文已同步翻译为英文")
+                        st.toast(f"✅ 任务 {idx+1}：英文底稿已自动更新")
                     
-                    cz.text_area("中文", key=f"sz_{i}", value=p_data["zh"], on_change=sync_std, height=100)
-                    ce.text_area("英文", value=p_data["en"], disabled=True, height=100)
+                    with t_zh:
+                        st.text_area("在此修改中文指令，AI 将自动同步英文底稿：", key=f"sz_{i}", value=p_data["zh"], on_change=sync_std, height=120)
+                    with t_en:
+                        st.info("ℹ️ AI 实际生成图像时将使用以下英文指令（随中文自动更新）：")
+                        st.text_area("英文底稿", value=p_data["en"], disabled=True, height=120)
 
             cg1, cg2, cg3 = st.columns(3)
             gen_model = cg1.selectbox("生成模型", GOOGLE_IMG_MODELS)
@@ -206,7 +216,7 @@ with tab_variants:
         v = st.session_state.var_prompt_zh
         if v: 
             st.session_state.var_prompt_en = st.session_state.translator.to_english(v)
-            st.toast("✅ 中文已同步翻译为英文")
+            st.toast("✅ 英文底稿已自动更新")
 
     with c1:
         st.markdown("#### Step 1: 读取")
@@ -222,18 +232,20 @@ with tab_variants:
                 st.rerun()
 
         st.markdown("#### Step 2: 改款")
-        vc1, vc2 = st.columns(2)
-        # 确保左边是中文
-        vc1.text_area("中文 (编辑)", key="var_prompt_zh", on_change=sync_var, height=100)
-        vc2.text_area("English (Auto)", key="var_prompt_en", disabled=True, height=100)
+        
+        # 使用 Tabs 替换左右分栏
+        t_zh, t_en = st.tabs(["🇨🇳 中文版 (可编辑)", "🇺🇸 英文版 (底稿)"])
+        
+        with t_zh:
+            st.text_area("特征描述 (中文)", key="var_prompt_zh", on_change=sync_var, height=120)
+        with t_en:
+            st.info("AI 参考的英文特征：")
+            st.text_area("Feature Desc", key="var_prompt_en", disabled=True, height=120)
         
         mode = st.selectbox("模式", ["微调 (Texture)", "中改 (Details)", "大改 (Silhouette)"])
         req = st.text_area("改款指令")
         
-        # 新增：权重控制
         var_weight = st.slider("创意权重 (0=保真, 1=听你的)", 0.0, 1.0, 0.5, key="vw")
-        
-        # 新增：数量上限提高
         cnt = st.slider("数量", 1, 20, 1, key="vc")
         vm = st.selectbox("模型", GOOGLE_IMG_MODELS, key="vm")
 
@@ -246,14 +258,12 @@ with tab_variants:
             
             for i in range(cnt):
                 vf.seek(0)
-                # 将权重指令加入 prompt
                 p = f"Restyle. Base: {st.session_state.var_prompt_en}. Mode: {mode}. Request: {req}. {weight_prompt}"
                 r = generate_image_call(vm, p, Image.open(vf), "")
                 if r:
                     st.session_state.batch_results.append(r)
                     st.session_state.history_manager.add(r, f"Var {i+1}", req)
                 vb.progress((i+1)/cnt)
-                # 批量生成时稍微缓冲，避免 API 拥塞
                 if cnt > 5: time.sleep(1)
 
     with c2:
@@ -276,7 +286,7 @@ with tab_background:
         v = st.session_state.bg_prompt_zh
         if v: 
             st.session_state.bg_prompt_en = st.session_state.translator.to_english(v)
-            st.toast("✅ 中文已同步翻译为英文")
+            st.toast("✅ 英文底稿已自动更新")
 
     with c1:
         st.markdown("#### Step 1: 锁定")
@@ -292,16 +302,18 @@ with tab_background:
                 st.rerun()
 
         st.markdown("#### Step 2: 换背景")
-        bc1, bc2 = st.columns(2)
-        bc1.text_area("中文 (编辑)", key="bg_prompt_zh", on_change=sync_bg, height=100)
-        bc2.text_area("English (Auto)", key="bg_prompt_en", disabled=True, height=100)
+        
+        # 使用 Tabs 替换左右分栏
+        t_zh, t_en = st.tabs(["🇨🇳 中文版 (可编辑)", "🇺🇸 英文版 (底稿)"])
+        
+        with t_zh:
+            st.text_area("产品特征 (中文)", key="bg_prompt_zh", on_change=sync_bg, height=120)
+        with t_en:
+            st.info("AI 参考的英文特征：")
+            st.text_area("Feature Desc", key="bg_prompt_en", disabled=True, height=120)
         
         bg_req = st.text_area("新背景")
-        
-        # 新增：权重控制
         bg_weight = st.slider("创意权重 (0=保真, 1=听你的)", 0.0, 1.0, 0.5, key="bw")
-        
-        # 新增：数量上限提高
         bcnt = st.slider("数量", 1, 20, 1, key="bc")
         bm = st.selectbox("模型", GOOGLE_IMG_MODELS, index=1, key="bm")
 
