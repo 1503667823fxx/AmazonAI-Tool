@@ -5,6 +5,7 @@ import io
 import sys
 import os
 import time
+import re
 
 # --- 0. 基础设置与核心库引入 ---
 sys.path.append(os.path.abspath('.'))
@@ -149,19 +150,24 @@ with tab_workflow:
         if st.session_state["std_prompt_data"]:
             st.markdown('<div class="step-header">Step 2: 任务执行</div>', unsafe_allow_html=True)
             for i, p_data in enumerate(st.session_state["std_prompt_data"]):
-                # 使用 Tabs 替换左右分栏，实现“合并”效果
-                # 默认显示第一个 Tab (中文)
                 with st.expander(f"📝 任务 {i+1} 指令管理", expanded=True):
                     t_zh, t_en = st.tabs(["🇨🇳 中文版 (可编辑)", "🇺🇸 英文版 (底稿)"])
                     
                     def sync_std(idx=i):
                         nz = st.session_state[f"sz_{idx}"]
                         st.session_state["std_prompt_data"][idx]["zh"] = nz
-                        # 自动翻译并更新英文版
                         st.session_state["std_prompt_data"][idx]["en"] = st.session_state.translator.to_english(nz)
                         st.toast(f"✅ 任务 {idx+1}：英文底稿已自动更新")
                     
                     with t_zh:
+                        # 检查是否还是英文（如果不含中文字符且长度大于10，可能是翻译失败）
+                        if not re.search(r'[\u4e00-\u9fff]', p_data["zh"]) and len(p_data["zh"]) > 10:
+                            st.caption("⚠️ 检测到翻译似乎失败，请点击下方按钮重试。")
+                            if st.button("🔄 强制重译中文", key=f"retry_trans_{i}"):
+                                new_zh = st.session_state.translator.to_chinese(p_data["en"])
+                                st.session_state["std_prompt_data"][i]["zh"] = new_zh
+                                st.rerun()
+
                         st.text_area("在此修改中文指令，AI 将自动同步英文底稿：", key=f"sz_{i}", value=p_data["zh"], on_change=sync_std, height=120)
                     with t_en:
                         st.info("ℹ️ AI 实际生成图像时将使用以下英文指令（随中文自动更新）：")
@@ -226,17 +232,24 @@ with tab_variants:
                 vf.seek(0)
                 txt = genai.GenerativeModel("models/gemini-flash-latest").generate_content(
                     ["Describe fashion details: Silhouette, Fabric, Color. Output pure English text.", Image.open(vf)]
-                ).text.strip()
+                ).text.strip().lstrip("=- ") # 清洗
+                
                 st.session_state.var_prompt_en = txt
                 st.session_state.var_prompt_zh = st.session_state.translator.to_chinese(txt)
                 st.rerun()
 
         st.markdown("#### Step 2: 改款")
         
-        # 使用 Tabs 替换左右分栏
         t_zh, t_en = st.tabs(["🇨🇳 中文版 (可编辑)", "🇺🇸 英文版 (底稿)"])
         
         with t_zh:
+            # 翻译检查
+            if st.session_state.var_prompt_zh and not re.search(r'[\u4e00-\u9fff]', st.session_state.var_prompt_zh):
+                 st.caption("⚠️ 自动翻译可能未生效")
+                 if st.button("🔄 重译", key="retry_var"):
+                     st.session_state.var_prompt_zh = st.session_state.translator.to_chinese(st.session_state.var_prompt_en)
+                     st.rerun()
+
             st.text_area("特征描述 (中文)", key="var_prompt_zh", on_change=sync_var, height=120)
         with t_en:
             st.info("AI 参考的英文特征：")
@@ -296,17 +309,22 @@ with tab_background:
                 bf.seek(0)
                 txt = genai.GenerativeModel("models/gemini-flash-latest").generate_content(
                     ["Describe FOREGROUND PRODUCT ONLY. Output pure English text.", Image.open(bf)]
-                ).text.strip()
+                ).text.strip().lstrip("=- ")
+                
                 st.session_state.bg_prompt_en = txt
                 st.session_state.bg_prompt_zh = st.session_state.translator.to_chinese(txt)
                 st.rerun()
 
         st.markdown("#### Step 2: 换背景")
         
-        # 使用 Tabs 替换左右分栏
         t_zh, t_en = st.tabs(["🇨🇳 中文版 (可编辑)", "🇺🇸 英文版 (底稿)"])
         
         with t_zh:
+            if st.session_state.bg_prompt_zh and not re.search(r'[\u4e00-\u9fff]', st.session_state.bg_prompt_zh):
+                 st.caption("⚠️ 自动翻译可能未生效")
+                 if st.button("🔄 重译", key="retry_bg"):
+                     st.session_state.bg_prompt_zh = st.session_state.translator.to_chinese(st.session_state.bg_prompt_en)
+                     st.rerun()
             st.text_area("产品特征 (中文)", key="bg_prompt_zh", on_change=sync_bg, height=120)
         with t_en:
             st.info("AI 参考的英文特征：")
