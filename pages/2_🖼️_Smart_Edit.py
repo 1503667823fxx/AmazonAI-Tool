@@ -18,7 +18,7 @@ try:
     from app_utils.history_manager import HistoryManager
     # 👇 引入纯 UI 组件
     from app_utils.ui_components import render_history_sidebar, show_image_modal
-    from app_utils.image_processing import create_preview_thumbnail
+    from app_utils.image_processing import create_preview_thumbnail, process_image_for_download
     
     from services.llm_engine import LLMEngine
     from services.image_engine import ImageGenEngine
@@ -81,12 +81,14 @@ tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修", "⚡ �
 # ... (后面的 Tab 代码逻辑保持不变，不需要动) ...
 
 # ==========================================
-# TAB 1: 标准工作流 (最终优化版)
+# TAB 1: 标准工作流 (Bug Fix & UI 优化版)
 # ==========================================
 with tab_workflow:
     # 状态初始化
     if "std_prompts" not in st.session_state: st.session_state.std_prompts = []
     if "std_results" not in st.session_state: st.session_state.std_results = []
+    # ✨ 修复 Bug 2: 引入版本号，强制刷新 Text Area
+    if "prompt_ver" not in st.session_state: st.session_state.prompt_ver = 0
 
     c_main, c_view = st.columns([1.5, 1], gap="large")
     
@@ -94,19 +96,22 @@ with tab_workflow:
     with c_main:
         st.markdown('<div class="step-header">Step 1: 需求配置</div>', unsafe_allow_html=True)
         
-        # 1. 图片上传与原图预览 (优化点 1)
+        # 1. 图片上传与原图预览
         uploaded_files = st.file_uploader("上传参考图", type=["jpg","png","webp"], accept_multiple_files=True)
         active_file = None
         
         if uploaded_files:
-            # 多图选择逻辑
-            target_name = st.selectbox("当前处理", [f.name for f in uploaded_files]) if len(uploaded_files) > 1 else uploaded_files[0].name
+            # ✨ 修复 Bug 1: 确保下拉框逻辑正确
+            file_names = [f.name for f in uploaded_files]
+            target_name = st.selectbox("👉 选择当前要处理的原图", file_names)
+            # 根据名字找到对应的文件对象
             active_file = next((f for f in uploaded_files if f.name == target_name), None)
             
-            # ✨ 新增：原图预览区
             if active_file:
-                with st.expander("🖼️ 查看当前参考原图", expanded=False):
+                with st.expander(f"🖼️ 查看原图: {target_name}", expanded=True):
                     st.image(active_file, width=300)
+        else:
+            st.info("👆 请先上传图片")
 
         col_t1, col_t2 = st.columns(2)
         task_type = col_t1.selectbox(
@@ -140,11 +145,7 @@ with tab_workflow:
             placeholder="low quality, deformed, messy",
             help="你【不希望】画面中出现的东西，比如 'blur' (模糊), 'dark' (太暗)。"
         )
-        enable_split = st.checkbox(
-            "🧩 启用多任务拆分", 
-            value=False,
-            help="勾选后，如果你的创意里包含多个不同的场景（用逗号隔开），AI 会尝试把它拆解成多张图分别生成。"
-        )
+        enable_split = st.checkbox("🧩 启用多任务拆分", value=False)
 
         # 🧠 生成 Prompt 按钮
         if st.button("🧠 AI 思考并生成 Prompt", type="primary"):
@@ -168,6 +169,9 @@ with tab_workflow:
                         p_zh = llm.translate(p_en, "Simplified Chinese")
                         st.session_state.std_prompts.append({"en": p_en, "zh": p_zh})
                     
+                    # ✨ 修复 Bug 2: 更新版本号，强制 UI 刷新
+                    st.session_state.prompt_ver += 1
+                    
                     status.update(label="✅ Prompt 生成完毕！", state="complete", expanded=False)
                     st.toast("Prompt 已生成！", icon="✨")
                     st.rerun()
@@ -176,34 +180,51 @@ with tab_workflow:
         if st.session_state.std_prompts:
             st.markdown('<div class="step-header">Step 2: 任务执行</div>', unsafe_allow_html=True)
             
-            # Prompt 编辑区
             for i, p_data in enumerate(st.session_state.std_prompts):
-                with st.expander(f"任务 {i+1} 指令", expanded=True):
-                    col_zh, col_en = st.columns(2)
-                    new_zh = col_zh.text_area("中文", p_data["zh"], key=f"p_zh_{i}", height=80)
-                    if new_zh != p_data["zh"]: 
-                        st.session_state.std_prompts[i]["zh"] = new_zh
-                        st.session_state.std_prompts[i]["en"] = llm.translate(new_zh, "English")
-                        st.rerun()
-                    col_en.text_area("English", st.session_state.std_prompts[i]["en"], disabled=True, height=80)
+                # ✨ 优化 3: 使用 Tabs 分离中英文，默认显示中文
+                with st.container(border=True):
+                    st.markdown(f"**任务 {i+1}**")
+                    tab_zh, tab_en = st.tabs(["🇨🇳 中文编辑 (默认)", "🇺🇸 English Prompt"])
+                    
+                    with tab_zh:
+                        # 这里的 key 加上了 prompt_ver，确保每次重新生成时 key 都不一样，从而强制刷新内容
+                        new_zh = st.text_area(
+                            "中文指令", 
+                            p_data["zh"], 
+                            key=f"p_zh_{i}_v{st.session_state.prompt_ver}", 
+                            height=100,
+                            label_visibility="collapsed"
+                        )
+                        if new_zh != p_data["zh"]: 
+                            st.session_state.std_prompts[i]["zh"] = new_zh
+                            st.session_state.std_prompts[i]["en"] = llm.translate(new_zh, "English")
+                            # 这里不 rerun，允许用户改完点生成再刷新，或者你可以选择 st.rerun()
+                    
+                    with tab_en:
+                        st.text_area(
+                            "English Source", 
+                            st.session_state.std_prompts[i]["en"], 
+                            disabled=True, 
+                            height=100,
+                            key=f"p_en_{i}_v{st.session_state.prompt_ver}"
+                        )
 
             # 高级面板
             with st.container(border=True):
                 st.caption("⚙️ **高级生成参数**")
                 cg1, cg2 = st.columns(2)
-                model_name = cg1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS, help="Flash 速度快但细节少；Pro 质量最高。")
+                model_name = cg1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS)
                 ratio_key = cg2.selectbox("📐 画幅比例", list(RATIO_MAP.keys()))
                 
-                # ✨ 优化点 4: Flash 模型比例警告
                 if "flash" in model_name.lower() and "1:1" not in ratio_key:
-                    st.warning("⚠️ 注意：Flash 模型通常强制输出 1:1 方图。如需宽/长图，建议切换到 Pro 模型。", icon="⚠️")
+                    st.warning("⚠️ 注意：Flash 模型通常强制输出 1:1 方图。建议切换 Pro 模型。", icon="⚠️")
 
                 cg3, cg4 = st.columns(2)
-                safety_level = cg3.selectbox("🛡️ 安全过滤", ["Standard (标准)", "Permissive (宽松 - 适合内衣/泳装)", "Strict (严格)"], help="如果生成被拦截，请选'宽松'。")
-                creativity = cg4.slider("🎨 创意度", 0.0, 1.0, 0.5, help="值越高，AI 发挥的随机性越大。")
+                safety_level = cg3.selectbox("🛡️ 安全过滤", ["Standard (标准)", "Permissive (宽松 - 适合内衣/泳装)", "Strict (严格)"])
+                creativity = cg4.slider("🎨 创意度", 0.0, 1.0, 0.5)
                 
                 cg5, cg6 = st.columns([0.8, 0.2], vertical_alignment="bottom")
-                seed_input = cg5.number_input("🎲 Seed", value=-1, step=1, help="-1 为随机。输入固定数字可复现结果。")
+                seed_input = cg5.number_input("🎲 Seed", value=-1, step=1)
                 real_seed = None if seed_input == -1 else int(seed_input)
 
             # 生成按钮
@@ -235,22 +256,23 @@ with tab_workflow:
                     status.update(label="🎉 执行完毕！", state="complete", expanded=False)
                     st.toast("图片生成完成！", icon="🖼️")
 
-    # --- 右侧：结果预览区 (优化点 2) ---
+    # --- 右侧：结果预览区 ---
     with c_view:
         if st.session_state.std_results:
             st.subheader("🖼️ 结果预览")
             for idx, img_bytes in enumerate(st.session_state.std_results):
                 with st.container(border=True):
-                    # 显示图片
                     thumb = create_preview_thumbnail(img_bytes, 400)
                     st.image(thumb, use_container_width=True, caption=f"Result {idx+1}")
                     
-                    # ✨ 新增：快速操作按钮行
                     b_col1, b_col2 = st.columns(2)
                     with b_col1:
-                        if st.button("🔍 放大", key=f"v_zoom_{idx}", use_container_width=True):
-                            show_image_modal(img_bytes, f"Result {idx+1}")
+                        # 注意：show_image_modal 需要从 app_utils.ui_components 引入
+                        if "show_image_modal" in globals():
+                            if st.button("🔍 放大", key=f"v_zoom_{idx}", use_container_width=True):
+                                show_image_modal(img_bytes, f"Result {idx+1}")
                     with b_col2:
+                        # ✨ 修复 Bug 4: 确保调用了 process_image_for_download
                         final_bytes, mime = process_image_for_download(img_bytes, format="JPEG")
                         st.download_button(
                             "📥 下载", 
