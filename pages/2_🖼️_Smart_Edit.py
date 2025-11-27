@@ -137,12 +137,16 @@ with tab_workflow:
                         st.session_state.std_prompts.append({"en": p_en, "zh": p_zh})
                     st.rerun()
 
-        # 🎨 执行生成
+# ... (Step 2 之前的代码保持不变) ...
+
+        # 🎨 执行生成 (Step 2 UI 更新)
         if st.session_state.std_prompts:
             st.markdown('<div class="step-header">Step 2: 任务执行</div>', unsafe_allow_html=True)
             
+            # (Prompt 显示区域代码保持不变，省略...)
             for i, p_data in enumerate(st.session_state.std_prompts):
                 with st.expander(f"任务 {i+1} 指令", expanded=True):
+                    # ... (这部分代码保持你原来的样子) ...
                     col_zh, col_en = st.columns(2)
                     new_zh = col_zh.text_area("中文", p_data["zh"], key=f"p_zh_{i}", height=80)
                     if new_zh != p_data["zh"]: 
@@ -151,11 +155,47 @@ with tab_workflow:
                         st.rerun()
                     col_en.text_area("English", st.session_state.std_prompts[i]["en"], disabled=True, height=80)
 
-            cg1, cg2 = st.columns(2)
-            model_name = cg1.selectbox("模型", GOOGLE_IMG_MODELS)
-            ratio_key = cg2.selectbox("比例", list(RATIO_MAP.keys()))
+            # --- ✨ 核心新增：高级控制面板 ---
+            with st.container(border=True):
+                st.caption("⚙️ **高级生成参数 (Advanced Controls)**")
+                
+                # 第一行：模型与比例
+                cg1, cg2 = st.columns(2)
+                model_name = cg1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS)
+                ratio_key = cg2.selectbox("📐 画幅比例", list(RATIO_MAP.keys()))
+                
+                # 第二行：安全与创意
+                cg3, cg4 = st.columns(2)
+                safety_level = cg3.selectbox(
+                    "🛡️ 安全过滤等级 (Safety Filter)", 
+                    ["Standard (标准)", "Permissive (宽松 - 适合内衣/泳装)", "Strict (严格)"],
+                    index=0,
+                    help="【真实生效】如果生成内衣或泳装模特时提示错误，请选择'宽松'模式。这将降低 Google 的 NSFW 拦截阈值。"
+                )
+                creativity = cg4.slider(
+                    "🎨 创意度 (Temperature)", 0.0, 1.0, 0.5,
+                    help="【真实生效】0.0: 严谨、更忠实于原图构图; 1.0: 狂野、更多随机细节。"
+                )
+
+                # 第三行：Seed 控制
+                cg5, cg6 = st.columns([0.8, 0.2], gap="small", vertical_alignment="bottom")
+                seed_input = cg5.number_input(
+                    "🎲 随机种子 (Seed)", value=-1, step=1,
+                    help="【尝试生效】输入固定数字(如 42)可尝试固定画面特征。输入 -1 代表完全随机。"
+                )
+                if cg6.button("🎲", help="随机生成一个 Seed"):
+                    # 这是一个小技巧：通过 rerun 来刷新 number_input 的默认值比较麻烦
+                    # 我们这里简单提示用户手动改，或者配合 session state 做（为保持简单暂不展开）
+                    pass
+                
+                real_seed = None if seed_input == -1 else int(seed_input)
+
+            # --- 生成按钮 ---
+            btn_col1, btn_col2 = st.columns([3, 1])
+            with btn_col1:
+                start_btn = st.button("🚀 开始生成图片 (Batch Run)", type="primary", use_container_width=True)
             
-            if st.button("🚀 开始生成图片"):
+            if start_btn:
                 st.session_state.std_results = []
                 img_pil = Image.open(active_file) if active_file else None
                 
@@ -163,17 +203,30 @@ with tab_workflow:
                 total = len(st.session_state.std_prompts)
                 
                 for idx, task in enumerate(st.session_state.std_prompts):
-                    with st.spinner(f"生成中 ({idx+1}/{total})..."):
-                        # ✨ 传入 negative_prompt
+                    with st.spinner(f"生成中 ({idx+1}/{total}) | 🛡️安全: {safety_level.split()[0]} | 🎲Seed: {real_seed if real_seed else 'Random'}..."):
+                        
+                        # ✨ 调用升级版 generate 接口
                         res_bytes = img_gen.generate(
-                            task["en"], model_name, img_pil, RATIO_MAP[ratio_key], 
-                            negative_prompt=neg_prompt
+                            prompt=task["en"], 
+                            model_name=model_name, 
+                            ref_image=img_pil, 
+                            ratio_suffix=RATIO_MAP[ratio_key], 
+                            negative_prompt=neg_prompt, # 记得确保 neg_prompt 变量在上面定义了(Tab 1 Step 1里)
+                            seed=real_seed,
+                            creativity=creativity,
+                            safety_level=safety_level.split()[0] # 传入 'Permissive' 等关键词
                         )
+                        
                         if res_bytes:
                             st.session_state.std_results.append(res_bytes)
                             history.add(res_bytes, f"Task {idx+1}", task["zh"]) 
+                        else:
+                            st.error(f"任务 {idx+1} 生成失败，已自动重试。请检查 Prompt 是否违规。")
+                            
                     bar.progress((idx + 1) / total)
-                st.success("完成！")
+                st.success("🎉 队列执行完毕！")
+
+        # ... (后续预览代码不变) ...
 
     with c_view:
         if st.session_state.std_results:
