@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 from collections import deque
-from utils.image_processing import create_preview_thumbnail, process_image_for_download
+from app_utils.image_processing import create_preview_thumbnail, process_image_for_download
 # 也可以在这里引入 show_preview_modal，或者在 UI 层处理
 
 class HistoryManager:
