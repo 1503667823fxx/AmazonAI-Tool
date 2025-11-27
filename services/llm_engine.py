@@ -1,6 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
-# 👇 引入风格库
+# 👇 务必确保引入了 styles
 from services.styles import PRESETS
 
 class LLMEngine:
@@ -29,6 +29,7 @@ class LLMEngine:
             return resp.text.strip()
         except Exception as e: return f"Analysis Failed: {e}"
 
+    # 👇 关键看这里：必须有 style_key 参数
     def optimize_art_director_prompt(self, user_idea, task_type, user_weight, style_key, image_obj=None, enable_split=False):
         """
         CoT 核心逻辑：基于用户权重和风格预设，进行链式思考。
@@ -41,7 +42,6 @@ class LLMEngine:
         style_light = style_data["lighting"]
 
         # 2. 构建思维链 Prompt
-        # 我们告诉 AI：不要急着输出，先思考(Thinking Process)，最后再输出 Prompt。
         cot_instructions = f"""
         Role: Senior Art Director for Amazon Fashion.
         
@@ -74,7 +74,7 @@ class LLMEngine:
             response = model.generate_content(inputs)
             raw_text = response.text.strip()
             
-            # 清洗一下可能带出的 "Prompt: " 前缀
+            # 清洗
             raw_text = raw_text.replace("Prompt:", "").replace("Here is the prompt:", "").strip()
             
             prompts = [p.strip() for p in raw_text.split("|||") if p.strip()]
