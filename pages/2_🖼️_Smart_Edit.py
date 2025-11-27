@@ -2,6 +2,8 @@ import streamlit as st
 from PIL import Image
 import sys
 import os
+# 在 Smart_Edit.py 顶部添加：
+from services.styles import PRESETS
 
 # --- 路径修复 ---
 current_script_path = os.path.abspath(__file__)
