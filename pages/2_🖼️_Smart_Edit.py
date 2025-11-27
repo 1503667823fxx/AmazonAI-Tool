@@ -9,14 +9,13 @@ import time
 # --- 0. 基础设置 ---
 sys.path.append(os.path.abspath('.'))
 
-# --- Mock Fallback ---
+# --- Mock ---
 class Mock:
     def to_english(self, t): return t
-    def to_chinese(self, t): return t
     def add(self, a, b, c): pass
     def render_sidebar(self): pass
 def mock_bi(m, i, t): return "Mock English", "Mock Chinese"
-def mock_an(m, i, t, ui, uw, es, tr): return []
+def mock_smart(m, i, t, ui, uw, es): return []
 def mock_img(b, f="PNG"): return b, "image/png"
 def mock_th(b, w=800): return b
 def mock_mo(b, c): pass
@@ -34,7 +33,7 @@ try:
 except ImportError:
     AITranslator = Mock; HistoryManager = Mock
     process_image_for_download = mock_img; create_preview_thumbnail = mock_th
-    smart_analyze_image = mock_an; analyze_image_bilingual = mock_bi
+    smart_analyze_image = mock_smart; analyze_image_bilingual = mock_bi
     show_preview_modal = mock_mo
 
 st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
@@ -99,16 +98,16 @@ with st.sidebar:
 st.title("🧬 Fashion AI Core V5.6")
 t1, t2, t3 = st.tabs(["✨ 标准精修", "⚡ 变体改款", "🏞️ 场景置换"])
 
-# --- TAB 1 ---
+# ================= Tab 1 =================
 with t1:
     c_main, c_prev = st.columns([1.5, 1], gap="large")
     with c_main:
         st.markdown('<div class="step-header">Step 1: 分析</div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
-        am = c1.selectbox("1. 读图模型", ANALYSIS_MODELS)
+        am = c1.selectbox("1. 读图模型", ANALYSIS_MODELS, key="am1")
         ufs = c2.file_uploader("2. 上传参考图", type=["jpg","png","webp"], accept_multiple_files=True, key="u1")
         af = ufs[0] if ufs else None
-        if ufs and len(ufs)>1: af = next((f for f in ufs if f.name == st.selectbox("选图", [f.name for f in ufs])), ufs[0])
+        if ufs and len(ufs)>1: af = next((f for f in ufs if f.name == st.selectbox("选图", [f.name for f in ufs], key="s1")), ufs[0])
 
         tt = st.selectbox("3. 类型", ["场景图", "展示图", "产品图"])
         idea = st.text_area("4. 创意", height=80)
@@ -118,8 +117,11 @@ with t1:
         if st.button("🧠 生成指令", type="primary"):
             if not af: st.warning("请上传")
             else:
-                with st.spinner("分析中..."):
-                    res = smart_analyze_image(am, af, tt, idea, wt, esp, st.session_state.translator)
+                with st.spinner("AI 分析中..."):
+                    # 1. 彻底清空旧数据
+                    st.session_state["std_prompt_data"] = []
+                    # 2. 调用新逻辑（强制 JSON 双语）
+                    res = smart_analyze_image(am, af, tt, idea, wt, esp)
                     st.session_state["std_prompt_data"] = res
                     st.rerun()
 
@@ -127,22 +129,25 @@ with t1:
             st.markdown('<div class="step-header">Step 2: 执行</div>', unsafe_allow_html=True)
             for i, d in enumerate(st.session_state["std_prompt_data"]):
                 with st.expander(f"任务 {i+1}", expanded=True):
-                    tz, te = st.tabs(["🇨🇳 中文", "🇺🇸 英文"])
+                    tz, te = st.tabs(["🇨🇳 中文 (编辑)", "🇺🇸 英文 (只读结果)"])
+                    
+                    # 同步逻辑：中文改变 -> 翻译 -> 更新英文
                     def sync1(idx=i):
                         nz = st.session_state[f"z_{idx}"]
                         st.session_state["std_prompt_data"][idx]["zh"] = nz
+                        # 翻译
                         st.session_state["std_prompt_data"][idx]["en"] = st.session_state.translator.to_english(nz)
-                    with tz: st.text_area("中文", key=f"z_{i}", value=d["zh"], on_change=sync1, height=100)
-                    with te: st.text_area("英文", value=d["en"], disabled=True, height=100)
+                        st.toast("✅ 英文底稿已更新")
+                        
+                    with tz: st.text_area("中文提示词", key=f"z_{i}", value=d["zh"], on_change=sync1, height=100)
+                    with te: st.text_area("AI 使用的英文指令", value=d["en"], disabled=True, height=100)
 
             cc1, cc2, cc3 = st.columns(3)
-            gm = cc1.selectbox("生成模型", GOOGLE_IMG_MODELS)
-            rt = cc2.selectbox("比例", list(RATIO_MAP.keys()))
-            nm = cc3.number_input("数量", 1, 4, 1)
+            gm = cc1.selectbox("生成模型", GOOGLE_IMG_MODELS, key="gm1")
+            rt = cc2.selectbox("比例", list(RATIO_MAP.keys()), key="rt1")
+            nm = cc3.number_input("数量", 1, 4, 1, key="nm1")
             
-            if "flash" in gm.lower() and "1:1" not in rt: st.info("Flash 模型建议使用 1:1")
-
-            if st.button("🎨 生成"):
+            if st.button("🎨 生成", key="btn1"):
                 st.session_state["std_images"] = []
                 bar = st.progress(0)
                 tot = len(st.session_state["std_prompt_data"]) * nm
@@ -150,6 +155,7 @@ with t1:
                 for task in st.session_state["std_prompt_data"]:
                     for _ in range(nm):
                         af.seek(0); im = Image.open(af)
+                        # 使用英文版 prompt
                         r = generate_image_call(gm, task["en"], im, RATIO_MAP[rt])
                         if r: 
                             st.session_state["std_images"].append(r)
@@ -166,12 +172,14 @@ with t1:
                 fb, m = process_image_for_download(b, dl_fmt)
                 st.download_button("下载", fb, f"s_{idx}.{dl_fmt}", m)
 
-# --- TAB 2 ---
+# ================= Tab 2 =================
 with t2:
     c1, c2 = st.columns([1.5, 1], gap="large")
     def sync_var():
         v = st.session_state.var_prompt_zh
-        if v: st.session_state.var_prompt_en = st.session_state.translator.to_english(v)
+        if v: 
+            st.session_state.var_prompt_en = st.session_state.translator.to_english(v)
+            st.toast("✅ 英文底稿已更新")
 
     with c1:
         st.markdown("#### Step 1: 读取")
@@ -181,6 +189,10 @@ with t2:
         if st.button("👁️ 双语读图", key="vbtn"):
             if vf:
                 with st.spinner("AI 正在同时生成中英文描述..."):
+                    # 1. 彻底清空旧数据
+                    st.session_state.var_prompt_en = ""
+                    st.session_state.var_prompt_zh = ""
+                    # 2. 调用双语分析
                     en, zh = analyze_image_bilingual(vam, vf, "fashion")
                     st.session_state.var_prompt_en = en
                     st.session_state.var_prompt_zh = zh
@@ -188,20 +200,17 @@ with t2:
                     st.rerun()
 
         st.markdown("#### Step 2: 改款")
-        tz, te = st.tabs(["🇨🇳 中文版 (默认)", "🇺🇸 英文版"])
+        tz, te = st.tabs(["🇨🇳 中文版 (编辑)", "🇺🇸 英文版 (只读)"])
         with tz:
-            st.text_area("特征 (中文 - 修改此处会同步英文)", key="var_prompt_zh", on_change=sync_var, height=120)
+            st.text_area("特征描述 (中文)", key="var_prompt_zh", on_change=sync_var, height=120)
         with te:
-            st.text_area("Feature (English - AI uses this)", key="var_prompt_en", disabled=True, height=120)
+            st.text_area("AI Used Features", value=st.session_state.var_prompt_en, disabled=True, height=120)
 
         md = st.selectbox("模式", ["微调 (Texture)", "中改 (Details)", "大改 (Silhouette)"])
         req = st.text_area("改款指令")
-        
-        # 新增：权重与数量
-        vw = st.slider("创意权重 (0=保真, 1=听你的)", 0.0, 1.0, 0.5, key="vw")
+        vw = st.slider("权重", 0.0, 1.0, 0.5, key="vw")
         vc = st.slider("数量", 1, 20, 1, key="vc")
         vm = st.selectbox("生成模型", GOOGLE_IMG_MODELS, key="vgm")
-        if "flash" in vm.lower(): st.caption("ℹ️ Flash 模型建议 1:1 画幅")
 
         if st.button("🚀 改款"):
             st.session_state.batch_results = []
@@ -209,6 +218,7 @@ with t2:
             wp = get_weight_instruction(vw)
             for i in range(vc):
                 vf.seek(0)
+                # 组合最终 Prompt
                 p = f"Restyle. Base: {st.session_state.var_prompt_en}. Mode: {md}. Request: {req}. {wp}"
                 r = generate_image_call(vm, p, Image.open(vf), "")
                 if r: 
@@ -227,12 +237,14 @@ with t2:
                 fb, m = process_image_for_download(b, dl_fmt)
                 st.download_button("下载", fb, f"v_{idx}.{dl_fmt}", m)
 
-# --- TAB 3 ---
+# ================= Tab 3 =================
 with t3:
     c1, c2 = st.columns([1.5, 1], gap="large")
     def sync_bg():
         v = st.session_state.bg_prompt_zh
-        if v: st.session_state.bg_prompt_en = st.session_state.translator.to_english(v)
+        if v: 
+            st.session_state.bg_prompt_en = st.session_state.translator.to_english(v)
+            st.toast("✅ 英文底稿已更新")
 
     with c1:
         st.markdown("#### Step 1: 锁定")
@@ -242,6 +254,10 @@ with t3:
         if st.button("🔒 双语锁定", key="bbtn"):
             if bf:
                 with st.spinner("AI 正在分析..."):
+                    # 1. 彻底清空
+                    st.session_state.bg_prompt_en = ""
+                    st.session_state.bg_prompt_zh = ""
+                    # 2. 调用双语分析
                     en, zh = analyze_image_bilingual(bam, bf, "product")
                     st.session_state.bg_prompt_en = en
                     st.session_state.bg_prompt_zh = zh
@@ -249,19 +265,16 @@ with t3:
                     st.rerun()
 
         st.markdown("#### Step 2: 换背景")
-        tz, te = st.tabs(["🇨🇳 中文版 (默认)", "🇺🇸 英文版"])
+        tz, te = st.tabs(["🇨🇳 中文版 (编辑)", "🇺🇸 英文版 (只读)"])
         with tz:
-            st.text_area("特征 (中文 - 修改此处会同步英文)", key="bg_prompt_zh", on_change=sync_bg, height=120)
+            st.text_area("产品特征 (中文)", key="bg_prompt_zh", on_change=sync_bg, height=120)
         with te:
-            st.text_area("Features (English)", key="bg_prompt_en", disabled=True, height=120)
+            st.text_area("AI Used Features", value=st.session_state.bg_prompt_en, disabled=True, height=120)
             
         breq = st.text_area("新背景")
-        
-        # 新增：权重与数量
         bw = st.slider("权重", 0.0, 1.0, 0.5, key="bw")
         bc = st.slider("数量", 1, 20, 1, key="bc")
         bm = st.selectbox("生成模型", GOOGLE_IMG_MODELS, index=1, key="bgm")
-        if "flash" in bm.lower(): st.caption("ℹ️ Flash 模型建议 1:1 画幅")
 
         if st.button("🚀 换背景"):
             st.session_state.bg_results = []
@@ -269,6 +282,7 @@ with t3:
             wp = get_weight_instruction(bw)
             for i in range(bc):
                 bf.seek(0)
+                # 组合最终 Prompt
                 p = f"BG Swap. Product: {st.session_state.bg_prompt_en}. New BG: {breq}. {wp}"
                 r = generate_image_call(bm, p, Image.open(bf), "")
                 if r: 
