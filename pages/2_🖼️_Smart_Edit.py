@@ -22,8 +22,8 @@ try:
     import auth
     from services.llm_engine import LLMEngine
     from services.image_engine import ImageGenEngine
-    from utils.history_manager import HistoryManager
-    from utils.image_processing import process_image_for_download, create_preview_thumbnail
+    from app_utils.history_manager import HistoryManager
+    from app_utils.image_processing import process_image_for_download, create_preview_thumbnail
 except ImportError as e:
     st.error(f"❌ 模块导入失败。调试信息：\n项目根目录: {root_dir}\n错误详情: {e}")
     st.stop()
