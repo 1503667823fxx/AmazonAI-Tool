@@ -81,7 +81,7 @@ tab_workflow, tab_variants, tab_background = st.tabs(["✨ 标准精修", "⚡ �
 # ... (后面的 Tab 代码逻辑保持不变，不需要动) ...
 
 # ==========================================
-# TAB 1: 标准工作流 (多图融合升级版)
+# TAB 1: 标准工作流 (最终完美版)
 # ==========================================
 with tab_workflow:
     # 状态初始化
@@ -95,76 +95,59 @@ with tab_workflow:
     with c_main:
         st.markdown('<div class="step-header">Step 1: 需求配置</div>', unsafe_allow_html=True)
         
-        # 1. 上传与模式选择
+        # 1. 上传逻辑 (自动判断单/多图)
         uploaded_files = st.file_uploader("上传参考图", type=["jpg","png","webp"], accept_multiple_files=True)
         
-        # ✨ 新增：处理模式开关 (关键逻辑)
-        proc_mode = st.radio(
-            "⚙️ 处理模式", 
-            ["🔄 单图批量 (Batch Loop)", "🧩 多图融合 (Composite)"], 
-            horizontal=True,
-            help="单图批量：上传5张图，分别生成5次；\n多图融合：上传5张图（如人+场景），AI 读取所有内容生成 1 个融合后的 Prompt。"
-        )
-
-        active_img_input = None # 将要传给 LLM 的图片对象（单图或列表）
-        active_ref_for_gen = None # 将要传给 ImageGen 的参考图
-
+        # 核心变量
+        active_img_input = None     # 传给 LLM 读图
+        active_ref_for_gen = None   # 传给生图做参考
+        
         if uploaded_files:
-            if proc_mode == "🔄 单图批量 (Batch Loop)":
-                # 旧逻辑：选一张作为当前主图
-                file_names = [f.name for f in uploaded_files]
-                target_name = st.selectbox("👉 选择当前要处理的原图", file_names)
-                active_file = next((f for f in uploaded_files if f.name == target_name), None)
-                
-                if active_file:
-                    with st.expander(f"🖼️ 查看原图: {target_name}", expanded=True):
-                        st.image(active_file, width=300)
-                    active_img_input = Image.open(active_file)
-                    active_ref_for_gen = active_img_input # 生图时参考这张
+            file_count = len(uploaded_files)
+            
+            if file_count == 1:
+                # === 单图模式 ===
+                active_file = uploaded_files[0]
+                with st.expander("🖼️ 查看原图", expanded=True):
+                    st.image(active_file, width=250)
+                active_img_input = Image.open(active_file)
+                active_ref_for_gen = active_img_input # 单图模式下，原图作为生图参考
 
-            else: # 🧩 多图融合 (Composite)
-                st.info(f"已选中 {len(uploaded_files)} 张图片进行融合分析 (例如：人物 + 背景)")
-                # 展示所有图的小缩略图
-                cols = st.columns(len(uploaded_files))
+            else:
+                # === 多图融合模式 ===
+                st.info(f"🧩 已检测到 {file_count} 张图片，进入**多图融合模式**。")
+                cols = st.columns(min(file_count, 4))
                 img_list = []
                 for idx, f in enumerate(uploaded_files):
                     img = Image.open(f)
                     img_list.append(img)
-                    with cols[idx]:
-                        st.image(img, use_container_width=True, caption=f"Img {idx+1}")
+                    if idx < 4:
+                        with cols[idx]:
+                            st.image(img, use_container_width=True)
                 
-                active_img_input = img_list # 传给 LLM 一个列表
-                # 注意：多图融合时，生图阶段通常很难同时参考多张图的结构（除非用ControlNet）。
-                # 策略：生图时我们不传 reference image，而是完全依赖 LLM 融合后写出的详细 Prompt。
-                # 或者，你可以选择其中一张作为结构参考（这里暂定为 None，全靠 Prompt）
-                active_ref_for_gen = None 
+                active_img_input = img_list # 列表传给 LLM
+                active_ref_for_gen = None   # 多图融合时，不传特定参考图给生图模型，全靠 Prompt
         else:
             st.info("👆 请先上传图片")
 
         col_t1, col_t2 = st.columns(2)
-        task_type = col_t1.selectbox(
-            "任务类型", 
-            ["展示图 (Creative)", "场景图 (Lifestyle)", "产品图 (Product Only)"],
-            help="Creative: 艺术感强的广告图; Lifestyle: 带生活场景的实拍感; Product Only: 纯白底或干净背景的产品特写。"
-        )
-        selected_style = col_t2.selectbox(
-            "🎨 风格预设", 
-            list(PRESETS.keys()), 
-            index=0
-        )
+        task_type = col_t1.selectbox("任务类型", ["展示图 (Creative)", "场景图 (Lifestyle)", "产品图 (Product Only)"])
+        selected_style = col_t2.selectbox("🎨 风格预设", list(PRESETS.keys()), index=0)
 
         # 2. 创意输入
         user_idea = st.text_area(
             "你的创意 Prompt", 
             height=80, 
-            placeholder="描述你的画面，例如：'把图1的模特放进图2的背景里'...",
-            help="在融合模式下，请明确告诉 AI 哪张图是干嘛的。"
+            placeholder="简述修改需求即可（例如：换成外国女模特、放在沙滩背景）。AI 会自动补全画质词。",
+            help="输入最核心的需求。不用写'8k, high quality'等废话，AI会自动加。"
         )
-        st.caption("💡 **高级语法**：`(keyword)` 增加权重，`[keyword]` 减小权重。")
         
         # 3. 参数控制
-        user_weight = st.slider("⚖️ AI 参考权重", 0.0, 1.0, 0.6)
-        neg_prompt = st.text_input("🚫 负向提示词", placeholder="low quality, deformed, messy")
+        user_weight = st.slider(
+            "⚖️ AI 参考权重", 0.0, 1.0, 0.7, 
+            help="值越高，AI 越听你的话（忽略原图内容）；值越低，AI 越忠实于原图。"
+        )
+        neg_prompt = st.text_input("🚫 负向提示词", placeholder="low quality, deformed")
         enable_split = st.checkbox("🧩 启用多任务拆分", value=False)
 
         # 🧠 生成 Prompt 按钮
@@ -172,34 +155,28 @@ with tab_workflow:
             if not uploaded_files: 
                 st.toast("⚠️ 请先上传图片", icon="🚨")
             else:
-                with st.status("🤖 AI 正在进行思维链思考...", expanded=True) as status:
-                    st.write("👀 正在阅读图片内容...")
-                    
-                    # 如果是多图，可能需要重新 seek(0)
+                with st.status("🤖 AI 正在优化提示词...", expanded=True) as status:
+                    # 准备图片数据
                     if isinstance(active_img_input, list):
-                        for img in active_img_input:
+                        for img in active_img_input: 
                             if hasattr(img, 'seek'): img.seek(0)
                     elif hasattr(active_img_input, 'seek'):
                         active_img_input.seek(0)
 
                     time.sleep(0.5)
                     
-                    st.write(f"🎨 正在融合【{selected_style}】风格与光影...")
-                    
-                    # ✨ 调用升级版 LLM 接口 (支持传入列表)
+                    # 调用 LLM
                     prompts = llm.optimize_art_director_prompt(
                         user_idea, task_type, user_weight, selected_style, active_img_input, enable_split
                     )
                     
-                    st.write("📝 正在撰写最终 Prompt 并翻译...")
                     st.session_state.std_prompts = []
                     for p_en in prompts:
                         p_zh = llm.translate(p_en, "Simplified Chinese")
                         st.session_state.std_prompts.append({"en": p_en, "zh": p_zh})
                     
                     st.session_state.prompt_ver += 1
-                    status.update(label="✅ Prompt 生成完毕！", state="complete", expanded=False)
-                    st.toast("Prompt 已生成！", icon="✨")
+                    status.update(label="✅ Prompt 优化完毕！", state="complete", expanded=False)
                     st.rerun()
 
         # 🎨 执行生成区域
@@ -209,68 +186,80 @@ with tab_workflow:
             for i, p_data in enumerate(st.session_state.std_prompts):
                 with st.container(border=True):
                     st.markdown(f"**任务 {i+1}**")
-                    tab_zh, tab_en = st.tabs(["🇨🇳 中文编辑 (默认)", "🇺🇸 English Prompt"])
+                    tab_zh, tab_en = st.tabs(["🇨🇳 中文编辑", "🇺🇸 English Prompt"])
                     
+                    # ✨ 修复 Bug 1 & 2: 同步更新逻辑
                     with tab_zh:
-                        new_zh = st.text_area(
-                            "中文指令", 
-                            p_data["zh"], 
-                            key=f"p_zh_{i}_v{st.session_state.prompt_ver}", 
-                            height=100, label_visibility="collapsed"
-                        )
+                        current_key = f"p_zh_{i}_v{st.session_state.prompt_ver}"
+                        new_zh = st.text_area("中文指令", p_data["zh"], key=current_key, height=100)
+                        
+                        # 核心修复：检测到变化立即翻译并更新 session state
                         if new_zh != p_data["zh"]: 
                             st.session_state.std_prompts[i]["zh"] = new_zh
-                            st.session_state.std_prompts[i]["en"] = llm.translate(new_zh, "English")
-                    
+                            translated_en = llm.translate(new_zh, "English")
+                            st.session_state.std_prompts[i]["en"] = translated_en
+                            # 强制刷新界面，让 English Tab 也能看到变化
+                            st.rerun()
+
                     with tab_en:
-                        st.text_area("English Source", st.session_state.std_prompts[i]["en"], disabled=True, height=100, key=f"p_en_{i}_v{st.session_state.prompt_ver}")
+                        st.text_area("English Source", st.session_state.std_prompts[i]["en"], disabled=True, height=100)
 
             # 高级面板
             with st.container(border=True):
-                st.caption("⚙️ **高级生成参数**")
-                cg1, cg2 = st.columns(2)
-                model_name = cg1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS)
-                ratio_key = cg2.selectbox("📐 画幅比例", list(RATIO_MAP.keys()))
+                st.caption("⚙️ **生成参数**")
+                r1_c1, r1_c2 = st.columns(2)
+                model_name = r1_c1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS)
+                ratio_key = r1_c2.selectbox("📐 画幅比例", list(RATIO_MAP.keys()))
                 
                 if "flash" in model_name.lower() and "1:1" not in ratio_key:
                     st.warning("⚠️ Flash 模型仅支持 1:1。", icon="⚠️")
 
-                cg3, cg4 = st.columns(2)
-                safety_level = cg3.selectbox("🛡️ 安全过滤", ["Standard (标准)", "Permissive (宽松)", "Strict (严格)"])
-                creativity = cg4.slider("🎨 创意度", 0.0, 1.0, 0.5)
+                r2_c1, r2_c2 = st.columns(2)
+                # ✨ 新增：数量选择
+                num_images = r2_c1.slider("🖼️ 生成数量", 1, 4, 1)
+                safety_level = r2_c2.selectbox("🛡️ 安全过滤", ["Standard (标准)", "Permissive (宽松)", "Strict (严格)"])
                 
-                cg5, cg6 = st.columns([0.8, 0.2], vertical_alignment="bottom")
-                seed_input = cg5.number_input("🎲 Seed", value=-1, step=1)
+                # 移除了创意度滑块，保留 Seed
+                seed_input = st.number_input("🎲 Seed (可选，-1为随机)", value=-1, step=1)
                 real_seed = None if seed_input == -1 else int(seed_input)
 
             # 生成按钮
             if st.button("🚀 开始生成图片", type="primary", use_container_width=True):
                 st.session_state.std_results = []
                 
+                # 准备参考图
+                ref_img = None
+                if active_ref_for_gen:
+                    active_ref_for_gen.seek(0)
+                    ref_img = active_ref_for_gen
+
+                total_ops = len(st.session_state.std_prompts) * num_images
                 bar = st.progress(0)
-                total = len(st.session_state.std_prompts)
+                current_op = 0
                 
                 with st.status("🎨 正在绘制中...", expanded=True) as status:
                     for idx, task in enumerate(st.session_state.std_prompts):
-                        st.write(f"正在执行任务 {idx+1}/{total}...")
-                        
-                        # ✨ 注意：融合模式下 active_ref_for_gen 通常为 None
-                        # 因为 Image Gen 模型一次只能吃一张参考图，融合主要靠 Prompt 描述
-                        res_bytes = img_gen.generate(
-                            task["en"], model_name, active_ref_for_gen, RATIO_MAP[ratio_key], 
-                            negative_prompt=neg_prompt,
-                            seed=real_seed, creativity=creativity, safety_level=safety_level.split()[0]
-                        )
-                        
-                        if res_bytes:
-                            st.session_state.std_results.append(res_bytes)
-                            history.add(res_bytes, f"Task {idx+1}", task["zh"])
-                        else:
-                            st.error(f"任务 {idx+1} 生成失败")
+                        # ✨ 循环生成 num_images 张
+                        for n in range(num_images):
+                            st.write(f"任务 {idx+1}: 正在生成第 {n+1}/{num_images} 张...")
                             
-                        bar.progress((idx + 1) / total)
+                            res_bytes = img_gen.generate(
+                                task["en"], model_name, ref_img, RATIO_MAP[ratio_key], 
+                                negative_prompt=neg_prompt,
+                                seed=real_seed, creativity=0.5, # 默认给 0.5
+                                safety_level=safety_level.split()[0]
+                            )
+                            
+                            if res_bytes:
+                                st.session_state.std_results.append(res_bytes)
+                                history.add(res_bytes, f"Task {idx+1}-{n+1}", task["zh"])
+                            else:
+                                st.error(f"任务 {idx+1} 生成失败")
+                            
+                            current_op += 1
+                            bar.progress(current_op / total_ops)
                     
-                    status.update(label="🎉 执行完毕！", state="complete", expanded=False)
+                    status.update(label="🎉 全部完成！", state="complete", expanded=False)
                     st.toast("图片生成完成！", icon="🖼️")
 
     # --- 右侧：结果预览区 ---
@@ -289,14 +278,7 @@ with tab_workflow:
                                 show_image_modal(img_bytes, f"Result {idx+1}")
                     with b_col2:
                         final_bytes, mime = process_image_for_download(img_bytes, format="JPEG")
-                        st.download_button(
-                            "📥 下载", 
-                            data=final_bytes, 
-                            file_name=f"result_{idx+1}.jpg", 
-                            mime=mime, 
-                            key=f"v_dl_{idx}", 
-                            use_container_width=True
-                        )
+                        st.download_button("📥 下载", data=final_bytes, file_name=f"res_{idx}.jpg", mime=mime, key=f"v_dl_{idx}", use_container_width=True)
 # ==========================================
 # TAB 2: 变体改款 (重构版)
 # ==========================================
