@@ -2,7 +2,6 @@ import streamlit as st
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import time
-import random
 
 class ImageGenEngine:
     def __init__(self, api_key=None):
@@ -11,17 +10,11 @@ class ImageGenEngine:
             genai.configure(api_key=self.api_key)
 
     def _get_safety_settings(self, tolerance_level="Standard"):
-        """
-        根据用户选择的安全容忍度，生成安全设置配置。
-        解决痛点：电商模特图经常被误判为成人内容而被拦截。
-        """
-        # 默认屏蔽阈值 (BLOCK_MEDIUM_AND_ABOVE)
+        # 保持您原有的安全设置逻辑，这部分没问题
         threshold = HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
-        
-        if tolerance_level == "Permissive (宽松 - 适合内衣/泳装)":
-            # 仅屏蔽极度危险内容，放行普通皮肤暴露
+        if tolerance_level.startswith("Permissive"):
             threshold = HarmBlockThreshold.BLOCK_ONLY_HIGH
-        elif tolerance_level == "Strict (严格)":
+        elif tolerance_level.startswith("Strict"):
             threshold = HarmBlockThreshold.BLOCK_LOW_AND_ABOVE
 
         return {
@@ -32,84 +25,78 @@ class ImageGenEngine:
         }
 
     def generate(self, prompt, model_name, ref_image=None, ratio_suffix="", negative_prompt="", 
-                 seed=None, creativity=0.5, safety_level="Standard", max_retries=3):
+                 seed=None, creativity=0.5, safety_level="Standard"):
         """
-        增强版生图接口：支持重试、安全设置、参数控制。
+        执行生图任务
         """
-        # 1. 预处理 Prompt
-        clean_prompt = prompt.replace("16:9", "").replace("4:3", "").replace("1:1", "").replace("Aspect Ratio", "")
-        final_prompt = f"{clean_prompt} {ratio_suffix}, high quality, 8k resolution, photorealistic"
+        # 1. 强制模型白名单检查 (根据您的要求)
+        allowed_models = [
+            "models/gemini-3-pro-image-preview", # 首选生图
+            "models/gemini-3-pro-preview",       # 备选
+            "models/gemini-flash-latest",
+            "models/gemini-flash-lite-latest"
+        ]
         
-        if negative_prompt and negative_prompt.strip():
-            final_prompt += f" --no {negative_prompt.strip()}"
+        # 如果传入的模型不在白名单，默认回退到 image-preview
+        target_model = model_name if model_name in allowed_models else "models/gemini-3-pro-image-preview"
 
-        # 2. 准备输入
+        # 2. 构建 Prompt
+        # 移除可能重复的比例词，由 ratio_suffix 控制
+        clean_prompt = prompt.replace("16:9", "").replace("4:3", "").replace("1:1", "")
+        final_prompt = f"{clean_prompt} {ratio_suffix}"
+        
+        if negative_prompt:
+            final_prompt += f" --no {negative_prompt}"
+
+        # 3. 准备输入 Payload
         inputs = [final_prompt]
         if ref_image:
             inputs.append(ref_image)
 
-        # 3. 准备生成配置 (Generation Config)
-        # 注意：temperature 在生图模型中通常影响“创意度/随机性”
+        # 4. 配置生成参数
         gen_config = genai.types.GenerationConfig(
-            temperature=creativity, # 0.0=保守/一致, 1.0=狂野/随机
+            temperature=creativity,
             candidate_count=1
         )
         
-        # 尝试注入 Seed (如果模型支持)
-        # 注意：目前部分 Gemini 版本会自动忽略此参数，但保留接口是为了未来兼容
-        if seed is not None and isinstance(seed, int):
-            # 这是一个 Hack，因为 python sdk 有时未显式暴露 seed
-            # 如果报错，我们会捕获异常
+        # 尝试注入 Seed
+        if seed is not None and seed != -1:
             try:
-                setattr(gen_config, 'seed', seed)
+                setattr(gen_config, 'seed', int(seed))
             except:
                 pass
 
-        # 4. 获取安全设置
         safety_settings = self._get_safety_settings(safety_level)
 
-        # 5. 带重试机制的调用循环
-        for attempt in range(max_retries):
+        # 5. 调用 API (带简单的重试)
+        max_retries = 2
+        for attempt in range(max_retries + 1):
             try:
-                gen_model = genai.GenerativeModel(model_name)
+                # 实例化指定的模型
+                gen_model = genai.GenerativeModel(target_model)
                 
-                # 发起调用
                 response = gen_model.generate_content(
-                    inputs, 
-                    stream=True,
+                    inputs,
                     generation_config=gen_config,
                     safety_settings=safety_settings
                 )
                 
-                # 解析流式结果
-                for chunk in response:
-                    if hasattr(chunk, "parts"):
-                        for part in chunk.parts:
-                            if part.inline_data:
-                                return part.inline_data.data
+                # 尝试解析图像数据
+                if response.parts:
+                    for part in response.parts:
+                        if hasattr(part, "inline_data") and part.inline_data:
+                            return part.inline_data.data
                 
-                # 如果代码走到这里还没返回，说明可能被拦截了
-                if attempt == max_retries - 1:
-                    print(f"Generation finished but no image found. Safety filter triggered?")
-            
+                # 如果没有图像数据但也没报错，可能是由于安全设置被静默拦截
+                if attempt == max_retries:
+                    print(f"No image returned. Prompt blocked? {response.prompt_feedback}")
+
             except Exception as e:
-                # 捕获错误并决定是否重试
-                error_msg = str(e)
-                is_last_attempt = (attempt == max_retries - 1)
-                
-                if "429" in error_msg: # 频率限制
-                    wait_time = 2 ** (attempt + 1) # 指数退避: 2s, 4s, 8s...
-                    print(f"Rate limit hit. Retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                elif "500" in error_msg or "503" in error_msg: # 服务器错误
-                    if not is_last_attempt:
-                        time.sleep(1)
-                        continue
+                if "429" in str(e): # Resource Exhausted
+                    time.sleep(2 * (attempt + 1))
+                    continue
                 else:
-                    # 其他错误（如 400 参数错误）直接抛出，不重试
-                    if is_last_attempt:
-                        st.error(f"❌ 生成失败 (Attempt {attempt+1}/{max_retries}): {e}")
-                    else:
-                        print(f"Error: {e}. Retrying...")
-                        
+                    print(f"Gen Error ({target_model}): {e}")
+                    if attempt == max_retries:
+                        return None
         return None
