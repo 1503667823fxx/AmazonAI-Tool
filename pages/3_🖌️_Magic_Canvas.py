@@ -90,7 +90,15 @@ with c_canvas:
         # 限制图片大小防止 Canvas 卡顿 (Flux 推荐 1024 左右)
         if image.width > 1024 or image.height > 1024:
             image.thumbnail((1024, 1024))
-        st.session_state.canvas_bg_img = image
+            
+   # ➕ 新增：如果图片变了，更新 Session 中的图片 ID
+        # 我们用文件名 + 大小作为唯一标识
+        img_id = f"{uploaded_file.name}-{uploaded_file.size}"
+        if st.session_state.get("last_img_id") != img_id:
+            st.session_state.canvas_bg_img = image
+            st.session_state.last_img_id = img_id
+            # 强制更新 Key，触发组件重绘
+            st.session_state.canvas_key = f"canvas_{int(time.time())}"
 
     # Canvas 配置栏
     t_col1, t_col2 = st.columns([1, 2])
@@ -111,7 +119,7 @@ with c_canvas:
             height=h,
             width=w,
             drawing_mode="freedraw",
-            key="magic_canvas_editor",
+             key=st.session_state.get("canvas_key", "magic_canvas_default"),
         )
     else:
         st.info("👈 请先上传图片开始创作")
