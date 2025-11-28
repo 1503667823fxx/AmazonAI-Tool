@@ -4,7 +4,7 @@ import sys
 import os
 import google.generativeai as genai
 
-# 环境配置
+# --- 路径环境设置 ---
 current_script_path = os.path.abspath(__file__)
 pages_dir = os.path.dirname(current_script_path)
 root_dir = os.path.dirname(pages_dir)
@@ -60,17 +60,23 @@ def regenerate_callback(idx):
         st.session_state.trigger_inference = True
         st.rerun()
 
-# --- 初始化 ---
+# --- 初始化与鉴权 ---
 if 'auth' in sys.modules and not auth.check_password(): st.stop()
+
+# ✅ 修复点：独立检查每个关键变量，防止旧状态导致的 AttributeError
+if "studio_msgs" not in st.session_state:
+    st.session_state.studio_msgs = []
+
+if "msg_uid" not in st.session_state:
+    st.session_state.msg_uid = 0
+
+if "uploader_key_id" not in st.session_state:
+    st.session_state.uploader_key_id = 0
 
 if "studio_ready" not in st.session_state:
     api_key = st.secrets.get("GOOGLE_API_KEY")
     st.session_state.llm_studio = LLMEngine(api_key)
     st.session_state.img_gen_studio = ImageGenEngine(api_key)
-    st.session_state.studio_msgs = []
-    st.session_state.msg_uid = 0
-    # ✅ 解决附件重复发送问题：用于强制刷新 Uploader 的 Key
-    st.session_state.uploader_key_id = 0 
     st.session_state.studio_ready = True
 
 # --- 侧边栏 ---
@@ -99,6 +105,10 @@ for idx, msg in enumerate(st.session_state.studio_msgs):
 if st.session_state.get("trigger_inference", False):
     st.session_state.trigger_inference = False
     
+    # 再次检查是否有消息，防止空指针
+    if not st.session_state.studio_msgs:
+        st.rerun()
+
     last_msg = st.session_state.studio_msgs[-1]
     
     if last_msg["role"] == "user":
@@ -135,7 +145,6 @@ if st.session_state.get("trigger_inference", False):
                     past_history = build_gemini_history(st.session_state.studio_msgs[:-1])
                     
                     # 2. 启动聊天会话 (直接调用 SDK，最稳妥)
-                    # 注意：system_instruction 目前仅部分 gemini 模型支持，这里简化为纯 Chat
                     chat_session = genai.GenerativeModel(current_model_id).start_chat(history=past_history)
                     
                     # 3. 准备当前消息 Payload
