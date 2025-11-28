@@ -33,63 +33,71 @@ class LLMEngine:
             return resp.text.strip()
         except: return text
 
-    def optimize_art_director_prompt(self, user_idea, task_type, weight, style_key, image_input=None, enable_split=False):
+def optimize_art_director_prompt(self, user_idea, task_type, weight, style_key, image_input=None, enable_split=False):
         """
-        优化核心：解决'换模特'无效的问题。
-        策略：强制 LLM 提取原图的'服装/环境'，但重写'人物特征'。
+        V6 逻辑升级：支持多主体生成 (Multi-Subject Generation)
+        解决痛点：用户要求"生成两位不同模特"时，AI 只输出单人 Prompt。
         """
         if not self.valid: return []
 
         style_data = PRESETS.get(style_key, PRESETS["💡 默认 (None)"])
         style_desc = style_data["desc"]
 
-        # 构建多模态输入
+        # 构建输入
         inputs = []
         inputs.append(image_input if image_input else "No reference image provided.")
         
-        # --- 核心 System Prompt ---
-        # 这一段 Prompt 是解决 Bug 的关键
+        # --- 核心 System Prompt (针对人数问题进行了深度重构) ---
         system_prompt = f"""
         You are an expert AI Art Director. Your goal is to write a precise image generation prompt based on the User's Request and the Reference Image.
 
         【User Request】: "{user_idea}"
         【Style Preset】: "{style_desc}"
 
-        【CRITICAL INSTRUCTION FOR IDENTITY SWAPPING】
-        Analyze if the user wants to CHANGE the model/person (e.g., "swap model", "use a foreigner", "change to man").
+        【STEP 1: ANALYZE SUBJECT COUNT】
+        Check if the user wants **MORE THAN ONE** person (e.g., "two models", "couple", "group", "twins", "friends").
         
-        IF YES (Change Model):
-        1. **IGNORE** the face/body traits in the Reference Image.
-        2. **INVENT** specific, high-contrast physical details for the new person to OVERRIDE the image signal.
-           - Instead of just "Western model", write: "Portrait of a Caucasian female model, platinum blonde wavy hair, icy blue eyes, fair skin structure, sharp jawline."
-           - Instead of just "Black model", write: "Portrait of an African American male model, dark skin tone, short buzz cut, brown eyes."
-        3. **KEEP** the clothing details from the Reference Image (describe the clothes you see in the image explicitly).
+        👉 CASE A: MULTIPLE SUBJECTS (Target > 1 person)
+        1. **Composition**: Start with "A medium shot of TWO models..." (or relevant number).
+        2. **Differentiation**: You MUST invent DISTINCT looks for each model if requested.
+           - Write: "Model on left is [Physique A, Hair A, Ethnicity A]. Model on right is [Physique B, Hair B, Ethnicity B]."
+           - Do NOT make them look like clones unless user asks for "twins".
+        3. **Clothing Logic**: Explicitly state that **BOTH** are wearing the clothing from the reference image (or as user requested).
+           - Write: "Both models are wearing matching [Clothing Description from Ref Image]."
 
-        IF NO (Keep Model):
-        1. Describe the person in the Reference Image accurately to maintain consistency.
+        👉 CASE B: SINGLE SUBJECT (Target = 1 person)
+        1. **Identity Check**: Does user want to change the model?
+           - IF YES: Invent NEW physical traits (e.g., "Caucasian, blonde" or "Asian, short hair") to override the reference image face.
+           - IF NO: Describe the person in the reference image accurately.
+
+        【STEP 2: EXTRACT VISUALS FROM REFERENCE】
+        - Look at the Reference Image. Extract the **Clothing Details** (Texture, Color, Cut) and **Environment** (if needed).
+        - If the user wants to keep the clothing, describe it in high detail so the generated image matches the product.
 
         【Final Output Format】
-        Write a single, high-quality English prompt suitable for a text-to-image model.
-        Format: [Subject Description (Face/Body)] + [Clothing Details (from Ref Image)] + [Action/Pose] + [Background/Environment] + [Lighting/Style].
+        Write a single, continuous English prompt.
+        Structure: [Subject Count & Composition] + [Distinct Subject Details (Model A, Model B...)] + [Clothing/Product Details] + [Action/Interaction] + [Background] + [Style tags].
         """
         
         inputs.append(system_prompt)
 
         try:
-            # 使用最强的 Gemini 3 Pro Preview 进行思考
+            # 依然使用最聪明的 Gemini 3 Pro Preview (Reasoning)
             model = self._get_model("reasoning")
             
             config = genai.types.GenerationConfig(
-                temperature=0.4, # 降低随机性，确保严格遵循指令
+                temperature=0.45, #稍微提高一点点创造力，让它能编造出两个不同的人
                 candidate_count=1
             )
             
             response = model.generate_content(inputs, generation_config=config)
             final_prompt = response.text.strip()
             
+            # 调试日志：可以在后台看到 LLM 到底输出了什么
+            print(f"🐛 Generated Prompt: {final_prompt}")
+            
             return [final_prompt]
 
         except Exception as e:
             print(f"LLM Error: {e}")
-            # 降级策略
             return [f"{user_idea}, {style_desc}, high quality, 8k resolution"]
