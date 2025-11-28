@@ -13,9 +13,9 @@ if root_dir not in sys.path:
 
 try:
     import auth
-    # 引入UI组件
+    # 引入UI组件 (移除了 show_image_modal)
     from app_utils.history_manager import HistoryManager
-    from app_utils.ui_components import render_history_sidebar, show_image_modal
+    from app_utils.ui_components import render_history_sidebar
     from app_utils.image_processing import create_preview_thumbnail, process_image_for_download
     
     # 引入服务引擎
@@ -29,11 +29,30 @@ except ImportError as e:
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
 
+# --- CSS 注入：实现右侧栏悬浮跟随 ---
+st.markdown("""
+    <style>
+    /* 针对宽屏模式下的第二列 (结果预览区) 设置 Sticky */
+    [data-testid="stHorizontalBlock"] > [data-testid="column"]:nth-of-type(2) {
+        position: sticky;
+        top: 60px; /* 距离顶部的距离 */
+        height: calc(100vh - 80px); /* 视口高度减去头部 */
+        overflow-y: auto; /* 允许内部滚动 */
+        padding-top: 10px;
+    }
+    /* 优化 Expander 的样式 */
+    .streamlit-expanderHeader {
+        background-color: #f0f2f6;
+        border-radius: 8px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- 2. 初始化与鉴权 ---
 if 'auth' in sys.modules and not auth.check_password():
     st.stop()
 
-# 初始化 Session State (防止刷新丢失数据)
+# 初始化 Session State
 if "services_ready" not in st.session_state:
     api_key = st.secrets.get("GOOGLE_API_KEY")
     if not api_key:
@@ -43,20 +62,21 @@ if "services_ready" not in st.session_state:
     st.session_state.img_gen = ImageGenEngine(api_key)
     st.session_state.history = HistoryManager()
     
-    # 数据容器
-    st.session_state.std_prompts = []  # 存储生成的 Prompt 列表
-    st.session_state.std_results = []  # 存储生成的图片结果
-    st.session_state.prompt_ver = 0    # 版本控制，强制刷新 UI
+    st.session_state.std_prompts = []  
+    st.session_state.std_results = []  
+    st.session_state.prompt_ver = 0    
     st.session_state.services_ready = True
 
 llm = st.session_state.llm
 img_gen = st.session_state.img_gen
 history = st.session_state.history
 
-# --- 3. 常量定义 ---
+# --- 3. 常量定义 (已更新为您指定的模型) ---
 GOOGLE_IMG_MODELS = [
-    "models/gemini-3-pro-image-preview", # 建议默认选这个，生图效果最好
-    "models/gemini-2.5-flash-image",
+    "models/gemini-3-pro-image-preview", 
+    "models/gemini-3-pro-preview",
+    "models/gemini-flash-latest",
+    "models/gemini-flash-lite-latest"
 ]
 RATIO_MAP = {
     "1:1 (Square)": ", crop to 1:1 aspect ratio",
@@ -67,7 +87,7 @@ RATIO_MAP = {
 # --- 4. 侧边栏 ---
 with st.sidebar:
     st.title("🗂️ 工作区")
-    # 复用历史记录组件
+    st.info("💡 **提示**：生成的图片会自动保存在这里，刷新页面也不会丢失。")
     render_history_sidebar(history) 
 
 # --- 5. 主逻辑区 (双栏布局) ---
@@ -76,57 +96,72 @@ st.title("🧬 Fashion AI Core (Smart Edit)")
 # 布局划分：左侧配置(1.2)，右侧预览(1)
 c_config, c_view = st.columns([1.2, 1], gap="large")
 
+# ================= 左侧：配置区 =================
 with c_config:
     st.subheader("🛠️ 需求配置")
     
-    # === A. 图片上传 (保留多图逻辑) ===
-    uploaded_files = st.file_uploader("上传参考图", type=["jpg","png","webp"], accept_multiple_files=True)
+    # === A. 图片上传 (可折叠) ===
+    uploaded_files = st.file_uploader(
+        "上传参考图", 
+        type=["jpg","png","webp"], 
+        accept_multiple_files=True,
+        help="支持上传单张或多张图片。\n- 单图：作为生图的直接参考（权重高）。\n- 多图：作为灵感参考，AI会分析多张图的共同特征。"
+    )
     
-    # 核心变量初始化
-    active_img_input = None     # 传给 LLM 读图
-    active_ref_for_gen = None   # 传给生图做参考
+    active_img_input = None     
+    active_ref_for_gen = None   
     
     if uploaded_files:
-        file_count = len(uploaded_files)
-        # 缩略图展示区
-        cols = st.columns(min(file_count, 4))
-        img_list = []
-        
-        for idx, f in enumerate(uploaded_files):
-            img = Image.open(f)
-            img_list.append(img)
-            if idx < 4:
-                with cols[idx]:
-                    st.image(img, use_container_width=True)
-        
-        if file_count == 1:
-            active_img_input = img_list[0]
-            active_ref_for_gen = img_list[0] # 单图：作为生图参考
-        else:
-            st.info(f"🧩 检测到 {file_count} 张图片，启用**多图融合模式** (仅作为灵感参考)。")
-            active_img_input = img_list      # 多图：列表传给 LLM
-            active_ref_for_gen = None        # 多图：不传具体参考图，全靠 Prompt
+        # 使用 Expander 包裹预览，节省空间
+        with st.expander(f"📸 原图预览 ({len(uploaded_files)} 张) - 点击收起", expanded=True):
+            file_count = len(uploaded_files)
+            cols = st.columns(min(file_count, 4))
+            img_list = []
+            
+            for idx, f in enumerate(uploaded_files):
+                img = Image.open(f)
+                img_list.append(img)
+                if idx < 4:
+                    with cols[idx]:
+                        st.image(img, use_container_width=True)
+            
+            if file_count == 1:
+                active_img_input = img_list[0]
+                active_ref_for_gen = img_list[0]
+            else:
+                st.info(f"🧩 已启用多图融合模式。")
+                active_img_input = img_list      
+                active_ref_for_gen = None 
 
     # === B. 创意输入 ===
+    st.markdown("#### 💡 创意指令")
     col_t1, col_t2 = st.columns(2)
-    task_type = col_t1.selectbox("任务类型", ["展示图 (Creative)", "场景图 (Lifestyle)", "产品图 (Product Only)"])
-    selected_style = col_t2.selectbox("🎨 风格预设", list(PRESETS.keys()), index=0)
+    task_type = col_t1.selectbox(
+        "任务类型", 
+        ["展示图 (Creative)", "场景图 (Lifestyle)", "产品图 (Product Only)"],
+        help="选择生成的目的，会影响 AI 对背景和光影的默认处理方式。"
+    )
+    selected_style = col_t2.selectbox(
+        "🎨 风格预设", 
+        list(PRESETS.keys()), 
+        index=0,
+        help="选择一种视觉风格，这会覆盖在您的 Prompt 之上。"
+    )
 
     user_idea = st.text_area(
         "你的创意 Prompt", 
         height=80, 
-        placeholder="简述修改需求即可（例如：换成外国女模特、放在沙滩背景）。",
-        help="输入最核心的需求，AI会自动补全画质词。"
+        placeholder="例如：换个外国女模特，背景改成巴黎街头，保留衣服细节。",
+        help="👉 **重要**：如果您想换模特，请明确输入“换个模特”、“换成外国人”等指令，AI 会自动处理。"
     )
 
     # === C. AI 思考按钮 ===
-    if st.button("🧠 AI 思考并生成 Prompt", type="primary"):
+    if st.button("🧠 AI 思考并生成 Prompt", type="primary", help="点击后，AI 会结合原图和您的文字，生成专业的英文绘画指令。"):
         if not uploaded_files: 
             st.toast("⚠️ 请先上传图片", icon="🚨")
         else:
-            with st.status("🤖 AI 正在优化提示词...", expanded=True) as status:
+            with st.status("🤖 AI 正在拆解需求...", expanded=True) as status:
                 try:
-                    # 准备图片指针
                     if isinstance(active_img_input, list):
                         for img in active_img_input: 
                             if hasattr(img, 'seek'): img.seek(0)
@@ -135,13 +170,11 @@ with c_config:
 
                     time.sleep(0.5)
                     
-                    # 调用 LLM (移除UI上的权重/拆分，使用默认值)
-                    # 默认: weight=0.7, enable_split=False (根据你的减负要求)
+                    # 这里的 prompt 优化逻辑已经包含了您要求的“换人”增强
                     prompts = llm.optimize_art_director_prompt(
                         user_idea, task_type, 0.7, selected_style, active_img_input, False
                     )
                     
-                    # 更新 Session State
                     st.session_state.std_prompts = []
                     for p_en in prompts:
                         p_zh = llm.translate(p_en, "Simplified Chinese")
@@ -149,26 +182,31 @@ with c_config:
                     
                     st.session_state.prompt_ver += 1
                     status.update(label="✅ Prompt 优化完毕！", state="complete", expanded=False)
-                    st.rerun() # 强制刷新以显示下方的 Prompt 编辑器
+                    st.rerun() 
                 except Exception as e:
                     st.error(f"LLM 调用失败: {e}")
 
-    # === D. Prompt 编辑器 (保留你要求的逻辑) ===
+    # === D. Prompt 编辑器 ===
     if st.session_state.std_prompts:
         st.markdown("---")
-        st.caption("📝 **任务列表 (Prompt Editor)**")
+        # 将编辑器也放入 Expander (可选，这里我默认展开，但标题清晰)
+        st.caption("📝 **指令编辑器 (Prompt Editor)**")
         
         for i, p_data in enumerate(st.session_state.std_prompts):
             with st.container(border=True):
                 st.markdown(f"**Task {i+1}**")
-                # 保留原有的 Tab 结构
-                tab_zh, tab_en = st.tabs(["🇨🇳 中文编辑", "🇺🇸 English Source"])
+                tab_zh, tab_en = st.tabs(["🇨🇳 中文编辑 (推荐)", "🇺🇸 英文原文"])
                 
                 with tab_zh:
                     current_key = f"p_zh_{i}_v{st.session_state.prompt_ver}"
-                    new_zh = st.text_area("中文指令", p_data["zh"], key=current_key, height=100)
+                    new_zh = st.text_area(
+                        "中文指令", 
+                        p_data["zh"], 
+                        key=current_key, 
+                        height=100,
+                        help="您可以修改这里的中文，系统会自动翻译回英文供生图使用。"
+                    )
                     
-                    # 同步逻辑：中文变动 -> 翻译 -> 更新英文
                     if new_zh != p_data["zh"]: 
                         st.session_state.std_prompts[i]["zh"] = new_zh
                         try:
@@ -176,31 +214,32 @@ with c_config:
                             st.session_state.std_prompts[i]["en"] = translated_en
                             st.rerun()
                         except Exception as e:
-                            st.warning("翻译服务暂时不可用，请直接编辑英文")
+                            st.warning("翻译服务暂时不可用")
 
                 with tab_en:
-                    # 英文部分通常作为 Source，如果需要也可以开放编辑
                     st.text_area("English Prompt", st.session_state.std_prompts[i]["en"], disabled=True, height=100)
 
-        # === E. 高级参数与执行 (折叠) ===
+        # === E. 高级参数与执行 ===
         with st.expander("⚙️ 生成参数设置", expanded=False):
             r1_c1, r1_c2 = st.columns(2)
-            model_name = r1_c1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS)
+            model_name = r1_c1.selectbox("🤖 基础模型", GOOGLE_IMG_MODELS, help="Gemini 3 Pro Image Preview 是目前效果最好的选择。")
             ratio_key = r1_c2.selectbox("📐 画幅比例", list(RATIO_MAP.keys()))
             
             r2_c1, r2_c2 = st.columns(2)
-            num_images = r2_c1.slider("🖼️ 生成数量", 1, 4, 1)
-            # 对应 _get_safety_settings 参数
-            safety_level = r2_c2.selectbox("🛡️ 安全过滤", ["Standard (标准)", "Permissive (宽松)", "Strict (严格)"])
+            num_images = r2_c1.slider("🖼️ 生成数量", 1, 4, 1, help="一次生成的图片数量，数量越多等待时间越长。")
+            safety_level = r2_c2.selectbox(
+                "🛡️ 安全过滤", 
+                ["Standard (标准)", "Permissive (宽松)", "Strict (严格)"],
+                help="如果生成内衣或泳装模特失败，请尝试切换到 'Permissive'。"
+            )
             
-            seed_input = st.number_input("🎲 Seed (-1为随机)", value=-1, step=1)
+            seed_input = st.number_input("🎲 Seed (-1为随机)", value=-1, step=1, help="固定种子可以复现之前的生成结果。")
             real_seed = None if seed_input == -1 else int(seed_input)
 
         # 执行按钮
         if st.button("🚀 开始生成图片", type="primary", use_container_width=True):
-            st.session_state.std_results = [] # 清空旧结果
+            st.session_state.std_results = [] 
             
-            # 准备参考图
             ref_img_to_pass = None
             if active_ref_for_gen:
                 if hasattr(active_ref_for_gen, 'seek'): active_ref_for_gen.seek(0)
@@ -214,9 +253,7 @@ with c_config:
                 for idx, task in enumerate(st.session_state.std_prompts):
                     for n in range(num_images):
                         st.write(f"任务 {idx+1}: 正在生成第 {n+1}/{num_images} 张...")
-                        
                         try:
-                            # 调用生成接口
                             res_bytes = img_gen.generate(
                                 task["en"], 
                                 model_name, 
@@ -231,7 +268,7 @@ with c_config:
                                 st.session_state.std_results.append(res_bytes)
                                 history.add(res_bytes, f"Task {idx+1}-{n+1}", task["zh"])
                             else:
-                                st.error(f"任务 {idx+1} 生成失败 (可能因安全策略拦截)")
+                                st.error(f"任务 {idx+1} 生成失败 (可能因安全策略拦截，请尝试调节安全等级)")
                         
                         except Exception as e:
                             st.error(f"API 异常: {e}")
@@ -242,12 +279,12 @@ with c_config:
                 status.update(label="🎉 全部完成！", state="complete", expanded=False)
                 st.toast("图片生成完成！", icon="🖼️")
 
-# --- 右侧：结果预览区 ---
+# ================= 右侧：结果预览区 (Sticky) =================
 with c_view:
     st.subheader("🖼️ 结果预览")
+    
     if not st.session_state.std_results:
         st.info("👈 在左侧完成配置后，结果将在此显示。")
-        # 占位图
         st.markdown(
             '<div style="border: 2px dashed #ddd; height: 300px; display: flex; align-items: center; justify-content: center; color: #888;">Waiting for results...</div>', 
             unsafe_allow_html=True
@@ -256,23 +293,20 @@ with c_view:
         # 结果渲染循环
         for idx, img_bytes in enumerate(st.session_state.std_results):
             with st.container(border=True):
-                # 创建缩略图防止卡顿
-                thumb = create_preview_thumbnail(img_bytes, 400)
-                st.image(thumb, use_container_width=True, caption=f"Result {idx+1}")
+                # 1. 创建缩略图
+                thumb = create_preview_thumbnail(img_bytes, 800) # 提高一点清晰度
                 
-                b_col1, b_col2 = st.columns(2)
-                with b_col1:
-                    # 弹窗组件
-                    if st.button("🔍 放大", key=f"v_zoom_{idx}", use_container_width=True):
-                        show_image_modal(img_bytes, f"Result {idx+1}")
-                with b_col2:
-                    # 下载组件
-                    final_bytes, mime = process_image_for_download(img_bytes, format="JPEG")
-                    st.download_button(
-                        "📥 下载", 
-                        data=final_bytes, 
-                        file_name=f"res_{idx}.jpg", 
-                        mime=mime, 
-                        key=f"v_dl_{idx}", 
-                        use_container_width=True
-                    )
+                # 2. 直接展示 (Streamlit 原生支持点击全屏查看)
+                st.image(thumb, use_container_width=True, caption=f"Result {idx+1} (点击图片可放大)")
+                
+                # 3. 下载按钮
+                final_bytes, mime = process_image_for_download(img_bytes, format="JPEG")
+                st.download_button(
+                    "📥 下载高清原图", 
+                    data=final_bytes, 
+                    file_name=f"smart_edit_res_{idx}_{int(time.time())}.jpg", 
+                    mime=mime, 
+                    key=f"v_dl_{idx}", 
+                    use_container_width=True,
+                    help="以高质量 JPEG 格式下载此图片"
+                )
