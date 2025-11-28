@@ -1,247 +1,104 @@
 import streamlit as st
 from PIL import Image
-import sys
-import os
+import google.generativeai as genai
 
-# --- 路径环境设置 ---
-current_script_path = os.path.abspath(__file__)
-pages_dir = os.path.dirname(current_script_path)
-root_dir = os.path.dirname(pages_dir)
-if root_dir not in sys.path: sys.path.append(root_dir)
-
-try:
-    import auth
-    from services.image_engine import ImageGenEngine
-    # ✅ 引入新的逻辑链管理器
-    from app_utils.chat_manager import ChatSessionManager 
-    from app_utils.ui_components import render_chat_message, inject_chat_css
-    from app_utils.image_processing import create_preview_thumbnail
-except ImportError as e:
-    st.error(f"❌ 模块缺失: {e}")
-    st.stop()
-
-st.set_page_config(page_title="Amazon AI Studio", page_icon="🧪", layout="wide")
-
-# 1. 注入 CSS (保持您之前的样式)
-inject_chat_css()
-st.markdown("""
-<style>
-    /* 强制上传按钮在左下角 */
-    section.main [data-testid="stPopover"] {
-        position: fixed !important; bottom: 25px !important; left: 20px !important; z-index: 99999 !important;
-        width: 45px !important; height: 45px !important;
-    }
-    section.main [data-testid="stPopover"] > div > button {
-        border-radius: 50% !important; width: 45px !important; height: 45px !important;
-        background-color: #fff !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important;
-    } 
-</style>
-""", unsafe_allow_html=True)
-
-# --- Session 初始化 ---
-if 'auth' in sys.modules and not auth.check_password(): st.stop()
-
-# 基础状态
-if "studio_msgs" not in st.session_state: st.session_state.studio_msgs = []
-if "msg_uid" not in st.session_state: st.session_state.msg_uid = 0
-if "uploader_key_id" not in st.session_state: st.session_state.uploader_key_id = 0
-if "system_prompt_val" not in st.session_state: 
-    st.session_state.system_prompt_val = "You are a helpful AI assistant for Amazon E-commerce sellers. Analyze images and text professionally."
-
-# API 初始化
-api_key = st.secrets.get("GOOGLE_API_KEY")
-if not api_key:
-    st.error("请配置 GOOGLE_API_KEY")
-    st.stop()
-
-if "img_gen_studio" not in st.session_state:
-    st.session_state.img_gen_studio = ImageGenEngine(api_key)
-
-# --- 侧边栏 ---
-with st.sidebar:
-    st.title("🧪 AI Workbench")
+class ChatSessionManager:
+    """
+    对话逻辑控制器 (The Logic Chain Brain)
+    负责管理上下文关系、多模态消息合并、以及 System Prompt 的注入。
+    """
     
-    # A. 模型选择
-    model_map = {
-        "🧠 Gemini 3 Pro (Reasoning)": "models/gemini-3-pro-preview", 
-        "⚡ Gemini Flash (Fast)": "models/gemini-flash-latest",
-        "🎨 Gemini 3 Image (Image Gen)": "models/gemini-3-pro-image-preview" 
-    }
-    selected_label = st.selectbox("Core Model", list(model_map.keys()))
-    current_model_id = model_map[selected_label]
-    is_image_mode = "image-preview" in current_model_id
+    def __init__(self, model_name, api_key, system_instruction=None):
+        self.model_name = model_name
+        self.api_key = api_key
+        self.system_instruction = system_instruction
+        
+        # 配置 API
+        if self.api_key:
+            genai.configure(api_key=self.api_key)
 
-    st.divider()
+    def _merge_user_messages(self, raw_msgs):
+        """
+        核心逻辑：合并连续的用户消息。
+        如果用户先上传了图片(User)，又发了文字(User)，逻辑上属于同一轮对话。
+        Gemini API 严格要求 User -> Model -> User 交替，因此必须合并。
+        """
+        merged_history = []
+        current_turn = None
 
-    # B. 系统设定 (System Prompt) - 这才是对话的灵魂
-    if not is_image_mode:
-        st.caption("🎭 System Persona")
-        new_sys_prompt = st.text_area(
-            "System Instruction", 
-            value=st.session_state.system_prompt_val,
-            height=100,
-            help="定义 AI 的身份，例如：'你是一个资深时尚买手' 或 '你是一个Python代码专家'。"
-        )
-        # 保存 System Prompt 变动
-        if new_sys_prompt != st.session_state.system_prompt_val:
-            st.session_state.system_prompt_val = new_sys_prompt
-            # System Prompt 变了，最好清空历史，或者让用户知道上下文变了
-            st.toast("System Prompt Updated!", icon="💾")
+        for msg in raw_msgs:
+            role = msg["role"]
+            content_parts = []
 
-    st.divider()
-    
-    # C. 操作区
-    col_k1, col_k2 = st.columns(2)
-    with col_k1:
-        if st.button("🧹 Clear", use_container_width=True):
-            st.session_state.studio_msgs = []
-            st.session_state.uploader_key_id += 1 
-            st.rerun()
-    with col_k2:
-        if st.button("↩️ Undo", use_container_width=True):
-            if st.session_state.studio_msgs:
-                st.session_state.studio_msgs.pop() # 删掉 Model 回复
-                if st.session_state.studio_msgs and st.session_state.studio_msgs[-1]["role"] == "user":
-                   st.session_state.studio_msgs.pop() # 也删掉 User 提问，彻底回退一步
-                st.rerun()
-
-# --- 消息渲染 ---
-def delete_msg_callback(idx):
-    if 0 <= idx < len(st.session_state.studio_msgs):
-        st.session_state.studio_msgs.pop(idx)
-        st.rerun()
-
-def regenerate_callback(idx):
-    # 重新生成逻辑：删掉当前的 AI 回复，触发重新推理
-    if st.session_state.studio_msgs[idx]["role"] == "model":
-        st.session_state.studio_msgs.pop(idx)
-        st.session_state.trigger_inference = True
-        st.rerun()
-
-if not st.session_state.studio_msgs:
-    st.info("👋 Ready via **Chat Manager**. Upload images or text to start.")
-else:
-    for idx, msg in enumerate(st.session_state.studio_msgs):
-        render_chat_message(idx, msg, delete_msg_callback, regenerate_callback)
-
-# --- 核心推理逻辑 (The Logical Chain) ---
-if st.session_state.get("trigger_inference", False):
-    st.session_state.trigger_inference = False
-    if not st.session_state.studio_msgs: st.rerun()
-
-    last_msg = st.session_state.studio_msgs[-1]
-    
-    # 只有当最后一条是用户发的消息时，才触发 AI 回复
-    if last_msg["role"] == "user":
-        with st.chat_message("model"):
+            # 1. 提取图片 (Visual Context)
+            if msg.get("ref_images"):
+                content_parts.extend(msg["ref_images"])
             
-            # === 分支 A: 生图模式 (无上下文逻辑，单次生成) ===
-            if is_image_mode:
-                with st.status("🎨 Rendering...", expanded=True):
-                    try:
-                        ref_img = last_msg["ref_images"][0] if last_msg.get("ref_images") else None
-                        hd_bytes = st.session_state.img_gen_studio.generate(
-                            prompt=last_msg["content"],
-                            model_name=current_model_id,
-                            ref_image=ref_img
-                        )
-                        if hd_bytes:
-                            thumb = create_preview_thumbnail(hd_bytes, 800)
-                            st.session_state.studio_msgs.append({
-                                "role": "model", "type": "image_result",
-                                "content": thumb, "hd_data": hd_bytes, 
-                                "id": st.session_state.msg_uid
-                            })
-                            st.rerun()
-                        else:
-                            st.error("Generation Failed / Blocked.")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+            # 2. 提取文本 (Text Context)
+            if msg.get("content"):
+                content_parts.append(msg["content"])
 
-            # === 分支 B: 智能对话模式 (调用 Chat Manager) ===
+            if not content_parts:
+                continue
+
+            # 3. 合并逻辑
+            if current_turn and current_turn["role"] == role:
+                # 如果当前角色和上一条一样（比如连续两条 User），则追加内容
+                current_turn["parts"].extend(content_parts)
             else:
-                placeholder = st.empty()
-                full_resp = ""
+                # 如果角色切换了，先保存上一轮，再开启新一轮
+                if current_turn:
+                    merged_history.append(current_turn)
+                current_turn = {"role": role, "parts": content_parts}
+
+        # 别忘了追加最后一轮
+        if current_turn:
+            merged_history.append(current_turn)
+
+        return merged_history
+
+    def build_context_window(self, raw_msgs):
+        """
+        构建发送给 API 的完整上下文窗口
+        """
+        # 1. 清洗和合并消息
+        clean_history = self._merge_user_messages(raw_msgs)
+        
+        # 2. 过滤掉不支持的消息类型（比如 UI 上的 Error 提示，或者尚未生成的空消息）
+        # 这里的 history 是符合 Gemini SDK 标准的 [{role:.., parts:[..]}]
+        final_history = []
+        for turn in clean_history:
+            # 确保 parts 不为空
+            if turn["parts"]:
+                final_history.append(turn)
                 
-                try:
-                    # 1. 初始化逻辑大脑 (传入 System Prompt)
-                    chat_manager = ChatSessionManager(
-                        model_name=current_model_id, 
-                        api_key=api_key,
-                        system_instruction=st.session_state.system_prompt_val
-                    )
-                    
-                    # 2. 构建历史上下文 (不包含当前的最后一条)
-                    # 注意：我们把除最后一条之外的所有消息，交给 Manager 去清洗、合并
-                    history_msgs = st.session_state.studio_msgs[:-1]
-                    chat_session = chat_manager.start_chat_session(history_msgs)
-                    
-                    # 3. 准备当前发送的内容 (User Turn)
-                    current_payload = []
-                    # 附件 (图片)
-                    if last_msg.get("ref_images"): 
-                        current_payload.extend(last_msg["ref_images"])
-                    # 文本
-                    if last_msg["content"]: 
-                        current_payload.append(last_msg["content"])
-                    
-                    # 4. 发送给 Gemini
-                    # stream=True 让体验像真实对话一样流畅
-                    response = chat_session.send_message(current_payload, stream=True)
-                    
-                    for chunk in response:
-                        if chunk.text:
-                            full_resp += chunk.text
-                            placeholder.markdown(full_resp + "▌")
-                    placeholder.markdown(full_resp)
-                    
-                    # 5. 记录回复
-                    st.session_state.msg_uid += 1
-                    st.session_state.studio_msgs.append({
-                        "role": "model", "type": "text", 
-                        "content": full_resp, "id": st.session_state.msg_uid
-                    })
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"Logic Chain Error: {e}")
-                    # 调试用：显示具体的错误栈
-                    # st.exception(e)
+        return final_history
 
-# --- 底部输入区 ---
-if not st.session_state.get("trigger_inference", False):
-    
-    upload_key = f"uploader_{st.session_state.uploader_key_id}"
-    
-    # 附件按钮 (左下角)
-    with st.popover("📎", use_container_width=False):
-        uploaded_files = st.file_uploader(
-            "Upload Context Images", 
-            type=["jpg", "png", "webp"], 
-            accept_multiple_files=True,
-            key=upload_key
-        )
-        if uploaded_files:
-            st.caption(f"{len(uploaded_files)} images selected")
-
-    # 输入框
-    user_input = st.chat_input("Type your message...")
-
-    if user_input:
-        img_list = []
-        if uploaded_files:
-            for uf in uploaded_files:
-                img_list.append(Image.open(uf))
+    def start_chat_session(self, st_history):
+        """
+        启动一个带记忆的 Chat Session
+        """
+        # 1. 准备历史记录 (不包含最后一条正在发送的，因为 SDK 的 send_message 会处理它)
+        # 注意：这里我们传入空列表或已有的历史。
+        # 如果是 start_chat(history=...)，SDK 会把这些作为过去式。
         
-        st.session_state.msg_uid += 1
-        st.session_state.studio_msgs.append({
-            "role": "user",
-            "type": "text",
-            "content": user_input,
-            "ref_images": img_list,
-            "id": st.session_state.msg_uid
-        })
+        formatted_history = self.build_context_window(st_history)
         
-        st.session_state.uploader_key_id += 1
-        st.session_state.trigger_inference = True
-        st.rerun()
+        # 2. 注入 System Prompt (如果模型支持)
+        # Gemini 1.5/Pro 系列支持 system_instruction 参数
+        try:
+            model = genai.GenerativeModel(
+                model_name=self.model_name,
+                system_instruction=self.system_instruction
+            )
+        except:
+            #以此兼容旧版库或不支持 system_instruction 的模型
+            model = genai.GenerativeModel(model_name=self.model_name)
+            if self.system_instruction:
+                # 如果不支持原生参数，就把 System Prompt 塞到历史记录的第一条
+                formatted_history.insert(0, {"role": "user", "parts": [f"System Instruction: {self.system_instruction}"]})
+                formatted_history.insert(1, {"role": "model", "parts": ["Understood. I will follow these instructions."]})
+
+        # 3. 启动会话
+        chat = model.start_chat(history=formatted_history)
+        return chat
