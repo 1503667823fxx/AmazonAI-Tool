@@ -2,6 +2,7 @@ import streamlit as st
 from PIL import Image
 import sys
 import os
+import io
 
 # --- 路径环境设置 ---
 current_script_path = os.path.abspath(__file__)
@@ -12,7 +13,6 @@ if root_dir not in sys.path: sys.path.append(root_dir)
 try:
     import auth
     from services.image_engine import ImageGenEngine
-    # ✅ 引入新的逻辑链管理器
     from app_utils.chat_manager import ChatSessionManager 
     from app_utils.ui_components import render_chat_message, inject_chat_css
     from app_utils.image_processing import create_preview_thumbnail
@@ -22,38 +22,67 @@ except ImportError as e:
 
 st.set_page_config(page_title="Amazon AI Studio", page_icon="🧪", layout="wide")
 
-# 1. 注入 CSS (保持您之前的样式)
+# ==========================================
+# 🎨 CSS 修复：确保上传按钮像钉子一样钉在左下角
+# ==========================================
 inject_chat_css()
 st.markdown("""
 <style>
-    /* 强制上传按钮在左下角 */
-    section.main [data-testid="stPopover"] {
-        position: fixed !important; bottom: 25px !important; left: 20px !important; z-index: 99999 !important;
-        width: 45px !important; height: 45px !important;
+    /* 1. 调整底部内边距，给输入框留位 */
+    .block-container {
+        padding-bottom: 120px !important;
     }
-    section.main [data-testid="stPopover"] > div > button {
-        border-radius: 50% !important; width: 45px !important; height: 45px !important;
-        background-color: #fff !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important;
-    } 
+
+    /* 2. 强力定位上传按钮 */
+    /* 使用 [data-testid="stPopover"] 定位，覆盖所有层级 */
+    div[data-testid="stPopover"] {
+        position: fixed !important;
+        bottom: 75px !important; /* 位于 chat_input 上方一点点，避免被遮挡 */
+        left: 30px !important;   /* 钉在左侧 */
+        z-index: 2147483647 !important; /*以此确保在最顶层*/
+        width: 45px !important;
+        height: 45px !important;
+    }
+
+    /* 3. 按钮样式美化 */
+    div[data-testid="stPopover"] > div > button {
+        border-radius: 50% !important;
+        width: 45px !important;
+        height: 45px !important;
+        background-color: white !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        border: 1px solid #eee !important;
+        color: #444 !important;
+        font-size: 1.2rem !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    
+    /* 悬停微动 */
+    div[data-testid="stPopover"] > div > button:hover {
+        transform: scale(1.1);
+        color: #000 !important;
+        border-color: #ccc !important;
+    }
+
+    /* 隐藏 footer 以免干扰 */
+    footer {visibility: hidden;}
+    
 </style>
 """, unsafe_allow_html=True)
 
 # --- Session 初始化 ---
 if 'auth' in sys.modules and not auth.check_password(): st.stop()
 
-# 基础状态
 if "studio_msgs" not in st.session_state: st.session_state.studio_msgs = []
 if "msg_uid" not in st.session_state: st.session_state.msg_uid = 0
 if "uploader_key_id" not in st.session_state: st.session_state.uploader_key_id = 0
 if "system_prompt_val" not in st.session_state: 
-    st.session_state.system_prompt_val = "You are a helpful AI assistant for Amazon E-commerce sellers. Analyze images and text professionally."
+    st.session_state.system_prompt_val = "You are a helpful AI assistant for Amazon E-commerce sellers."
 
-# API 初始化
 api_key = st.secrets.get("GOOGLE_API_KEY")
-if not api_key:
-    st.error("请配置 GOOGLE_API_KEY")
-    st.stop()
-
 if "img_gen_studio" not in st.session_state:
     st.session_state.img_gen_studio = ImageGenEngine(api_key)
 
@@ -61,7 +90,7 @@ if "img_gen_studio" not in st.session_state:
 with st.sidebar:
     st.title("🧪 AI Workbench")
     
-    # A. 模型选择
+    # 模型选择
     model_map = {
         "🧠 Gemini 3 Pro (Reasoning)": "models/gemini-3-pro-preview", 
         "⚡ Gemini Flash (Fast)": "models/gemini-flash-latest",
@@ -73,78 +102,84 @@ with st.sidebar:
 
     st.divider()
 
-    # B. 系统设定 (System Prompt) - 这才是对话的灵魂
+    # System Prompt (仅 Chat 模式有效)
     if not is_image_mode:
         st.caption("🎭 System Persona")
-        new_sys_prompt = st.text_area(
-            "System Instruction", 
-            value=st.session_state.system_prompt_val,
-            height=100,
-            help="定义 AI 的身份，例如：'你是一个资深时尚买手' 或 '你是一个Python代码专家'。"
-        )
-        # 保存 System Prompt 变动
+        new_sys_prompt = st.text_area("Instruction", st.session_state.system_prompt_val, height=100)
         if new_sys_prompt != st.session_state.system_prompt_val:
             st.session_state.system_prompt_val = new_sys_prompt
-            # System Prompt 变了，最好清空历史，或者让用户知道上下文变了
-            st.toast("System Prompt Updated!", icon="💾")
+            st.toast("System Prompt Updated!")
 
-    st.divider()
-    
-    # C. 操作区
-    col_k1, col_k2 = st.columns(2)
-    with col_k1:
-        if st.button("🧹 Clear", use_container_width=True):
-            st.session_state.studio_msgs = []
-            st.session_state.uploader_key_id += 1 
+    # 清空 / 撤回
+    c1, c2 = st.columns(2)
+    if c1.button("🧹 Clear"):
+        st.session_state.studio_msgs = []
+        st.session_state.uploader_key_id += 1
+        st.rerun()
+    if c2.button("↩️ Undo"):
+        if st.session_state.studio_msgs:
+            st.session_state.studio_msgs.pop() # Del AI
+            if st.session_state.studio_msgs and st.session_state.studio_msgs[-1]["role"] == "user":
+                st.session_state.studio_msgs.pop() # Del User
             st.rerun()
-    with col_k2:
-        if st.button("↩️ Undo", use_container_width=True):
-            if st.session_state.studio_msgs:
-                st.session_state.studio_msgs.pop() # 删掉 Model 回复
-                if st.session_state.studio_msgs and st.session_state.studio_msgs[-1]["role"] == "user":
-                   st.session_state.studio_msgs.pop() # 也删掉 User 提问，彻底回退一步
-                st.rerun()
 
 # --- 消息渲染 ---
 def delete_msg_callback(idx):
-    if 0 <= idx < len(st.session_state.studio_msgs):
-        st.session_state.studio_msgs.pop(idx)
-        st.rerun()
+    st.session_state.studio_msgs.pop(idx)
+    st.rerun()
 
 def regenerate_callback(idx):
-    # 重新生成逻辑：删掉当前的 AI 回复，触发重新推理
     if st.session_state.studio_msgs[idx]["role"] == "model":
         st.session_state.studio_msgs.pop(idx)
         st.session_state.trigger_inference = True
         st.rerun()
 
 if not st.session_state.studio_msgs:
-    st.info("👋 Ready via **Chat Manager**. Upload images or text to start.")
+    st.info("👋 开始你的创作。上传图片或输入指令...")
 else:
     for idx, msg in enumerate(st.session_state.studio_msgs):
         render_chat_message(idx, msg, delete_msg_callback, regenerate_callback)
 
-# --- 核心推理逻辑 (The Logical Chain) ---
+# --- 核心推理逻辑 (Visual Logic Chain) ---
 if st.session_state.get("trigger_inference", False):
     st.session_state.trigger_inference = False
     if not st.session_state.studio_msgs: st.rerun()
 
     last_msg = st.session_state.studio_msgs[-1]
     
-    # 只有当最后一条是用户发的消息时，才触发 AI 回复
     if last_msg["role"] == "user":
         with st.chat_message("model"):
             
-            # === 分支 A: 生图模式 (无上下文逻辑，单次生成) ===
+            # === 模式 A: 生图 (支持连续编辑流) ===
             if is_image_mode:
-                with st.status("🎨 Rendering...", expanded=True):
+                with st.status("🎨 正在绘制...", expanded=True):
                     try:
-                        ref_img = last_msg["ref_images"][0] if last_msg.get("ref_images") else None
+                        # 1. 确定参考图 (Reference Image)
+                        target_ref_img = None
+                        
+                        # [优先级 1] 用户这一轮新上传了图
+                        if last_msg.get("ref_images"):
+                            target_ref_img = last_msg["ref_images"][0]
+                            st.write("📸 使用本次上传的图片作为参考")
+                        
+                        # [优先级 2] 用户没传图，但上一轮 AI 生成了图 -> 视觉接力 (Visual Carry-over)
+                        # 这就是解决你问题的关键逻辑
+                        elif len(st.session_state.studio_msgs) >= 2:
+                            prev_ai_msg = st.session_state.studio_msgs[-2]
+                            # 检查上一条是不是 AI 发的，且是不是生图结果
+                            if prev_ai_msg["role"] == "model" and prev_ai_msg.get("type") == "image_result" and prev_ai_msg.get("hd_data"):
+                                # 将上一轮生成的 Bytes 转回 PIL Image
+                                prev_bytes = prev_ai_msg["hd_data"]
+                                target_ref_img = Image.open(io.BytesIO(prev_bytes))
+                                st.write("🔗 自动引用上一张生成图作为底图 (连续编辑模式)")
+
+                        # 2. 调用生图引擎
                         hd_bytes = st.session_state.img_gen_studio.generate(
                             prompt=last_msg["content"],
                             model_name=current_model_id,
-                            ref_image=ref_img
+                            ref_image=target_ref_img # 传入接力后的图片
                         )
+                        
                         if hd_bytes:
                             thumb = create_preview_thumbnail(hd_bytes, 800)
                             st.session_state.studio_msgs.append({
@@ -154,39 +189,29 @@ if st.session_state.get("trigger_inference", False):
                             })
                             st.rerun()
                         else:
-                            st.error("Generation Failed / Blocked.")
+                            st.error("生成失败或被拦截")
+                            
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-            # === 分支 B: 智能对话模式 (调用 Chat Manager) ===
+            # === 模式 B: 聊天 (调用 Chat Manager) ===
             else:
                 placeholder = st.empty()
                 full_resp = ""
-                
                 try:
-                    # 1. 初始化逻辑大脑 (传入 System Prompt)
                     chat_manager = ChatSessionManager(
                         model_name=current_model_id, 
                         api_key=api_key,
                         system_instruction=st.session_state.system_prompt_val
                     )
                     
-                    # 2. 构建历史上下文 (不包含当前的最后一条)
-                    # 注意：我们把除最后一条之外的所有消息，交给 Manager 去清洗、合并
                     history_msgs = st.session_state.studio_msgs[:-1]
                     chat_session = chat_manager.start_chat_session(history_msgs)
                     
-                    # 3. 准备当前发送的内容 (User Turn)
                     current_payload = []
-                    # 附件 (图片)
-                    if last_msg.get("ref_images"): 
-                        current_payload.extend(last_msg["ref_images"])
-                    # 文本
-                    if last_msg["content"]: 
-                        current_payload.append(last_msg["content"])
+                    if last_msg.get("ref_images"): current_payload.extend(last_msg["ref_images"])
+                    if last_msg["content"]: current_payload.append(last_msg["content"])
                     
-                    # 4. 发送给 Gemini
-                    # stream=True 让体验像真实对话一样流畅
                     response = chat_session.send_message(current_payload, stream=True)
                     
                     for chunk in response:
@@ -195,37 +220,32 @@ if st.session_state.get("trigger_inference", False):
                             placeholder.markdown(full_resp + "▌")
                     placeholder.markdown(full_resp)
                     
-                    # 5. 记录回复
                     st.session_state.msg_uid += 1
                     st.session_state.studio_msgs.append({
                         "role": "model", "type": "text", 
                         "content": full_resp, "id": st.session_state.msg_uid
                     })
                     st.rerun()
-                    
                 except Exception as e:
-                    st.error(f"Logic Chain Error: {e}")
-                    # 调试用：显示具体的错误栈
-                    # st.exception(e)
+                    st.error(f"Chat Error: {e}")
 
 # --- 底部输入区 ---
 if not st.session_state.get("trigger_inference", False):
     
     upload_key = f"uploader_{st.session_state.uploader_key_id}"
     
-    # 附件按钮 (左下角)
+    # 悬浮按钮 (CSS 已强制固定)
     with st.popover("📎", use_container_width=False):
         uploaded_files = st.file_uploader(
-            "Upload Context Images", 
+            "参考图", 
             type=["jpg", "png", "webp"], 
             accept_multiple_files=True,
             key=upload_key
         )
         if uploaded_files:
-            st.caption(f"{len(uploaded_files)} images selected")
+            st.caption(f"已选 {len(uploaded_files)} 张")
 
-    # 输入框
-    user_input = st.chat_input("Type your message...")
+    user_input = st.chat_input("输入指令...")
 
     if user_input:
         img_list = []
