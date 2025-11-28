@@ -62,7 +62,7 @@ history = st.session_state.history
 # --- 3. 常量定义 ---
 # 批量模式专属模型列表，默认 Flash 在第一位
 BATCH_MODELS = [
-    "models/gemini-flash-latest",         # 🚀 默认：极速、便宜、适合批量
+    "models/gemini-2.5-flash-image",         # 🚀 默认：极速、便宜、适合批量
     "models/gemini-3-pro-image-preview",  # 🎨 Pro：高质量，但慢且贵
 ]
 
