@@ -28,7 +28,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CSS 样式 (暴力修复左上角问题 + 滚动优化) ---
+# --- CSS 样式 (调整附件按钮至右下角) ---
 st.markdown("""
 <style>
     /* 1. 滚动条修复：给底部留足空间 */
@@ -37,40 +37,47 @@ st.markdown("""
         padding-bottom: 120px !important; 
     }
     
-    /* 2. 暴力固定附件按钮 */
-    /* 这是一个全屏覆盖的 hack，确保找到 Popover */
+    /* 2. 悬浮附件按钮 - 右下角定位 */
     .stApp [data-testid="stPopover"] {
         position: fixed !important;
-        bottom: 80px !important; /* 距离底部 80px */
-        left: 20px !important;   /* 距离左侧 20px */
-        z-index: 999999 !important; /* 确保层级最高 */
+        bottom: 90px !important;  /* 位于输入框上方 */
+        right: 40px !important;   /* 距离右侧 40px */
+        left: auto !important;    /* 清除左侧定位 */
+        z-index: 999999 !important;
         width: 50px !important;
         height: 50px !important;
         background: transparent !important;
-        transform: none !important; /* 防止父容器 transform 影响 fixed 定位 */
+        transform: none !important;
     }
     
-    /* 针对按钮本身的样式 */
+    /* 按钮样式优化 */
     .stApp [data-testid="stPopover"] > div > button {
-        border-radius: 50% !important; /* 圆形 */
+        border-radius: 50% !important;
         width: 50px !important;
         height: 50px !important;
         padding: 0 !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important; /* 更明显的阴影 */
         background-color: white !important;
-        color: #333 !important;
-        border: 1px solid #ddd !important;
-        font-size: 1.2rem !important;
+        color: #555 !important;
+        border: 1px solid #eee !important;
+        font-size: 1.5rem !important; /* 图标放大 */
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        transition: transform 0.2s !important;
     }
     
-    /* 排除侧边栏中的 Popover (如果有的话) */
+    .stApp [data-testid="stPopover"] > div > button:hover {
+        transform: scale(1.1) !important; /* 悬停微放大 */
+        color: #000 !important;
+        border-color: #ccc !important;
+    }
+    
+    /* 排除侧边栏中的 Popover */
     [data-testid="stSidebar"] [data-testid="stPopover"] {
         position: relative !important;
         bottom: auto !important;
-        left: auto !important;
+        right: auto !important;
         z-index: auto !important;
     }
     
@@ -344,10 +351,10 @@ if st.session_state.get("trigger_inference", False):
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-# --- 6. 底部输入区 (固定位置实现) ---
+# --- 6. 底部输入区 ---
 if not st.session_state.get("trigger_inference", False):
     
-    # 悬浮的上传按钮
+    # 悬浮的上传按钮 (现在位于右下角)
     with st.popover("📎", use_container_width=False):
         uploaded_files = st.file_uploader(
             "Upload Images", 
