@@ -3,10 +3,8 @@ from PIL import Image
 import sys
 import os
 import io
-import time
-import google.generativeai as genai
 
-# --- 环境配置 ---
+# --- 路径环境设置 ---
 current_script_path = os.path.abspath(__file__)
 pages_dir = os.path.dirname(current_script_path)
 root_dir = os.path.dirname(pages_dir)
@@ -17,8 +15,9 @@ try:
     import auth
     from services.llm_engine import LLMEngine
     from services.image_engine import ImageGenEngine
-    # 修复引用
+    # 引入核心UI组件
     from app_utils.image_processing import create_preview_thumbnail
+    from app_utils.ui_components import show_image_modal
 except ImportError as e:
     st.error(f"❌ 核心模块导入失败: {e}")
     st.stop()
@@ -26,34 +25,42 @@ except ImportError as e:
 # --- 页面配置 ---
 st.set_page_config(
     page_title="Amazon AI Studio",
-    page_icon="🧪",
+    page_icon="💬",
     layout="wide"
 )
 
-# --- CSS 样式优化 (对标 AI Studio) ---
+# --- CSS 深度优化 ---
 st.markdown("""
 <style>
-    /* 隐藏默认头部 */
-    .block-container { padding-top: 1.5rem; }
+    /* 1. 解决滚动回弹: 移除多余的padding，让内容自然流式排列 */
+    .block-container { padding-top: 1rem; padding-bottom: 8rem; }
     
-    /* 消息气泡样式 */
+    /* 2. 消息气泡美化 */
     .stChatMessage {
         background-color: transparent;
-        border-bottom: 1px solid #f0f0f0;
-        padding-bottom: 15px;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 0.5rem;
     }
-    
-    /* 操作按钮区 */
+    .stChatMessage:hover {
+        background-color: rgba(240, 242, 246, 0.5); /* 鼠标悬停微高亮 */
+    }
+
+    /* 3. 操作栏样式 */
     .msg-actions {
         display: flex;
-        gap: 0.5rem;
-        font-size: 0.8rem;
-        opacity: 0.6;
+        gap: 8px;
+        margin-top: 5px;
+        opacity: 0.4;
+        transition: opacity 0.2s;
     }
-    .msg-actions:hover { opacity: 1; }
+    .stChatMessage:hover .msg-actions { opacity: 1; }
     
-    /* 隐藏部分Streamlit默认元素以更像App */
-    div[data-testid="stToolbar"] { visibility: hidden; }
+    /* 4. 图片容器限制 */
+    .preview-img {
+        border-radius: 8px;
+        border: 1px solid #ddd;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -61,23 +68,21 @@ st.markdown("""
 if 'auth' in sys.modules and not auth.check_password():
     st.stop()
 
-# 核心服务
 if "studio_ready" not in st.session_state:
     api_key = st.secrets.get("GOOGLE_API_KEY")
     st.session_state.llm_studio = LLMEngine(api_key)
     st.session_state.img_gen_studio = ImageGenEngine(api_key)
     st.session_state.studio_ready = True
 
-# 消息列表：这是唯一的真理来源
-# 结构: {"role": "user"/"model", "content": str/img, "type": "text"/"image_result", "hd_data": bytes, "id": int}
+# 消息历史
 if "studio_msgs" not in st.session_state:
     st.session_state.studio_msgs = []
 
-# 编辑状态追踪 {"idx": 3, "content": "..."}
+# 编辑状态
 if "editing_state" not in st.session_state:
     st.session_state.editing_state = None
 
-# 计数器
+# ID 计数器
 if "msg_uid" not in st.session_state:
     st.session_state.msg_uid = 0
 
@@ -85,28 +90,22 @@ def get_uid():
     st.session_state.msg_uid += 1
     return st.session_state.msg_uid
 
-# --- 2. 逻辑处理函数 ---
+# --- 2. 逻辑函数 ---
 
 def delete_msg(idx):
-    """删除某条消息，如果是中间删除，可能需要截断后续以保持逻辑连贯(可选)，这里选择仅删除该条"""
     if 0 <= idx < len(st.session_state.studio_msgs):
         st.session_state.studio_msgs.pop(idx)
         st.rerun()
 
 def start_edit(idx, content):
-    """进入编辑模式"""
     st.session_state.editing_state = {"idx": idx, "content": content}
     st.rerun()
 
 def save_edit(idx, new_content):
-    """保存编辑：通常意味着截断后续历史，重新生成"""
-    # 1. 更新该条内容
     st.session_state.studio_msgs[idx]["content"] = new_content
-    # 2. 截断：编辑了用户的 Prompt，通常意味着后面的 AI 回复作废
+    # 截断后续
     st.session_state.studio_msgs = st.session_state.studio_msgs[:idx+1]
-    # 3. 退出编辑
     st.session_state.editing_state = None
-    # 4. 触发重新生成 (通过设置标记让主循环处理)
     st.session_state.trigger_inference = True
     st.rerun()
 
@@ -115,38 +114,26 @@ def cancel_edit():
     st.rerun()
 
 def regenerate(idx):
-    """重生成：删除这条 AI 回复，并触发上一条 User 消息的推理"""
-    # 确保这条是 assistant 消息
     if st.session_state.studio_msgs[idx]["role"] == "model":
-        # 删除当前条
         st.session_state.studio_msgs.pop(idx)
-        # 触发推理
         st.session_state.trigger_inference = True
         st.rerun()
 
 def build_gemini_history(msgs):
-    """将 UI 消息转换为 Gemini API 格式"""
     history = []
     for m in msgs:
         if m["type"] == "text" or m.get("ref_image"):
             parts = []
-            if m.get("ref_image"):
-                parts.append(m["ref_image"])
-            if m["content"]:
-                parts.append(m["content"])
-            
+            if m.get("ref_image"): parts.append(m["ref_image"])
+            if m["content"]: parts.append(m["content"])
             if parts:
-                history.append({
-                    "role": m["role"],
-                    "parts": parts
-                })
+                history.append({"role": m["role"], "parts": parts})
     return history
 
 # --- 3. 侧边栏 ---
 with st.sidebar:
-    st.title("🧪 AI Studio")
+    st.title("🧪 AI Workbench")
     
-    # 模型选择
     model_map = {
         "⚡ Gemini Flash (Fast)": "models/gemini-flash-latest",
         "🧠 Gemini 3 Pro (Reasoning)": "models/gemini-3-pro-preview", 
@@ -160,109 +147,102 @@ with st.sidebar:
     st.divider()
 
     if is_image_mode:
-        st.caption("🎨 Generation Settings")
+        st.caption("🎨 Image Settings")
         ratio = st.selectbox("Aspect Ratio", ["1:1 (Square)", "4:3", "3:4", "16:9", "9:16"])
         seed_val = st.number_input("Seed (-1 Random)", value=-1)
     else:
-        st.caption("🧠 System Instructions")
+        st.caption("🧠 Persona")
         sys_prompt = st.text_area("System Prompt", value="You are a helpful Amazon assistant.", height=150)
 
     st.divider()
-    if st.button("🗑️ Clear All History", type="primary", use_container_width=True):
+    if st.button("🗑️ New Chat", use_container_width=True):
         st.session_state.studio_msgs = []
         st.rerun()
 
-# --- 4. 主工作台 (历史消息渲染) ---
-chat_container = st.container()
+# --- 4. 主消息区 (移除 st.container 以解决滚动 Bug) ---
 
-with chat_container:
-    for idx, msg in enumerate(st.session_state.studio_msgs):
+# 直接在主流程渲染，让 Streamlit 自动处理滚动
+for idx, msg in enumerate(st.session_state.studio_msgs):
+    is_editing = (st.session_state.editing_state and st.session_state.editing_state["idx"] == idx)
+    
+    with st.chat_message(msg["role"]):
         
-        # 判断是否正在编辑这条消息
-        is_editing = (st.session_state.editing_state and st.session_state.editing_state["idx"] == idx)
+        # === 编辑模式 ===
+        if is_editing:
+            new_val = st.text_area("Edit prompt:", value=msg["content"], height=100)
+            c1, c2 = st.columns([1, 4])
+            if c1.button("Save", key=f"s_{msg['id']}"): save_edit(idx, new_val)
+            if c2.button("Cancel", key=f"c_{msg['id']}"): cancel_edit()
         
-        with st.chat_message(msg["role"]):
+        # === 浏览模式 ===
+        else:
+            # 1. 垫图显示
+            if msg.get("ref_image"):
+                st.image(msg["ref_image"], width=150, caption="Ref Image")
             
-            # === 编辑模式视图 ===
-            if is_editing:
-                edit_col1, edit_col2 = st.columns([4, 1])
-                with edit_col1:
-                    new_val = st.text_area("Edit prompt:", value=msg["content"], label_visibility="collapsed")
-                with edit_col2:
-                    if st.button("Save & Run", key=f"save_{msg['id']}"):
-                        save_edit(idx, new_val)
-                    if st.button("Cancel", key=f"cancel_{msg['id']}"):
-                        cancel_edit()
-            
-            # === 正常视图 ===
+            # 2. 内容显示 (核心修改点：Smart Edit 风格预览)
+            if msg["type"] == "image_result":
+                # 显示缩略图 (快速)
+                st.image(msg["content"], width=400)
+                
+                # 操作区 (放大 + 下载)
+                act_cols = st.columns([1, 1, 4])
+                with act_cols[0]:
+                    # 模态框逻辑
+                    if st.button("🔍 Zoom", key=f"zoom_{msg['id']}"):
+                        show_image_modal(msg["hd_data"], f"Result-{msg['id']}")
+                with act_cols[1]:
+                    # 下载按钮
+                    st.download_button(
+                        "📥", 
+                        data=msg["hd_data"], 
+                        file_name=f"gen_{msg['id']}.jpg", 
+                        mime="image/jpeg", 
+                        key=f"dl_{msg['id']}"
+                    )
+                with act_cols[2]:
+                     if st.button("🗑️", key=f"del_img_{msg['id']}"): delete_msg(idx)
+
             else:
-                # 1. 显示内容
-                if msg.get("ref_image"):
-                    st.image(msg["ref_image"], width=200)
+                st.markdown(msg["content"])
                 
-                if msg["type"] == "image_result":
-                    # 这里的 content 已经是缩略图了，直接显示
-                    st.image(msg["content"], caption=f"Generated Image", width=400)
-                else:
-                    st.markdown(msg["content"])
+                # 文本消息的操作栏
+                # 使用 opacity CSS 实现鼠标悬停才显示
+                st.markdown('<div class="msg-actions">', unsafe_allow_html=True)
                 
-                # 2. 操作栏 (Action Bar) - 模仿 Google AI Studio 放在消息下方
-                # 使用 columns 布局操作按钮
-                act_cols = st.columns([0.1, 0.1, 0.1, 0.1, 0.6])
+                act_c1, act_c2, _ = st.columns([1, 1, 8])
                 
-                # 按钮A: 编辑 (仅用户)
+                # 编辑按钮 (仅用户)
                 if msg["role"] == "user":
-                    with act_cols[0]:
-                        if st.button("✏️", key=f"edit_{msg['id']}", help="Edit prompt"):
-                            start_edit(idx, msg["content"])
+                    with act_c1:
+                        if st.button("✏️", key=f"edt_{msg['id']}"): start_edit(idx, msg["content"])
                 
-                # 按钮B: 重生成 (仅 AI)
+                # 重试按钮 (仅 AI)
                 if msg["role"] == "model":
-                    with act_cols[0]:
-                        if st.button("🔄", key=f"regen_{msg['id']}", help="Regenerate"):
-                            regenerate(idx)
+                    with act_c1:
+                        if st.button("🔄", key=f"rgn_{msg['id']}"): regenerate(idx)
                 
-                # 按钮C: 下载 (仅图片)
-                if msg["type"] == "image_result" and msg.get("hd_data"):
-                    with act_cols[1]:
-                        st.download_button(
-                            "⬇️", 
-                            data=msg["hd_data"], 
-                            file_name=f"gen_{msg['id']}.jpg", 
-                            mime="image/jpeg", 
-                            key=f"dl_{msg['id']}",
-                            help="Download HD Image"
-                        )
-                
-                # 按钮D: 删除 (通用)
-                # 调整位置：如果是 AI 消息放在第二列，用户消息放在第二列
-                del_col_idx = 2 if (msg["type"] == "image_result" or msg["role"]=="model") else 1
-                with act_cols[del_col_idx]:
-                    if st.button("🗑️", key=f"del_{msg['id']}", help="Delete this message"):
-                        delete_msg(idx)
+                # 删除按钮 (通用)
+                with act_c2:
+                    if st.button("🗑️", key=f"del_{msg['id']}"): delete_msg(idx)
+                    
+                st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 5. 推理逻辑 (Trigger Inference) ---
-# 当用户输入、或点击"Save & Run"、或点击"Regenerate"时，trigger_inference 会被设为 True
+# 底部占位符，防止内容被输入框遮挡
+st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+
+# --- 5. 推理逻辑 ---
 if st.session_state.get("trigger_inference", False):
-    # 立即复位标记
     st.session_state.trigger_inference = False
     
-    # 获取上下文（最后一条通常是 User 的 Prompt）
-    if not st.session_state.studio_msgs:
-        st.stop()
-        
+    if not st.session_state.studio_msgs: st.stop()
     last_msg = st.session_state.studio_msgs[-1]
     
-    # 必须保证最后一条是 User 发起的，才能让 AI 回复
     if last_msg["role"] == "user":
-        
         with st.chat_message("model"):
-            
-            # === 生图模式 ===
             if is_image_mode:
-                with st.status("🎨 Rendering...", expanded=True) as status:
+                with st.status("🎨 Rendering...", expanded=True):
                     try:
-                        # 核心生图调用
                         hd_bytes = st.session_state.img_gen_studio.generate(
                             prompt=last_msg["content"],
                             model_name=current_model_id,
@@ -270,82 +250,74 @@ if st.session_state.get("trigger_inference", False):
                             ratio_suffix=f", aspect ratio {ratio.split()[0]}",
                             seed=int(seed_val) if seed_val != -1 else None
                         )
-                        
                         if hd_bytes:
-                            # 1. 修复的缩略图调用 (不使用关键字 size=)
+                            # 生成缩略图
                             thumb = create_preview_thumbnail(hd_bytes, 800)
-                            
-                            # 2. 追加到历史
                             st.session_state.studio_msgs.append({
-                                "role": "model",
-                                "type": "image_result",
-                                "content": thumb,   # 预览图
-                                "hd_data": hd_bytes, # 高清原图
-                                "id": get_uid()
+                                "role": "model", "type": "image_result",
+                                "content": thumb, "hd_data": hd_bytes, "id": get_uid()
                             })
-                            status.update(label="Complete", state="complete")
                             st.rerun()
                         else:
-                            st.error("Safety filter triggered or error occurred.")
-                            status.update(label="Failed", state="error")
+                            st.error("Blocked by safety filters.")
                     except Exception as e:
-                        st.error(f"Gen Error: {e}")
-
-            # === 文本/对话模式 ===
+                        st.error(f"Error: {e}")
             else:
-                placeholder = st.empty()
-                full_resp = ""
-                
+                # 文本逻辑 (同前)
                 try:
-                    # 1. 动态重建历史 (Stateless 模式，保证上下文永远正确)
-                    # 取出除了最后一条的所有历史作为 context
+                    placeholder = st.empty()
+                    full_resp = ""
                     past_msgs = st.session_state.studio_msgs[:-1]
                     gemini_history = build_gemini_history(past_msgs)
-                    
-                    # 2. 初始化带 System Prompt 的模型
                     model = st.session_state.llm_studio.get_chat_model(current_model_id, sys_prompt)
                     chat = model.start_chat(history=gemini_history)
                     
-                    # 3. 发送最后一条消息
-                    user_content = []
-                    if last_msg.get("ref_image"): user_content.append(last_msg["ref_image"])
-                    if last_msg["content"]: user_content.append(last_msg["content"])
+                    user_c = []
+                    if last_msg.get("ref_image"): user_c.append(last_msg["ref_image"])
+                    if last_msg["content"]: user_c.append(last_msg["content"])
                     
-                    response = chat.send_message(user_content, stream=True)
-                    
+                    response = chat.send_message(user_c, stream=True)
                     for chunk in response:
                         if chunk.text:
                             full_resp += chunk.text
                             placeholder.markdown(full_resp + "▌")
-                    
                     placeholder.markdown(full_resp)
-                    
-                    # 4. 追加结果
                     st.session_state.studio_msgs.append({
-                        "role": "model",
-                        "type": "text",
-                        "content": full_resp,
-                        "id": get_uid()
+                        "role": "model", "type": "text",
+                        "content": full_resp, "id": get_uid()
                     })
                     st.rerun()
-                    
                 except Exception as e:
-                    st.error(f"Chat Error: {e}")
+                    st.error(f"Error: {e}")
 
-# --- 6. 底部输入框 ---
-# 只有不在推理时才显示
+# --- 6. 底部输入区 (优化版) ---
 if not st.session_state.get("trigger_inference", False):
     
-    # 文件上传区
-    with st.expander("📷 Add Image", expanded=False):
-        uploaded_file = st.file_uploader("Upload", type=["jpg", "png", "webp"], label_visibility="collapsed")
+    # 布局优化：利用 Popover 实现类似“附件菜单”的效果
+    # 这会显示在输入框的左上方，最接近 "旁边" 的效果
     
-    user_input = st.chat_input("Message Amazon AI Studio...")
+    # 定义底部容器，固定在下方
+    bottom_container = st.container()
+    
+    with bottom_container:
+        # 创建两列：左侧是附件按钮，右侧由于 chat_input 独占一行，其实这里主要是给附件腾位置
+        
+        # 使用 st.popover 创建一个折叠的菜单
+        with st.popover("📎 添加图片", use_container_width=False):
+            uploaded_file = st.file_uploader(
+                "Upload Reference Image", 
+                type=["jpg", "png", "webp"], 
+                key="chat_uploader"
+            )
+            if uploaded_file:
+                st.caption("✅ 图片已就绪，请在下方发送")
+
+        # 紧接着是输入框
+        user_input = st.chat_input("Message...")
 
     if user_input:
         img_obj = Image.open(uploaded_file) if uploaded_file else None
         
-        # 存入历史
         st.session_state.studio_msgs.append({
             "role": "user",
             "type": "text",
@@ -353,7 +325,5 @@ if not st.session_state.get("trigger_inference", False):
             "ref_image": img_obj,
             "id": get_uid()
         })
-        
-        # 设置标记，下一帧触发推理
         st.session_state.trigger_inference = True
         st.rerun()
