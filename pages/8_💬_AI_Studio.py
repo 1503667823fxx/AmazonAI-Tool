@@ -92,9 +92,20 @@ def get_uid():
 # --- 2. 辅助工具 ---
 
 def pil_to_bytes(img, format="JPEG"):
-    """将 PIL 图片转为 Bytes，用于快速预览的模态框"""
+    """
+    将图片转为 Bytes，兼容 PIL Image 和 bytes 类型。
+    修复：如果输入已经是 bytes，则直接返回，避免 AttributeError。
+    """
+    if isinstance(img, bytes):
+        return img
+    
+    # 如果是 PIL Image 对象，则进行转换
     buf = io.BytesIO()
-    img.save(buf, format=format, quality=80)
+    try:
+        img.save(buf, format=format, quality=80)
+    except Exception:
+        # 兜底：如果 img 既不是 bytes 也不是 PIL，可能是 numpy array 等，尝试强制转换
+        return None 
     return buf.getvalue()
 
 def delete_msg(idx):
