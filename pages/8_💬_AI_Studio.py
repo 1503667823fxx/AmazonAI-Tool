@@ -2,6 +2,7 @@ import streamlit as st
 from PIL import Image
 import sys
 import os
+import google.generativeai as genai
 
 # 环境配置
 current_script_path = os.path.abspath(__file__)
@@ -130,17 +131,11 @@ if st.session_state.get("trigger_inference", False):
                 placeholder = st.empty()
                 full_resp = ""
                 try:
-                    # 1. 构建历史 (不包含刚才发的这条，否则 Gemini SDK 会报错说 User 连续发了两条)
+                    # 1. 构建历史 (不包含刚才发的这条)
                     past_history = build_gemini_history(st.session_state.studio_msgs[:-1])
                     
-                    # 2. 启动聊天会话
-                    model = st.session_state.llm_studio.get_chat_model(current_model_id) # 需确保 llm_engine 有此方法
-                    
-                    # 注意：如果 llm_engine 没有 get_chat_model，可以直接用 genai.GenerativeModel
-                    # 也可以在这里写: chat = genai.GenerativeModel(current_model_id).start_chat(history=past_history)
-                    
-                    # 假设 LLMEngine 需要一点适配，这里直接调用原生逻辑演示：
-                    import google.generativeai as genai
+                    # 2. 启动聊天会话 (直接调用 SDK，最稳妥)
+                    # 注意：system_instruction 目前仅部分 gemini 模型支持，这里简化为纯 Chat
                     chat_session = genai.GenerativeModel(current_model_id).start_chat(history=past_history)
                     
                     # 3. 准备当前消息 Payload
@@ -171,7 +166,6 @@ if st.session_state.get("trigger_inference", False):
 if not st.session_state.get("trigger_inference", False):
     
     # ✅ 解决附件重复问题：动态 Key
-    # 每次 uploader_key_id 变化，组件就会重置，已选文件被清空
     upload_key = f"uploader_{st.session_state.uploader_key_id}"
     
     with st.popover("📎", use_container_width=False):
@@ -203,7 +197,7 @@ if not st.session_state.get("trigger_inference", False):
             "id": st.session_state.msg_uid
         })
         
-        # 3. ✅ 关键：增加 Key ID，强制下一次渲染时清空上传框
+        # 3. 强制重置上传控件
         st.session_state.uploader_key_id += 1
         
         # 4. 触发推理
