@@ -28,40 +28,50 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CSS 样式 ---
+# --- CSS 终极优化 (Fixed UI & Smooth Scroll) ---
 st.markdown("""
 <style>
-    .block-container { padding-top: 1rem; padding-bottom: 8rem; }
+    /* 1. 全局滚动优化: 给底部留出巨大的缓冲空间，避免内容被遮挡 */
+    .block-container { 
+        padding-top: 1rem; 
+        padding-bottom: 12rem; /* 增加到底部 12rem，给固定输入框留足位置 */
+    }
     
+    /* 2. 消息气泡样式 */
     .stChatMessage {
         background-color: transparent;
         padding: 1rem;
         border-radius: 8px;
         margin-bottom: 0.5rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.05); /* 极淡的边框 */
     }
     .stChatMessage:hover {
-        border-color: rgba(128, 128, 128, 0.3);
         background-color: rgba(240, 242, 246, 0.1);
     }
 
-    /* 紧凑的操作栏 */
+    /* 3. 操作栏 */
     .msg-actions {
         display: flex;
         gap: 12px;
         margin-top: 8px;
-        opacity: 0.5;
+        opacity: 0.4;
         font-size: 0.85rem;
+        transition: opacity 0.2s;
     }
     .stChatMessage:hover .msg-actions { opacity: 1; }
     
-    /* 图片网格 */
-    .img-grid {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
+    /* 4. [关键] 强制固定附件按钮的位置 */
+    /* 这是一个 CSS Hack，将页面底部的 Popover 容器强制固定在屏幕下方 */
+    div[data-testid="stPopover"] {
+        position: fixed;
+        bottom: 5rem; /* 位于 chat_input (约4rem高) 的上方 */
+        z-index: 1000;
+        /* 这里的 left/right 可能需要根据 Sidebar 状态微调，但在 wide 模式下通常没问题 */
     }
+    
+    /* 隐藏 Streamlit 自带的 footer */
+    footer {visibility: hidden;}
+    
 </style>
 """, unsafe_allow_html=True)
 
@@ -75,13 +85,11 @@ if "studio_ready" not in st.session_state:
     st.session_state.img_gen_studio = ImageGenEngine(api_key)
     st.session_state.studio_ready = True
 
-# 消息结构更新: ref_image -> ref_images (list)
+# 数据结构
 if "studio_msgs" not in st.session_state:
     st.session_state.studio_msgs = []
-
 if "editing_state" not in st.session_state:
     st.session_state.editing_state = None
-
 if "msg_uid" not in st.session_state:
     st.session_state.msg_uid = 0
 
@@ -89,22 +97,16 @@ def get_uid():
     st.session_state.msg_uid += 1
     return st.session_state.msg_uid
 
-# --- 2. 辅助工具 ---
+# --- 2. 辅助工具 (含 Bug 修复) ---
 
 def pil_to_bytes(img, format="JPEG"):
-    """
-    将图片转为 Bytes，兼容 PIL Image 和 bytes 类型。
-    修复：如果输入已经是 bytes，则直接返回，避免 AttributeError。
-    """
+    """修复：兼容 bytes 和 PIL 对象"""
     if isinstance(img, bytes):
         return img
-    
-    # 如果是 PIL Image 对象，则进行转换
     buf = io.BytesIO()
     try:
         img.save(buf, format=format, quality=80)
     except Exception:
-        # 兜底：如果 img 既不是 bytes 也不是 PIL，可能是 numpy array 等，尝试强制转换
         return None 
     return buf.getvalue()
 
@@ -135,18 +137,12 @@ def regenerate(idx):
         st.rerun()
 
 def build_gemini_history(msgs):
-    """构建 Gemini 历史，支持多图"""
     history = []
     for m in msgs:
         if m["type"] == "text" or m.get("ref_images"):
             parts = []
-            # 添加多张图片
-            if m.get("ref_images"):
-                parts.extend(m["ref_images"])
-            # 添加文本
-            if m["content"]:
-                parts.append(m["content"])
-            
+            if m.get("ref_images"): parts.extend(m["ref_images"])
+            if m["content"]: parts.append(m["content"])
             if parts:
                 history.append({"role": m["role"], "parts": parts})
     return history
@@ -181,179 +177,37 @@ with st.sidebar:
         st.rerun()
 
 # --- 4. 渲染消息流 ---
+# 不使用 container 包裹，直接流式渲染，解决回弹问题
 for idx, msg in enumerate(st.session_state.studio_msgs):
     is_editing = (st.session_state.editing_state and st.session_state.editing_state["idx"] == idx)
     
     with st.chat_message(msg["role"]):
-        
-        # === 编辑模式 ===
+        # 编辑模式
         if is_editing:
             new_val = st.text_area("Edit:", value=msg["content"], height=100)
             c1, c2 = st.columns([1, 6])
             if c1.button("Save", key=f"s_{msg['id']}"): save_edit(idx, new_val)
             if c2.button("Cancel", key=f"c_{msg['id']}"): cancel_edit()
         
-        # === 浏览模式 ===
+        # 浏览模式
         else:
-            # 1. 多图显示逻辑 (用户上传的参考图)
+            # 多图预览
             if msg.get("ref_images"):
-                cols = st.columns(len(msg["ref_images"]))
+                # 限制预览大小，避免刷屏
+                cols = st.columns(min(len(msg["ref_images"]), 4))
                 for i, img in enumerate(msg["ref_images"]):
-                    with cols[i]:
-                        st.image(img, use_container_width=True)
+                    if i < 4:
+                        with cols[i]: st.image(img, use_container_width=True)
             
-            # 2. 内容显示
+            # 内容主体
             if msg["type"] == "image_result":
-                # 直接显示缩略图
-                st.image(msg["content"], width=400)
+                st.image(msg["content"], width=400) # 默认显示缩略图
                 
-                # 操作区
+                # 图片操作栏
                 act_cols = st.columns([1, 1, 4])
                 with act_cols[0]:
-                    # 🔍 优化点：放大预览不再请求 HD Data，而是直接用当前缩略图转 Bytes
-                    # 这样就是秒开，只有模糊预览，符合您的要求
+                    # 快速放大 (使用 Bytes)
                     if st.button("🔍 Zoom", key=f"z_{msg['id']}"):
-                        preview_bytes = pil_to_bytes(msg["content"]) # 将缩略图转为二进制
-                        show_image_modal(preview_bytes, f"Preview-{msg['id']}")
-                        
-                with act_cols[1]:
-                    # 📥 只有这里才下载高清原图
-                    st.download_button(
-                        "📥", 
-                        data=msg["hd_data"], 
-                        file_name=f"gen_{msg['id']}.jpg", 
-                        mime="image/jpeg", 
-                        key=f"dl_{msg['id']}"
-                    )
-                with act_cols[2]:
-                     if st.button("🗑️", key=f"del_{msg['id']}"): delete_msg(idx)
-
-            else:
-                # 文本内容
-                st.markdown(msg["content"])
-                
-                # 文本操作栏
-                st.markdown('<div class="msg-actions">', unsafe_allow_html=True)
-                ac1, ac2, _ = st.columns([2, 1, 6])
-                
-                with ac1:
-                    if msg["role"] == "user":
-                        if st.button("✏️ Edit", key=f"ed_{msg['id']}"): start_edit(idx, msg["content"])
-                    elif msg["role"] == "model":
-                        if st.button("🔄 Regen", key=f"rg_{msg['id']}"): regenerate(idx)
-                
-                with ac2:
-                    if st.button("🗑️ Del", key=f"dl_t_{msg['id']}"): delete_msg(idx)
-                
-                st.markdown('</div>', unsafe_allow_html=True)
-
-st.markdown("<div style='height: 120px;'></div>", unsafe_allow_html=True)
-
-# --- 5. AI 推理逻辑 ---
-if st.session_state.get("trigger_inference", False):
-    st.session_state.trigger_inference = False
-    
-    if not st.session_state.studio_msgs: st.stop()
-    last_msg = st.session_state.studio_msgs[-1]
-    
-    if last_msg["role"] == "user":
-        with st.chat_message("model"):
-            
-            # A. 生图模式 (Image Gen)
-            if is_image_mode:
-                with st.status("🎨 Rendering...", expanded=True):
-                    try:
-                        # 生图通常只取第一张参考图 (多图控制较为复杂，暂取首张)
-                        ref_img = last_msg["ref_images"][0] if last_msg.get("ref_images") else None
-                        
-                        hd_bytes = st.session_state.img_gen_studio.generate(
-                            prompt=last_msg["content"],
-                            model_name=current_model_id,
-                            ref_image=ref_img, 
-                            ratio_suffix=f", aspect ratio {ratio.split()[0]}",
-                            seed=int(seed_val) if seed_val != -1 else None
-                        )
-                        if hd_bytes:
-                            thumb = create_preview_thumbnail(hd_bytes, 800)
-                            st.session_state.studio_msgs.append({
-                                "role": "model", "type": "image_result",
-                                "content": thumb, "hd_data": hd_bytes, "id": get_uid()
-                            })
-                            st.rerun()
-                        else:
-                            st.error("⚠️ Filtered / Error")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
-            # B. 文本/对话模式 (Text Chat)
-            else:
-                try:
-                    placeholder = st.empty()
-                    full_resp = ""
-                    
-                    # 构建历史
-                    past_msgs = st.session_state.studio_msgs[:-1]
-                    gemini_history = build_gemini_history(past_msgs)
-                    
-                    model = st.session_state.llm_studio.get_chat_model(current_model_id, sys_prompt)
-                    chat = model.start_chat(history=gemini_history)
-                    
-                    # 构建当前多模态输入 [text, img1, img2, ...]
-                    current_payload = []
-                    if last_msg["content"]:
-                        current_payload.append(last_msg["content"])
-                    if last_msg.get("ref_images"):
-                        current_payload.extend(last_msg["ref_images"])
-                    
-                    # 发送请求
-                    response = chat.send_message(current_payload, stream=True)
-                    
-                    for chunk in response:
-                        if chunk.text:
-                            full_resp += chunk.text
-                            placeholder.markdown(full_resp + "▌")
-                    placeholder.markdown(full_resp)
-                    
-                    st.session_state.studio_msgs.append({
-                        "role": "model", "type": "text",
-                        "content": full_resp, "id": get_uid()
-                    })
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-# --- 6. 底部输入区 (集成多文件上传) ---
-if not st.session_state.get("trigger_inference", False):
-    
-    bottom_container = st.container()
-    
-    with bottom_container:
-        # 使用 Popover 包装上传器，并改为 accept_multiple_files=True
-        with st.popover("📎 添加附件", use_container_width=False):
-            uploaded_files = st.file_uploader(
-                "上传图片 (支持多选)", 
-                type=["jpg", "png", "webp"], 
-                accept_multiple_files=True, # 关键修改
-                key="chat_uploader"
-            )
-            if uploaded_files:
-                st.caption(f"✅ 已选择 {len(uploaded_files)} 张图片")
-
-        user_input = st.chat_input("Message...")
-
-    if user_input:
-        # 处理多图
-        img_list = []
-        if uploaded_files:
-            for uf in uploaded_files:
-                img_list.append(Image.open(uf))
-        
-        st.session_state.studio_msgs.append({
-            "role": "user",
-            "type": "text",
-            "content": user_input,
-            "ref_images": img_list, # 存为列表
-            "id": get_uid()
-        })
-        st.session_state.trigger_inference = True
-        st.rerun()
+                        preview_bytes = pil_to_bytes(msg["content"])
+                        if preview_bytes:
+                            show_image_modal(preview_bytes, f"Preview-{msg['id']}")
