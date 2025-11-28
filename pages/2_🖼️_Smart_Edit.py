@@ -54,7 +54,12 @@ img_gen = st.session_state.img_gen
 history = st.session_state.history
 
 # --- 3. 常量定义 ---
-GOOGLE_IMG_MODELS = ["models/gemini-2.5-flash-image", "models/gemini-3-pro-image-preview"]
+GOOGLE_IMG_MODELS = [
+    "models/gemini-3-pro-image-preview", # 建议默认选这个，生图效果最好
+    "models/gemini-3-pro-preview",
+    "models/gemini-flash-latest",
+    "models/gemini-flash-lite-latest"
+]
 RATIO_MAP = {
     "1:1 (Square)": ", crop to 1:1 aspect ratio",
     "4:3 (Landscape)": ", 4:3 landscape aspect ratio",
