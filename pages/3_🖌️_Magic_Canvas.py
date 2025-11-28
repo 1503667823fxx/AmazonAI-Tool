@@ -5,6 +5,7 @@ import io
 import sys
 import os
 import time
+import base64
 
 # --- 路径环境设置 ---
 current_script_path = os.path.abspath(__file__)
