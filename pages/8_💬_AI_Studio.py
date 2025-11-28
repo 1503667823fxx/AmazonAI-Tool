@@ -28,32 +28,51 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CSS 终极优化 ---
+# --- CSS 样式 (重点修复了悬浮按钮位置) ---
 st.markdown("""
 <style>
     /* 1. 滚动条修复：给底部留足空间，防止内容被输入框遮挡 */
     .block-container { 
         padding-top: 1rem; 
-        padding-bottom: 120px !important; /* 关键：留出底部输入区的高度 */
+        padding-bottom: 120px !important; 
     }
     
     /* 2. 强制固定“附件按钮”到左下角 */
-    /* 仅针对主区域的 Popover，不影响侧边栏 */
-    .main [data-testid="stPopover"] {
-        position: fixed;
-        bottom: 5rem; /* 距离底部的高度，刚好在 chat_input 上方 */
-        left: 2rem;   /* 距离左侧的距离 */
-        z-index: 9999;
-        background-color: transparent;
+    /* 使用通配符匹配 stMain，兼容不同 Streamlit 版本 */
+    section[data-testid="stMain"] [data-testid="stPopover"],
+    div[data-testid="stMain"] [data-testid="stPopover"] {
+        position: fixed !important;
+        bottom: 80px !important; /* 距离底部的高度 */
+        left: 20px !important;   /* 距离左侧的距离 */
+        z-index: 100000 !important; /* 确保在最顶层 */
+        transform: none !important;
     }
     
-    /* 让附件按钮看起来像悬浮按钮 */
-    .main [data-testid="stPopover"] button {
-        border-radius: 50%;       /* 圆形按钮 */
-        width: 45px;
-        height: 45px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* 阴影增加层次感 */
-        border: 1px solid rgba(128,128,128,0.2);
+    /* 让按钮变圆，增加阴影，像一个悬浮球 */
+    section[data-testid="stMain"] [data-testid="stPopover"] button,
+    div[data-testid="stMain"] [data-testid="stPopover"] button {
+        border-radius: 50% !important;
+        width: 50px !important;
+        height: 50px !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
+        background-color: #ffffff !important; 
+        border: 1px solid #e0e0e0 !important;
+        color: #333 !important;
+        font-size: 20px !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    
+    /* 暗色模式适配 */
+    @media (prefers-color-scheme: dark) {
+        section[data-testid="stMain"] [data-testid="stPopover"] button,
+        div[data-testid="stMain"] [data-testid="stPopover"] button {
+            background-color: #262730 !important;
+            border: 1px solid #464b5d !important;
+            color: #fafafa !important;
+        }
     }
 
     /* 3. 消息气泡样式 */
@@ -62,13 +81,9 @@ st.markdown("""
         padding: 1rem;
         border-radius: 8px;
         margin-bottom: 0.5rem;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(128, 128, 128, 0.1);
     }
-    .stChatMessage:hover {
-        background-color: rgba(240, 242, 246, 0.1);
-        border-color: rgba(128, 128, 128, 0.2);
-    }
-
+    
     /* 操作栏 */
     .msg-actions {
         display: flex;
@@ -76,7 +91,6 @@ st.markdown("""
         margin-top: 8px;
         opacity: 0.5;
         font-size: 0.85rem;
-        transition: opacity 0.2s;
     }
     .stChatMessage:hover .msg-actions { opacity: 1; }
 </style>
@@ -192,7 +206,6 @@ with st.sidebar:
         st.rerun()
 
 # --- 4. 消息渲染区 ---
-# 注意：移除了 st.container()，直接渲染在 Root 下，解决滚动冲突
 for idx, msg in enumerate(st.session_state.studio_msgs):
     is_editing = (st.session_state.editing_state and st.session_state.editing_state["idx"] == idx)
     
@@ -327,7 +340,6 @@ if st.session_state.get("trigger_inference", False):
 if not st.session_state.get("trigger_inference", False):
     
     # 悬浮的上传按钮 (CSS固定在左下角)
-    # 注意：这个 popover 虽然写在这里，但 CSS 会把它“劫持”到屏幕左下角
     with st.popover("📎", use_container_width=False):
         uploaded_files = st.file_uploader(
             "Upload Images", 
@@ -336,9 +348,9 @@ if not st.session_state.get("trigger_inference", False):
             key="chat_uploader"
         )
         if uploaded_files:
-            st.caption(f"✅ {len(uploaded_files)} images selected")
+            st.caption(f"✅ {len(uploaded_files)} images")
 
-    # 聊天输入框 (Streamlit 默认固定底部)
+    # 聊天输入框
     user_input = st.chat_input("Message...")
 
     if user_input:
