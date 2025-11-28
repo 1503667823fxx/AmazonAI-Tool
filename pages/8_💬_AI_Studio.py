@@ -2,8 +2,9 @@ import streamlit as st
 from PIL import Image
 import sys
 import os
+import time
 
-# 环境设置 (与之前一致)
+# --- 环境设置 ---
 current_script_path = os.path.abspath(__file__)
 pages_dir = os.path.dirname(current_script_path)
 root_dir = os.path.dirname(pages_dir)
@@ -13,137 +14,179 @@ if root_dir not in sys.path:
 try:
     import auth
     from services.llm_engine import LLMEngine
-    from services.image_engine import ImageGenEngine # 如果你想在这里也支持生图
+    from services.image_engine import ImageGenEngine
 except ImportError as e:
-    st.error(f"❌ 模块导入失败: {e}")
+    st.error(f"❌ 核心模块导入失败: {e}")
     st.stop()
 
-st.set_page_config(page_title="Amazon AI Studio", page_icon="💬", layout="wide")
+st.set_page_config(page_title="AI Studio", page_icon="💬", layout="wide")
 
 # --- 1. 初始化 ---
 if 'auth' in sys.modules and not auth.check_password():
     st.stop()
 
-if "llm_studio" not in st.session_state:
+# 初始化引擎
+if "studio_ready" not in st.session_state:
     api_key = st.secrets.get("GOOGLE_API_KEY")
     st.session_state.llm_studio = LLMEngine(api_key)
+    st.session_state.img_gen_studio = ImageGenEngine(api_key)
+    st.session_state.studio_ready = True
 
-# 核心：管理聊天历史和会话对象
-if "chat_messages" not in st.session_state:
-    st.session_state.chat_messages = [] # 用于UI显示 [{"role": "user", "content": "hi", "image": img}, ...]
+# 初始化聊天历史 [{"role": "user", "type": "text/image", "content": "..."}]
+if "studio_msgs" not in st.session_state:
+    st.session_state.studio_msgs = []
 
-if "gemini_chat_session" not in st.session_state:
-    # 初始化一个空的 Gemini 会话
-    model = st.session_state.llm_studio.get_chat_model()
-    st.session_state.gemini_chat_session = model.start_chat(history=[])
+# 初始化 Gemini Chat Session (仅用于文本模型)
+if "gemini_chat" not in st.session_state:
+    # 默认用 Flash 启动
+    model = st.session_state.llm_studio.get_chat_model("models/gemini-flash-latest")
+    st.session_state.gemini_chat = model.start_chat(history=[])
 
-# --- 2. 侧边栏配置 (控制台风格) ---
+# --- 2. 侧边栏配置 ---
 with st.sidebar:
-    st.title("🎛️ AI Studio 控制台")
+    st.title("🎛️ AI 工作台")
     
-    # A. 模型选择
-    model_options = [
-        "models/gemini-3-pro-preview", 
-        "models/gemini-flash-latest",
-        "models/gemini-flash-lite-latest"
-    ]
-    selected_model = st.selectbox("🤖 模型选择", model_options)
+    # === 模型选择 (核心逻辑) ===
+    # 按照您的要求提供三个模型
+    model_map = {
+        "⚡ Gemini Flash (Fast Chat)": "models/gemini-flash-latest",
+        "🧠 Gemini 3 Pro (Reasoning)": "models/gemini-3-pro-preview", 
+        "🎨 Gemini 3 Image (Generation)": "models/gemini-3-pro-image-preview" 
+    }
     
-    # B. 系统指令 (System Prompt) - 这就是"人设"
-    st.caption("🧠 系统指令 (System Instructions)")
-    system_prompt = st.text_area(
-        "定义 AI 的行为", 
-        value="你是一个专业的亚马逊电商运营专家。回答要简洁、商业化，并善于分析产品卖点。",
-        height=150,
-        help="在这里告诉 AI 它是谁，比如'你是一个资深文案'或'你是一个Python代码助手'。"
-    )
+    selected_label = st.selectbox("🤖 选择模型功能", list(model_map.keys()))
+    current_model_id = model_map[selected_label]
     
+    # 判断当前是否是生图模式
+    is_image_mode = "image-preview" in current_model_id
+
+    st.divider()
+
+    # === 参数配置 (根据模式变化) ===
+    if is_image_mode:
+        st.info("🎨 **生图模式已激活**")
+        st.caption("直接在对话框输入 Prompt 即可生图。")
+        ratio = st.selectbox("画幅比例", ["1:1 (Square)", "4:3", "16:9", "9:16"])
+        style_seed = st.number_input("Seed (-1随机)", value=-1)
+    else:
+        st.caption("🧠 **系统人设 (System Prompt)**")
+        sys_prompt = st.text_area("定义AI角色", value="你是一个亚马逊电商专家。", height=100)
+        
     st.divider()
     
-    # C. 记忆管理 (核心需求)
-    col_mem1, col_mem2 = st.columns([1, 3])
-    with col_mem1:
-        st.write("") # Spacer
-    with col_mem2:
-        if st.button("🗑️ 清除记忆 (Reset)", type="primary", use_container_width=True):
-            # 1. 清空 UI 历史
-            st.session_state.chat_messages = []
-            # 2. 重置 Gemini 后端会话
-            new_model = st.session_state.llm_studio.get_chat_model(selected_model, system_prompt)
-            st.session_state.gemini_chat_session = new_model.start_chat(history=[])
-            st.toast("记忆已清除，开启新话题！", icon="🧹")
-            st.rerun()
+    # === 记忆管理 ===
+    if st.button("🗑️ 清空历史 / 新话题", use_container_width=True):
+        st.session_state.studio_msgs = []
+        # 重置 Chat Session
+        if not is_image_mode:
+            new_model = st.session_state.llm_studio.get_chat_model(current_model_id, sys_prompt)
+            st.session_state.gemini_chat = new_model.start_chat(history=[])
+        st.rerun()
 
-    st.info("💡 **提示**: 你可以直接截图粘贴到对话框，或者点击回形针上传图片。")
+# --- 3. 主界面 ---
+st.title("💬 Amazon AI Studio")
 
-# --- 3. 主对话区 ---
-st.title("💬 Amazon AI Workbench")
-st.caption("与 AI 自由对话，分析图片、撰写文案或构思创意。")
-
-# 展示历史消息
-for msg in st.session_state.chat_messages:
+# 显示历史消息
+for msg in st.session_state.studio_msgs:
     with st.chat_message(msg["role"]):
-        # 如果有图片先展示图片
-        if "image" in msg and msg["image"]:
-            st.image(msg["image"], width=300)
-        st.markdown(msg["content"])
+        # 如果是图片类型的消息
+        if msg.get("type") == "image_result":
+            st.image(msg["content"], caption="Generated Image")
+        # 如果是包含上传图的用户消息
+        elif msg.get("ref_image"):
+            st.image(msg["ref_image"], width=250)
+            st.markdown(msg["content"])
+        # 普通文本
+        else:
+            st.markdown(msg["content"])
 
 # --- 4. 输入处理 ---
-# 上传图片的小挂件 (放在输入框上方或侧边比较难，Streamlit限制，通常用 expander 或 file_uploader)
-with st.expander("📷 上传图片 (可选)", expanded=False):
-    uploaded_img = st.file_uploader("添加图片到对话", type=["png", "jpg", "webp", "jpeg"], label_visibility="collapsed")
+# 上传图片组件 (仅文本模式支持识图，生图模式支持参考图)
+uploaded_file = st.file_uploader("📷 上传图片 (识图/参考)", type=["jpg", "png", "webp"], label_visibility="collapsed")
 
-prompt = st.chat_input("输入你的指令...")
+user_input = st.chat_input("输入指令或 Prompt...")
 
-if prompt:
-    # 1. 处理用户输入
-    user_img = None
-    if uploaded_img:
-        user_img = Image.open(uploaded_img)
+if user_input:
+    # 处理上传的图片
+    input_image = None
+    if uploaded_file:
+        input_image = Image.open(uploaded_file)
     
-    # 更新 UI 历史
-    st.session_state.chat_messages.append({
+    # 1. 显示用户输入
+    st.session_state.studio_msgs.append({
         "role": "user", 
-        "content": prompt,
-        "image": user_img
+        "content": user_input,
+        "ref_image": input_image
     })
-    
-    # 显示用户消息
     with st.chat_message("user"):
-        if user_img:
-            st.image(user_img, width=300)
-        st.markdown(prompt)
+        if input_image: st.image(input_image, width=250)
+        st.markdown(user_input)
 
-    # 2. AI 回复
+    # 2. AI 响应 (分流逻辑)
     with st.chat_message("assistant"):
-        stream_placeholder = st.empty()
-        full_response = ""
         
-        # 确保模型与侧边栏配置同步 (如果系统指令变了，其实应该重置 session，但在简单模式下我们只更新 session 对象)
-        # 注意：动态修改 System Prompt 在运行中的 Session 比较麻烦，通常建议修改后点"清除记忆"生效
-        # 这里我们直接调用 chat_stream
-        
-        try:
-            # 获取流式生成器
-            response_stream = st.session_state.llm_studio.chat_stream(
-                st.session_state.gemini_chat_session,
-                prompt,
-                user_img
-            )
+        # === 分支 A: 生图模式 ===
+        if is_image_mode:
+            with st.status("🎨 正在绘图...", expanded=True) as status:
+                try:
+                    # 调用 Image Engine
+                    img_bytes = st.session_state.img_gen_studio.generate(
+                        prompt=user_input,
+                        model_name=current_model_id,
+                        ref_image=input_image, # 支持垫图
+                        ratio_suffix=f", aspect ratio {ratio.split()[0]}",
+                        seed=int(style_seed) if style_seed != -1 else None
+                    )
+                    
+                    if img_bytes:
+                        st.image(img_bytes, caption="Generated by Gemini 3 Image")
+                        # 保存到历史
+                        st.session_state.studio_msgs.append({
+                            "role": "assistant",
+                            "type": "image_result",
+                            "content": img_bytes
+                        })
+                        status.update(label="✅ 绘图完成", state="complete")
+                    else:
+                        st.error("生成失败，可能触发了安全拦截。")
+                        status.update(label="❌ 任务中止", state="error")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+        # === 分支 B: 文本/对话模式 ===
+        else:
+            # 检查是否需要切换 Session 模型 (如果用户在中途切换了下拉框)
+            # 简单的做法：这里我们假设用户切换模型后点了清空，或者我们动态重连
+            # 为了流畅体验，这里动态调用 chat_stream 即可
             
-            for chunk in response_stream:
-                full_response += chunk
-                stream_placeholder.markdown(full_response + "▌")
+            stream_placeholder = st.empty()
+            full_response = ""
             
-            stream_placeholder.markdown(full_response)
-            
-            # 更新 UI 历史
-            st.session_state.chat_messages.append({
-                "role": "assistant", 
-                "content": full_response
-            })
-            
-        except Exception as e:
-            st.error(f"对话出错: {e}")
-            if "429" in str(e):
-                st.warning("请求过快，请稍后重试。")
+            try:
+                # 重新获取一次带最新 System Prompt 的 Chat Session 
+                # (注意：在长对话中频繁切换 System Prompt 可能会导致上下文错乱，这里简化处理)
+                if not st.session_state.gemini_chat:
+                     model = st.session_state.llm_studio.get_chat_model(current_model_id)
+                     st.session_state.gemini_chat = model.start_chat(history=[])
+                
+                # 开始流式对话
+                response_stream = st.session_state.llm_studio.chat_stream(
+                    st.session_state.gemini_chat, 
+                    user_input, 
+                    input_image
+                )
+                
+                for chunk in response_stream:
+                    full_response += chunk
+                    stream_placeholder.markdown(full_response + "▌")
+                
+                stream_placeholder.markdown(full_response)
+                
+                # 保存文本历史
+                st.session_state.studio_msgs.append({
+                    "role": "assistant",
+                    "content": full_response
+                })
+                
+            except Exception as e:
+                st.error(f"对话异常: {e}")
