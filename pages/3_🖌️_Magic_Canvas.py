@@ -46,6 +46,7 @@ if "flux_service_ready" not in st.session_state:
     st.session_state.history = HistoryManager()
     st.session_state.flux_result = None # 存储结果
     st.session_state.flux_service_ready = True
+    st.session_state.canvas_key = "magic_canvas_init"
 
 flux_engine = st.session_state.flux_engine
 history = st.session_state.history
