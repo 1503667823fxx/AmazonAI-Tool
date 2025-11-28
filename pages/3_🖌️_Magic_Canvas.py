@@ -29,6 +29,13 @@ except ImportError as e:
 
 # --- 1. 页面配置 ---
 st.set_page_config(page_title="Magic Canvas", page_icon="🖌️", layout="wide")
+# ➕ 新增：暴力转 Base64 的辅助函数
+def pil_to_base64(image):
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+    return f"data:image/png;base64,{img_str}"
+
 
 # --- CSS 优化 Canvas 显示 ---
 st.markdown("""
@@ -107,21 +114,42 @@ with c_canvas:
     brush_size = t_col1.slider("🖊️ 画笔大小", 10, 100, 40)
     stroke_color = "#FFFFFF" # 蒙版颜色（白色）
     
-    # 核心 Canvas 组件
-    if st.session_state.canvas_bg_img:
-        # 计算合适的 Canvas 高度
+# 核心 Canvas 组件
+    if st.session_state.get("canvas_bg_img"):
         w, h = st.session_state.canvas_bg_img.size
-        # 这里的 key 很重要，如果底图变了，Canvas 需要重绘
+        
+        # 1. 转换成 Base64 字符串
+        bg_base64 = pil_to_base64(st.session_state.canvas_bg_img)
+        
+        # 2. 调用组件
+        # 注意：background_image 参数在某些版本里如果传 Image 对象会挂
+        # 但我们这里还是传 Image 对象，不过是"洗"过一遍的
+        # 如果还是不行，我们将利用 CSS 强行把图片垫在下面
+        
+        # 为了 100% 稳妥，我们采用 "透明画布 + CSS背景" 方案
+        
+        # A. 显示一个背景图 (绝对定位)
+        st.markdown(
+            f"""
+            <div style="position: relative; width: {w}px; height: {h}px; margin-bottom: -{h}px; z-index: 1;">
+                <img src="{bg_base64}" style="width: 100%; height: 100%; object-fit: contain;">
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # B. 渲染透明画布覆盖在上面 (Z-index 更高)
         canvas_result = st_canvas(
-            fill_color="rgba(255, 255, 255, 0.0)",  # 填充色透明
+            fill_color="rgba(255, 255, 255, 0.0)",
             stroke_width=brush_size,
             stroke_color=stroke_color,
-            background_image=st.session_state.canvas_bg_img,
+            background_color="rgba(0,0,0,0)", # 完全透明
+            background_image=None, # 不让组件处理背景图，我们自己画了
             update_streamlit=True,
             height=h,
             width=w,
             drawing_mode="freedraw",
-             key=st.session_state.get("canvas_key", "magic_canvas_default"),
+            key=st.session_state.get("canvas_key", "magic_canvas_default"),
         )
     else:
         st.info("👈 请先上传图片开始创作")
