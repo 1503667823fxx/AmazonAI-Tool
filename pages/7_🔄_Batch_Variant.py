@@ -63,7 +63,6 @@ history = st.session_state.history
 # 批量模式专属模型列表，默认 Flash 在第一位
 BATCH_MODELS = [
     "models/gemini-flash-latest",         # 🚀 默认：极速、便宜、适合批量
-    "models/gemini-flash-lite-latest",    # ⚡️ Lite：超快
     "models/gemini-3-pro-image-preview",  # 🎨 Pro：高质量，但慢且贵
 ]
 
