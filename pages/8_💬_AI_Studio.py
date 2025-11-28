@@ -28,7 +28,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CSS 样式 (暴力修复版) ---
+# --- CSS 样式 (暴力修复左上角问题 + 滚动优化) ---
 st.markdown("""
 <style>
     /* 1. 滚动条修复：给底部留足空间 */
@@ -38,19 +38,20 @@ st.markdown("""
     }
     
     /* 2. 暴力固定附件按钮 */
-    /* 排除侧边栏，只针对主区域的 Popover */
-    .stApp > header + div [data-testid="stPopover"] {
+    /* 这是一个全屏覆盖的 hack，确保找到 Popover */
+    .stApp [data-testid="stPopover"] {
         position: fixed !important;
         bottom: 80px !important; /* 距离底部 80px */
         left: 20px !important;   /* 距离左侧 20px */
-        z-index: 2147483647 !important; /* 最高层级 */
+        z-index: 999999 !important; /* 确保层级最高 */
         width: 50px !important;
         height: 50px !important;
         background: transparent !important;
+        transform: none !important; /* 防止父容器 transform 影响 fixed 定位 */
     }
     
     /* 针对按钮本身的样式 */
-    .stApp > header + div [data-testid="stPopover"] > div > button {
+    .stApp [data-testid="stPopover"] > div > button {
         border-radius: 50% !important; /* 圆形 */
         width: 50px !important;
         height: 50px !important;
@@ -65,9 +66,17 @@ st.markdown("""
         justify-content: center !important;
     }
     
+    /* 排除侧边栏中的 Popover (如果有的话) */
+    [data-testid="stSidebar"] [data-testid="stPopover"] {
+        position: relative !important;
+        bottom: auto !important;
+        left: auto !important;
+        z-index: auto !important;
+    }
+    
     /* 暗黑模式适配 */
     @media (prefers-color-scheme: dark) {
-        .stApp > header + div [data-testid="stPopover"] > div > button {
+        .stApp [data-testid="stPopover"] > div > button {
             background-color: #262730 !important;
             color: white !important;
             border: 1px solid #464b5d !important;
@@ -338,7 +347,7 @@ if st.session_state.get("trigger_inference", False):
 # --- 6. 底部输入区 (固定位置实现) ---
 if not st.session_state.get("trigger_inference", False):
     
-    # CSS 已将此 Popover 强制移至左下角
+    # 悬浮的上传按钮
     with st.popover("📎", use_container_width=False):
         uploaded_files = st.file_uploader(
             "Upload Images", 
