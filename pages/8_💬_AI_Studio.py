@@ -28,54 +28,53 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- CSS 样式 (重点修复了悬浮按钮位置) ---
+# --- CSS 样式 (暴力修复版) ---
 st.markdown("""
 <style>
-    /* 1. 滚动条修复：给底部留足空间，防止内容被输入框遮挡 */
+    /* 1. 滚动条修复：给底部留足空间 */
     .block-container { 
         padding-top: 1rem; 
         padding-bottom: 120px !important; 
     }
     
-    /* 2. 强制固定“附件按钮”到左下角 */
-    /* 使用通配符匹配 stMain，兼容不同 Streamlit 版本 */
-    section[data-testid="stMain"] [data-testid="stPopover"],
-    div[data-testid="stMain"] [data-testid="stPopover"] {
+    /* 2. 暴力固定附件按钮 */
+    /* 排除侧边栏，只针对主区域的 Popover */
+    .stApp > header + div [data-testid="stPopover"] {
         position: fixed !important;
-        bottom: 80px !important; /* 距离底部的高度 */
-        left: 20px !important;   /* 距离左侧的距离 */
-        z-index: 100000 !important; /* 确保在最顶层 */
-        transform: none !important;
-    }
-    
-    /* 让按钮变圆，增加阴影，像一个悬浮球 */
-    section[data-testid="stMain"] [data-testid="stPopover"] button,
-    div[data-testid="stMain"] [data-testid="stPopover"] button {
-        border-radius: 50% !important;
+        bottom: 80px !important; /* 距离底部 80px */
+        left: 20px !important;   /* 距离左侧 20px */
+        z-index: 2147483647 !important; /* 最高层级 */
         width: 50px !important;
         height: 50px !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
-        background-color: #ffffff !important; 
-        border: 1px solid #e0e0e0 !important;
-        color: #333 !important;
-        font-size: 20px !important;
+        background: transparent !important;
+    }
+    
+    /* 针对按钮本身的样式 */
+    .stApp > header + div [data-testid="stPopover"] > div > button {
+        border-radius: 50% !important; /* 圆形 */
+        width: 50px !important;
+        height: 50px !important;
         padding: 0 !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+        background-color: white !important;
+        color: #333 !important;
+        border: 1px solid #ddd !important;
+        font-size: 1.2rem !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
     }
     
-    /* 暗色模式适配 */
+    /* 暗黑模式适配 */
     @media (prefers-color-scheme: dark) {
-        section[data-testid="stMain"] [data-testid="stPopover"] button,
-        div[data-testid="stMain"] [data-testid="stPopover"] button {
+        .stApp > header + div [data-testid="stPopover"] > div > button {
             background-color: #262730 !important;
+            color: white !important;
             border: 1px solid #464b5d !important;
-            color: #fafafa !important;
         }
     }
 
-    /* 3. 消息气泡样式 */
+    /* 3. 消息气泡美化 */
     .stChatMessage {
         background-color: transparent;
         padding: 1rem;
@@ -120,10 +119,10 @@ def get_uid():
     st.session_state.msg_uid += 1
     return st.session_state.msg_uid
 
-# --- 2. 辅助工具函数 ---
+# --- 2. 辅助工具 ---
 
 def pil_to_bytes(img, format="JPEG"):
-    """兼容 Bytes 和 PIL 的转换函数"""
+    """兼容 Bytes 和 PIL 的转换"""
     if isinstance(img, bytes):
         return img
     if img is None:
@@ -323,48 +322,3 @@ if st.session_state.get("trigger_inference", False):
                     response = chat.send_message(current_payload, stream=True)
                     
                     for chunk in response:
-                        if chunk.text:
-                            full_resp += chunk.text
-                            placeholder.markdown(full_resp + "▌")
-                    placeholder.markdown(full_resp)
-                    
-                    st.session_state.studio_msgs.append({
-                        "role": "model", "type": "text",
-                        "content": full_resp, "id": get_uid()
-                    })
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-# --- 6. 底部输入区 (固定位置实现) ---
-if not st.session_state.get("trigger_inference", False):
-    
-    # 悬浮的上传按钮 (CSS固定在左下角)
-    with st.popover("📎", use_container_width=False):
-        uploaded_files = st.file_uploader(
-            "Upload Images", 
-            type=["jpg", "png", "webp"], 
-            accept_multiple_files=True,
-            key="chat_uploader"
-        )
-        if uploaded_files:
-            st.caption(f"✅ {len(uploaded_files)} images")
-
-    # 聊天输入框
-    user_input = st.chat_input("Message...")
-
-    if user_input:
-        img_list = []
-        if uploaded_files:
-            for uf in uploaded_files:
-                img_list.append(Image.open(uf))
-        
-        st.session_state.studio_msgs.append({
-            "role": "user",
-            "type": "text",
-            "content": user_input,
-            "ref_images": img_list,
-            "id": get_uid()
-        })
-        st.session_state.trigger_inference = True
-        st.rerun()
