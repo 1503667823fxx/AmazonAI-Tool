@@ -102,7 +102,7 @@ with c_conf:
         
         # 3. 执行生成
         st.divider()
-        model_name = st.selectbox("模型", ["models/gemini-3-pro-image-preview", "models/gemini-1.5-flash"])
+        model_name = st.selectbox("模型", ["models/gemini-3-pro-image-preview", "models/gemini-flash-latest"])
         if st.button("🚀 2. 开始生成"):
             with st.spinner("绘制中..."):
                 img_bytes = generator.generate_image(
