@@ -101,3 +101,53 @@ def optimize_art_director_prompt(self, user_idea, task_type, weight, style_key, 
         except Exception as e:
             print(f"LLM Error: {e}")
             return [f"{user_idea}, {style_desc}, high quality, 8k resolution"]
+    # 在 LLMEngine 类中添加
+
+    def get_chat_model(self, model_name="models/gemini-3-pro-image-preview", system_instruction=None):
+        """
+        获取一个配置好的聊天模型实例
+        """
+        if not self.valid: return None
+        
+        # 安全设置
+        safety = {
+            "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+            "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+            "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+            "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+        }
+        
+        return genai.GenerativeModel(
+            model_name=model_name,
+            system_instruction=system_instruction, # 支持动态人设
+            safety_settings=safety
+        )
+
+    def chat_stream(self, chat_session, user_input, image_input=None):
+        """
+        流式对话接口
+        chat_session: genai.ChatSession 对象
+        user_input: 文本输入
+        image_input: PIL Image 对象 (可选)
+        """
+        if not self.valid: 
+            yield "❌ API Key 无效"
+            return
+
+        # 构建消息内容
+        content = []
+        if user_input:
+            content.append(user_input)
+        if image_input:
+            content.append(image_input)
+            
+        if not content: return
+
+        try:
+            # 流式发送消息
+            response = chat_session.send_message(content, stream=True)
+            for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            yield f"⚠️ Error: {str(e)}"
