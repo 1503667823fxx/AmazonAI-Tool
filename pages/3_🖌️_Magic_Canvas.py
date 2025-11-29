@@ -8,7 +8,6 @@ GRADIO_URL = "https://huggingface.co/spaces/Veredisfu/My-Magic-Canvas/?__theme=l
 
 # 判断是否是云端嵌入链接
 if "huggingface.co" in GRADIO_URL:
-    st.info("💡 编辑器加载自 Hugging Face Spaces。如果加载缓慢，请耐心等待云端唤醒。")
     # 使用 components.iframe 嵌入
     # scrolling=True 很重要，否则操作不了
     import streamlit.components.v1 as components
