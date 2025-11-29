@@ -19,4 +19,4 @@ else:
     if check_server_status("http://127.0.0.1:7860"):
         render_gradio_app("http://127.0.0.1:7860", height=900)
     else:
-        st.warning("⚠️ 未配置远程 URL，且本地服务未启动。")
+
