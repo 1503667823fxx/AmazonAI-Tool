@@ -77,6 +77,11 @@ with gr.Blocks(theme=gr.themes.Soft(), css="footer {visibility: hidden}") as dem
     input_img.select(on_image_click, [input_img], [input_img, state_mask])
     btn_run.click(run_inpaint, [input_img, state_mask, prompt], [output_img])
 
+# ... (前面的代码保持不变) ...
+
 if __name__ == "__main__":
-    # 启动在 7860 端口
-    demo.launch(server_name="0.0.0.0", server_port=7860, show_api=False)
+    # ⚠️ 关键修改：开启 share=True
+    # 这会生成一个类似 https://xxxxx.gradio.live 的临时公开链接
+    # 这样 Streamlit Cloud 才能访问到它
+    print("正在启动 Gradio 服务...")
+    demo.launch(share=True, server_name="0.0.0.0", server_port=7860, prevent_thread_lock=True)
