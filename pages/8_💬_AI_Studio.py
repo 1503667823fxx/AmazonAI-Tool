@@ -12,16 +12,11 @@ if root_dir not in sys.path: sys.path.append(root_dir)
 
 try:
     import auth
-    # [引入] 专属工具
     from app_utils.ai_studio.state_manager import init_session_state, clear_history, undo_last_turn
     from app_utils.ai_studio.css_injector import inject_studio_css
     from app_utils.ai_studio.message_renderer import render_studio_message
-    from app_utils.image_processing import create_preview_thumbnail # 引用通用工具
-    
-    # [引入] 专属服务
+    from app_utils.image_processing import create_preview_thumbnail
     from services.ai_studio.chat_service import StudioChatService
-    # Vision Service 已经在 state_manager 初始化时单例化了
-    
 except ImportError as e:
     st.error(f"❌ 模块缺失: {e}")
     st.stop()
@@ -31,7 +26,7 @@ inject_studio_css()
 
 # --- 1. 初始化 ---
 if 'auth' in sys.modules and not auth.check_password(): st.stop()
-init_session_state() # 初始化所有状态
+init_session_state()
 
 api_key = st.secrets.get("GOOGLE_API_KEY")
 
@@ -39,10 +34,10 @@ api_key = st.secrets.get("GOOGLE_API_KEY")
 with st.sidebar:
     st.title("🧪 AI Workbench")
     
-    model_map = { 
+    model_map = {
+        "🧠 Gemini 3 Pro (Reasoning)": "models/gemini-3-pro-preview", 
         "⚡ Gemini Flash (Fast)": "models/gemini-flash-latest",
         "🎨 Gemini 3 Image (Image Gen)": "models/gemini-3-pro-image-preview" 
-        "🧠 Gemini 3 Pro (Reasoning)": "models/gemini-3-pro-preview",
     }
     selected_label = st.selectbox("Core Model", list(model_map.keys()))
     current_model_id = model_map[selected_label]
@@ -78,7 +73,7 @@ else:
     for idx, msg in enumerate(st.session_state.studio_msgs):
         render_studio_message(idx, msg, delete_callback, regen_callback)
 
-# --- 4. 核心推理循环 (Controller) ---
+# --- 4. 核心推理循环 ---
 if st.session_state.get("trigger_inference", False):
     st.session_state.trigger_inference = False
     if not st.session_state.studio_msgs: st.rerun()
@@ -88,16 +83,14 @@ if st.session_state.get("trigger_inference", False):
     if last_msg["role"] == "user":
         with st.chat_message("model"):
             
-            # === 分支 A: 视觉模式 ===
             if is_image_mode:
+                # === 视觉模式 ===
                 with st.status("🎨 正在绘制...", expanded=True):
                     vision_svc = st.session_state.studio_vision_svc
                     
-                    # 智能解析参考图 (含接力逻辑)
                     target_ref_img, info_text = vision_svc.resolve_reference_image(last_msg, st.session_state.studio_msgs)
                     if info_text: st.write(info_text)
 
-                    # 生图
                     hd_bytes = vision_svc.generate_image(
                         prompt=last_msg["content"],
                         model_name=current_model_id,
@@ -114,29 +107,24 @@ if st.session_state.get("trigger_inference", False):
                         st.rerun()
                     else:
                         st.error("生成失败或被拦截")
-
-            # === 分支 B: 对话模式 ===
             else:
+                # === 对话模式 ===
                 placeholder = st.empty()
                 full_resp = ""
                 try:
-                    # 实例化对话服务
                     chat_svc = StudioChatService(
                         api_key=api_key,
                         model_name=current_model_id, 
                         system_instruction=st.session_state.system_prompt_val
                     )
                     
-                    # 启动 Session (注意：不包含最后一条 User 消息)
                     history_msgs = st.session_state.studio_msgs[:-1]
                     chat_session = chat_svc.create_chat_session(history_msgs)
                     
-                    # 准备当前 payload
                     current_payload = []
                     if last_msg.get("ref_images"): current_payload.extend(last_msg["ref_images"])
                     if last_msg["content"]: current_payload.append(last_msg["content"])
                     
-                    # 流式发送
                     response = chat_session.send_message(current_payload, stream=True)
                     
                     for chunk in response:
