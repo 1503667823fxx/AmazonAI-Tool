@@ -1,15 +1,9 @@
 import streamlit as st
 
 def inject_studio_css():
-    """注入 AI Studio 专属样式"""
     st.markdown("""
     <style>
-        /* 1. 调整底部内边距 */
-        .block-container {
-            padding-bottom: 120px !important;
-        }
-
-        /* 2. 强力定位上传按钮 (Popover) */
+        .block-container { padding-bottom: 120px !important; }
         div[data-testid="stPopover"] {
             position: fixed !important;
             bottom: 75px !important; 
@@ -18,8 +12,6 @@ def inject_studio_css():
             width: 45px !important;
             height: 45px !important;
         }
-
-        /* 3. 按钮样式美化 */
         div[data-testid="stPopover"] > div > button {
             border-radius: 50% !important;
             width: 45px !important;
@@ -34,13 +26,11 @@ def inject_studio_css():
             align-items: center !important;
             justify-content: center !important;
         }
-        
         div[data-testid="stPopover"] > div > button:hover {
             transform: scale(1.1);
             color: #000 !important;
             border-color: #ccc !important;
         }
-
         footer {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
