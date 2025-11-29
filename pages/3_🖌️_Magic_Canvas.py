@@ -4,7 +4,7 @@
 
 # 🔴 关键修改：填入你 Hugging Face Space 的地址
 # 注意：要在链接末尾加上 /?__theme=light 这样嵌入进去好看点
-GRADIO_URL = "https://huggingface.co/spaces/Veredisfu/My-Magic-Canvas" 
+GRADIO_URL = "https://www.modelscope.cn/studios/veredis/magic-editor/summary/?__theme=light" 
 
 # 判断是否是云端嵌入链接
 if "huggingface.co" in GRADIO_URL:
