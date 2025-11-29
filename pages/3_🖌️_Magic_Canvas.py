@@ -1,7 +1,6 @@
 # ... 前面的 import 和 setup 代码不变 ...
 
-# --- 主界面 ---
-st.caption("基于 SAM (Segment Anything) 的智能重绘工作台。")
+
 
 # 🔴 关键修改：填入你 Hugging Face Space 的地址
 # 注意：要在链接末尾加上 /?__theme=light 这样嵌入进去好看点
