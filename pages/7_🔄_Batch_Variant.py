@@ -14,13 +14,18 @@ if root_dir not in sys.path:
 
 try:
     import auth
-    from app_utils.history_manager import HistoryManager
-    from app_utils.ui_components import render_history_sidebar
-    from app_utils.image_processing import create_preview_thumbnail, process_image_for_download
     
-    # 引入服务引擎
-    from services.image_engine import ImageGenEngine
-    # 只需要生图引擎，批量变体不需要复杂的 LLM 推理，靠 Prompt 即可
+    # [修改点 1] 引入专属工具包
+    from app_utils.batch_variant.tools import (
+        BatchHistoryManager, 
+        render_history_sidebar, 
+        create_preview_thumbnail, 
+        process_image_for_download
+    )
+    
+    # [修改点 2] 引入专属服务引擎
+    from services.batch_variant.image_service import BatchGenerator
+    
 except ImportError as e:
     st.error(f"❌ 核心模块导入失败: {e}")
     st.stop()
@@ -46,18 +51,20 @@ st.markdown("""
 if 'auth' in sys.modules and not auth.check_password():
     st.stop()
 
-if "batch_service_ready" not in st.session_state:
+# [修改点 3] 专属 Session State Key (bv_ 前缀)
+if "bv_service_ready" not in st.session_state:
     api_key = st.secrets.get("GOOGLE_API_KEY")
     if not api_key:
         st.error("❌ 未找到 GOOGLE_API_KEY")
         st.stop()
-    st.session_state.img_gen = ImageGenEngine(api_key)
-    st.session_state.history = HistoryManager()
-    st.session_state.batch_results = [] # 存储批量结果
-    st.session_state.batch_service_ready = True
+    st.session_state.bv_generator = BatchGenerator(api_key)
+    st.session_state.bv_history = BatchHistoryManager()
+    st.session_state.bv_results = [] # 存储批量结果
+    st.session_state.bv_service_ready = True
 
-img_gen = st.session_state.img_gen
-history = st.session_state.history
+# 快捷引用
+img_gen = st.session_state.bv_generator
+history = st.session_state.bv_history
 
 # --- 3. 常量定义 ---
 # 批量模式专属模型列表，默认 Flash 在第一位
@@ -147,7 +154,7 @@ with c_config:
     # D. 执行
     btn_disabled = not (uploaded_file and prompt_direction)
     if st.button("🚀 启动批量生产", type="primary", disabled=btn_disabled, use_container_width=True):
-        st.session_state.batch_results = [] # 清空
+        st.session_state.bv_results = [] # 清空
         
         # 准备进度条
         progress_bar = st.progress(0)
@@ -161,27 +168,25 @@ with c_config:
             status_text.text(f"正在生产变体 {i+1} / {batch_count} ...")
             
             # 💡 核心技巧：通过随机 Seed 强制产生变体
-            # 即使 Prompt 一样，不同的 Seed + High Temperature 也会产生不同结果
             random_seed = random.randint(1, 1000000)
             
-            # 构建差异化 Prompt (可选：可以在 Prompt 里注入一点噪声)
-            # 比如 "Variation {i}" 这种没什么实际意义的词有时候能打破缓存
+            # 构建差异化 Prompt
             final_prompt = f"{prompt_direction}"
             
             try:
-                # 调用生图接口
+                # 调用专属生图接口
                 img_bytes = img_gen.generate(
                     prompt=final_prompt,
                     model_name=selected_model,
                     ref_image=ref_image,
                     ratio_suffix=RATIO_MAP[selected_ratio],
                     seed=random_seed,
-                    creativity=temperature, # 使用差异度控制
+                    creativity=temperature, 
                     safety_level="Standard"
                 )
                 
                 if img_bytes:
-                    st.session_state.batch_results.append(img_bytes)
+                    st.session_state.bv_results.append(img_bytes)
                     # 自动保存到历史
                     history.add(img_bytes, f"Batch-{i+1}", prompt_direction[:20])
                 else:
@@ -192,8 +197,7 @@ with c_config:
             
             # 更新进度
             progress_bar.progress((i + 1) / batch_count)
-            # ⚠️ 简单的限流：如果是 Flash 模型，跑得太快可能会 429，这里稍微 sleep 一下
-            # Pro 模型本来就慢，通常不需要 sleep
+            # 简单的限流
             if "flash" in selected_model:
                 time.sleep(1.5) 
         
@@ -204,18 +208,18 @@ with c_config:
 
 # --- 右侧：网格预览区 ---
 with c_view:
-    st.subheader(f"📦 产出结果 ({len(st.session_state.batch_results)})")
+    st.subheader(f"📦 产出结果 ({len(st.session_state.bv_results)})")
     
-    if not st.session_state.batch_results:
+    if not st.session_state.bv_results:
         st.info("👈 在左侧配置并启动生产线，结果将以网格形式展示在这里。")
         st.markdown(
             '<div style="border: 2px dashed #ddd; height: 400px; display: flex; align-items: center; justify-content: center; color: #888;">Production Line Idle...</div>', 
             unsafe_allow_html=True
         )
     else:
-        # 网格布局：每行 3 张 (宽屏下效果好)
+        # 网格布局
         cols = st.columns(3)
-        for idx, img_bytes in enumerate(st.session_state.batch_results):
+        for idx, img_bytes in enumerate(st.session_state.bv_results):
             col = cols[idx % 3] # 循环放入列中
             with col:
                 thumb = create_preview_thumbnail(img_bytes, 400)
@@ -228,6 +232,6 @@ with c_view:
                     data=final_bytes, 
                     file_name=f"variant_{idx+1}.jpg", 
                     mime=mime, 
-                    key=f"b_dl_{idx}",
+                    key=f"bv_dl_{idx}",
                     help="下载此变体"
                 )
