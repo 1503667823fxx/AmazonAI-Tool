@@ -5,8 +5,3 @@ pillow
 numpy
 requests
 watchdog
-# --- 新增的魔法库 ---
-gradio
-segment-anything
-torch
-torchvision
