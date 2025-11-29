@@ -4,14 +4,9 @@ replicate
 pillow
 numpy
 requests
-streamlit-drawable-canvas
 watchdog
-
-
-
-
-
-
-
-
-
+# --- 新增的魔法库 ---
+gradio
+segment-anything
+torch
+torchvision
