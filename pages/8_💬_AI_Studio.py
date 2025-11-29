@@ -35,9 +35,9 @@ with st.sidebar:
     st.title("🧪 AI Workbench")
     
     model_map = {
-        "🧠 Gemini 3 Pro (Reasoning)": "models/gemini-3-pro-preview", 
         "⚡ Gemini Flash (Fast)": "models/gemini-flash-latest",
-        "🎨 Gemini 3 Image (Image Gen)": "models/gemini-3-pro-image-preview" 
+        "🎨 Gemini 3 Image (Image Gen)": "models/gemini-3-pro-image-preview", 
+        "🧠 Gemini 3 Pro (Reasoning)": "models/gemini-3-pro-preview", 
     }
     selected_label = st.selectbox("Core Model", list(model_map.keys()))
     current_model_id = model_map[selected_label]
