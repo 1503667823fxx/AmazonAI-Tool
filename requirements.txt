@@ -4,4 +4,14 @@ replicate
 pillow
 numpy
 requests
+streamlit-drawable-canvas
 watchdog
+
+
+
+
+
+
+
+
+
