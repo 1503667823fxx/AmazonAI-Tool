@@ -12,7 +12,7 @@ def analyze_background(image: Image.Image) -> str:
     使用 Gemini Flash 1.5 快速分析图片背景特征，用于指导 Outpainting。
     """
     try:
-        model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('models/gemini-flash-latest')
         
         # 专门针对 Outpainting 优化的 Prompt
         prompt = """
