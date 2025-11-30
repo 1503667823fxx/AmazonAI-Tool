@@ -25,7 +25,7 @@ def fill_image(image: Image.Image, mask: Image.Image, prompt: str) -> Image.Imag
     # 使用 Google 官方 Imagen 3 的 REST 端点
     # 注意：模型名称通常是 'imagen-3.0-generate-001' 或 'imagen-3.0-capability-001'
     # 如果你的账号支持 gemini-3-pro-image-preview，也可以尝试，但在 API 路径中通常是通用名称
-    model_name = "gemini-3-pro-image-preview" 
+    model_name = "models/gemini-3-pro-image-preview" 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:editImage?key={API_KEY}"
     
     # --- 2. 准备 Payload (请求体) ---
