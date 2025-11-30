@@ -1,58 +1,94 @@
 import streamlit as st
-import google.generativeai as genai
-from PIL import Image
+import requests
+import json
+import base64
 import io
+from PIL import Image
 
-# 1. 获取 Google API Key
+# 获取 Google API Key
 API_KEY = st.secrets.get("GOOGLE_API_KEY") or st.secrets["google"]["api_key"]
-genai.configure(api_key=API_KEY)
+
+def image_to_base64(img: Image.Image) -> str:
+    """辅助函数：将 PIL 图片转为 Base64 字符串（不带头）"""
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    img_bytes = buf.getvalue()
+    return base64.b64encode(img_bytes).decode('utf-8')
 
 def fill_image(image: Image.Image, mask: Image.Image, prompt: str) -> Image.Image:
     """
-    使用 Google 原生 GenAI 进行图像扩展 (Outpainting)。
-    尝试使用用户指定的 Gemini/Imagen 模型。
+    直接使用 HTTP 请求调用 Google Imagen 3 API (REST 方式)。
+    这种方法不依赖 google-generativeai 库的版本，避免 'AttributeError'。
     """
+    
+    # --- 1. 准备 API 端点 ---
+    # 使用 Google 官方 Imagen 3 的 REST 端点
+    # 注意：模型名称通常是 'imagen-3.0-generate-001' 或 'imagen-3.0-capability-001'
+    # 如果你的账号支持 gemini-3-pro-image-preview，也可以尝试，但在 API 路径中通常是通用名称
+    model_name = "models/gemini-3-pro-image-preview" 
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:editImage?key={API_KEY}"
+    
+    # --- 2. 准备 Payload (请求体) ---
+    payload = {
+        "requests": [{
+            "image": {
+                "imageBytes": image_to_base64(image)
+            },
+            "mask": {
+                "imageBytes": image_to_base64(mask) # 这里的 Mask 白色代表编辑区
+            },
+            "prompt": prompt,
+            "parameters": {
+                "sampleCount": 1,
+                # 【关键】强制禁止生成人物，防止影分身
+                "personGeneration": "DONT_ALLOW", 
+                # 指定正方形，或者让模型自动保持原图比例
+                # "aspectRatio": "1:1" 
+            }
+        }]
+    }
+    
+    headers = {
+        'Content-Type': 'application/json'
+    }
+
     try:
-        # ------------------------------------------------------------------
-        # 模型选择策略：
-        # 优先使用你指定的 'models/gemini-3-pro-image-preview' (如果有权限)
-        # 如果失败，自动回退到标准的 'imagen-3.0-generate-001'
-        # ------------------------------------------------------------------
-        target_model = "models/gemini-3-pro-image-preview" 
-        fallback_model = "imagen-3.0-generate-001"
-
-        try:
-            # 尝试初始化指定的模型
-            model = genai.ImageGenerationModel(target_model)
-            print(f"尝试使用模型: {target_model}")
-        except Exception:
-            # 初始化失败，使用 fallback
-            print(f"指定模型不可用，切换至: {fallback_model}")
-            model = genai.ImageGenerationModel(fallback_model)
-        # Google 的 edit_image 接口参数略有不同
-        # prompt: 提示词
-        # base_image: 原图 (我们传进去的是已经 padding 过的底图)
-        # mask: 遮罩 (白色区域为编辑区/扩充区)
-        response = model.edit_image(
-            prompt=prompt,
-            base_image=image,
-            mask=mask,
-            aspect_ratio=None, # 因为我们已经手动调整了画布尺寸，所以不需要模型再调整比例
-            safety_filter_level="block_only_high",
-            person_generation="dont_allow", # 【关键】强制禁止生成人物，防止影分身！
-        )
-
-        # Google 返回的是 GeneratedImage 对象，直接取第一张
-        generated_image = response.images[0]
+        # --- 3. 发送请求 ---
+        print(f"正在通过 REST API 调用模型: {model_name} ...")
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
         
-        # 将结果转换为 PIL Image 对象返回
-        # 这里的 generated_image 通常有 ._image_bytes 或者可以直接 save
-        # 为了兼容性，我们将其转为 PIL
-        return Image.open(io.BytesIO(generated_image.image_bytes))
+        # --- 4. 处理响应 ---
+        if response.status_code != 200:
+            # 打印详细错误信息
+            error_msg = f"API Error {response.status_code}: {response.text}"
+            print(error_msg)
+            raise Exception(f"Google API 请求失败: {response.text}")
+            
+        result = response.json()
+        
+        # 提取图片数据
+        # 结构通常是: result['image']['imageBytes'] 或 result['predictions'][0]['bytesBase64Encoded']
+        # Imagen API 的返回结构可能略有不同，我们需要做兼容判断
+        
+        img_data = None
+        
+        # 尝试路径 A (常见路径)
+        if 'image' in result and 'imageBytes' in result['image']:
+            img_data = result['image']['imageBytes']
+        # 尝试路径 B (列表路径)
+        elif 'images' in result and len(result['images']) > 0:
+            img_data = result['images'][0].get('imageBytes')
+        else:
+            # 打印返回结构以便调试
+            print(f"API 返回结构未知: {result.keys()}")
+            raise Exception("无法从 API 响应中提取图片数据")
 
+        if img_data:
+            # 解码 Base64 并转为 PIL
+            image_bytes = base64.b64decode(img_data)
+            return Image.open(io.BytesIO(image_bytes))
+            
     except Exception as e:
-        # 错误处理：如果 Google 编辑接口失败（这通常是因为 Key 权限或模型名称问题）
-        print(f"Google GenAI Edit Error: {e}")
-        st.error(f"Google AI 绘图失败: {str(e)}")
-        st.warning("提示：请确保你的 API Key 开通了 Imagen/ImageGeneration 权限。")
+        st.error(f"绘图服务出错: {str(e)}")
+        # 可以在这里打印 response.text 查看具体是权限问题还是参数问题
         raise e
