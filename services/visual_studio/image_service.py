@@ -25,8 +25,8 @@ def generate_image_replicate(prompt: str, aspect_ratio: str, output_format: str 
     # 这里我们默认用 black-forest-labs 官方版本
     # 如果您想支持切换，可以通过参数传入 model_type
     
-    # 示例中使用 flux-schnell 因为它生成速度极快 (通常 <1s)，适合演示
-    # 生产环境如果追求极致画质，可改用 "black-forest-labs/flux-dev"
+    # 示例中使用black-forest-labs/flux-2-pro因为它生成极致画质
+
     model_id = "black-forest-labs/flux-2-pro" 
     
     input_params = {
