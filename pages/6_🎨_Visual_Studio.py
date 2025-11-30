@@ -7,7 +7,7 @@ import time
 # 注意：这些模块我们稍后创建，这里先定义好接口规范
 try:
     from services.visual_studio import prompt_service, image_service
-    from app_utils.visual_studio import tools
+    from app_utils.visual_studio import ui_layout, state_manager
 except ImportError:
     # 首次运行时防止报错，提示用户还需要创建依赖文件
     st.error("⚠️ 核心依赖模块未找到。请确保 'services/visual_studio' 和 'app_utils/visual_studio' 已正确创建。")
@@ -24,13 +24,13 @@ st.set_page_config(
 )
 
 # 初始化 Session State (委托给工具包处理)
-tools.init_visual_studio_state()
+state_manager.init_visual_studio_state()
 
 # ==============================================================================
 # 3. 侧边栏：参数配置区
 # ==============================================================================
 # render_sidebar 返回用户配置的字典，例如 {'style': 'Cinematic', 'ratio': '9:16', ...}
-user_config = tools.render_sidebar()
+user_config = ui_layout.render_sidebar()
 
 # ==============================================================================
 # 4. 主界面：业务逻辑流
@@ -114,9 +114,10 @@ st.divider()
 
 # 委托给工具包渲染结果 (包括图片展示、下载按钮、历史记录保存逻辑)
 if st.session_state.get('vs_current_image'):
-    tools.render_result_area(
+   ui_layout.render_result_area(
         image_url=st.session_state['vs_current_image'],
         prompt_used=final_prompt
     )
 else:
     st.info("👈 在上方输入描述并点击 'AI 润色' 开始创作。")
+
