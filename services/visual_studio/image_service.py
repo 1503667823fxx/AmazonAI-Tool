@@ -2,55 +2,76 @@ import streamlit as st
 import replicate
 import os
 
-# 确保环境变量中有 Token，供 replicate SDK 使用
-if "replicate_api_token" in st.secrets:
-    os.environ["REPLICATE_API_TOKEN"] = st.secrets["REPLICATE_API_TOKEN"]
+# ==========================================
+# 1. 鉴权配置 (增强健壮性)
+# ==========================================
+# 优先读取 REPLICATE_API_TOKEN，兼容大小写
+token = st.secrets.get("replicate_api_token") or st.secrets.get("REPLICATE_API_TOKEN")
+if token:
+    os.environ["REPLICATE_API_TOKEN"] = token
 
-def generate_image_replicate(prompt: str, aspect_ratio: str, output_format: str = "png", safety_tolerance: int = 2) -> str:
+def generate_image_replicate(prompt: str, aspect_ratio: str, output_format: str = "webp", safety_tolerance: int = 2) -> str:
     """
-    调用 Replicate 上的 Flux 模型生成图片。
-    
-    Args:
-        prompt: 英文提示词
-        aspect_ratio: 图片比例 (例如 "16:9")
-        output_format: "png", "jpg", "webp"
-        safety_tolerance: 安全等级 (1-5)
-        
-    Returns:
-        str: 生成图片的 URL 地址
+    调用 Replicate 上的 Flux 模型生成图片 (带详细调试信息)。
     """
     
-    # 1. 确定模型版本 ID
-    # Flux-Schnell (快速版) vs Flux-Dev (开发版/高质量)
-    # 这里我们默认用 black-forest-labs 官方版本
-    # 如果您想支持切换，可以通过参数传入 model_type
-    
-    # 示例中使用black-forest-labs/flux-2-pro因为它生成极致画质
+    # 检查 Token 是否存在
+    if not os.environ.get("REPLICATE_API_TOKEN"):
+        raise ValueError("❌ 未检测到 Replicate API Token。请在 secrets.toml 中配置。")
 
-    model_id = "black-forest-labs/flux-1.1-pro" 
+    # 2. 确定模型 ID (使用官方别名)
+    # flux-schnell: 速度快 (0.01$/图)
+    # flux-dev: 质量高 (0.025$/图)
+    model_id = "black-forest-labs/flux-1.1-pro"
     
+    # 3. 构建参数
+    # 注意: Flux 对 aspect_ratio 的要求必须是特定字符串
+    # 确保传入的是 "1:1", "16:9", "9:16", "3:2", "2:3", "4:5", "5:4" 之一
     input_params = {
         "prompt": prompt,
-        "aspect_ratio": aspect_ratio,  # Flux 支持直接传 "16:9", "1:1" 等字符串
+        "aspect_ratio": aspect_ratio, 
         "output_format": output_format,
-        "disable_safety_checker": False,
         "safety_tolerance": safety_tolerance
     }
     
+    # --- 调试日志 (会在 Streamlit 后台右侧打印) ---
+    print(f"🚀 [Flux Request] Model: {model_id}")
+    print(f"📋 [Flux Params] {input_params}")
+
     try:
-        # 2. 调用 Replicate API
-        # output 通常是一个列表，包含图片 URL
+        # 4. 发起调用
         output = replicate.run(
             model_id,
             input=input_params
         )
         
-        # 3. 解析结果
+        # --- 调试日志 (查看原始返回结果) ---
+        print(f"📦 [Flux Response] Type: {type(output)}")
+        print(f"📦 [Flux Response] Data: {output}")
+
+        # 5. 解析结果
+        # Replicate SDK 通常返回一个列表: ['https://...']
         if output and isinstance(output, list) and len(output) > 0:
-            # output[0] 是一个 FileOutput 对象或 URL 字符串
-            return str(output[0])
-        else:
-            raise ValueError("Replicate API 返回结果为空")
+            # 将 FileOutput 对象转换为字符串 URL
+            image_url = str(output[0])
+            return image_url
             
+        elif output and isinstance(output, str):
+            # 极少数情况直接返回字符串
+            return output
+            
+        else:
+            # 如果是空列表，极大概率是触发了安全拦截
+            raise ValueError(
+                "API 返回结果为空。\n"
+                "可能原因：\n"
+                "1. 提示词触发了内容安全过滤器 (NSFW/敏感词)。\n"
+                "2. 提示词为空或格式错误。"
+            )
+            
+    except replicate.exceptions.ReplicateError as e:
+        # 捕获 Replicate 官方定义的错误
+        raise RuntimeError(f"Replicate API 拒绝服务: {str(e)}")
     except Exception as e:
-        raise RuntimeError(f"Replicate 生图失败: {str(e)}")
+        # 捕获其他未知错误
+        raise RuntimeError(f"生图流程未知错误: {str(e)}")
