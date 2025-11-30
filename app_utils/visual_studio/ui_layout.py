@@ -14,7 +14,7 @@ def render_sidebar():
         st.subheader("1. 模型版本")
         model_version = st.selectbox(
             "选择 Flux 模型",
-            options=["black-forest-labs/flux-1.1-pro"],
+            options=["black-forest-labs/flux-schnell"],
             index=0,
             help="fast 速度快成本低；pro 细节更丰富但稍慢。"
         )
