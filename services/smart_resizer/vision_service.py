@@ -7,34 +7,28 @@ genai.configure(api_key=API_KEY)
 
 def analyze_background(image: Image.Image) -> str:
     """
-    使用 Gemini 分析图片，为 Imagen 生成提示词。
+    让 Gemini 分析原图，生成用于'填补背景'的指令。
     """
     try:
-        # 使用最新的 Flash 模型进行快速分析
-        model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('models/gemini-flash-latest')
         
-        # 针对 Google Imagen 优化的 Prompt
         prompt = """
-        Task: Describe the BACKGROUND texture and lighting of this image for an outpainting task.
+        You are an AI Art Director.
+        Look at this product image.
+        Write a concise prompt to EXTEND the background outwards.
         
-        CRITICAL RULES:
-        1. DO NOT describe the person, product, or central subject. IGNORE THEM.
-        2. Focus ONLY on the empty space.
-        3. Use keywords like "seamless", "clean", "studio lighting".
-        4. Output format: A comma-separated list of visual qualities.
+        1. Identify the texture (e.g., marble, wood, pure white studio).
+        2. Identify the lighting direction.
+        3. Output a command like: "Extend the background with [Texture], using [Lighting], keeping the style clean and seamless."
         
-        Example Output: "pure white studio background, soft shadows, seamless extension, high key lighting"
+        CRITICAL: DO NOT describe the product itself. Only describe the environment to be generated.
         """
         
         response = model.generate_content([prompt, image])
         analysis = response.text.strip()
         
-        # 强制加上这句 Magic Prompt，Imagen 对此非常受用
-        final_prompt = f"{analysis}, empty background, high quality, photorealistic, 8k"
-        
-        print(f"Google Prompt: {final_prompt}")
-        return final_prompt
+        return analysis
         
     except Exception as e:
         print(f"Vision Error: {e}")
-        return "pure white studio background, seamless, empty, high quality"
+        return "Extend the background with a clean, high-quality studio setting, soft lighting, seamless integration."
