@@ -32,7 +32,7 @@ except ImportError as e:
     st.stop()
 
 # --- 1. 页面配置 ---
-st.set_page_config(page_title="Fashion AI Core", page_icon="🧬", layout="wide")
+st.set_page_config(page_title="图生图AI工作台", page_icon="🧬", layout="wide")
 
 # --- CSS 注入 ---
 st.markdown("""
