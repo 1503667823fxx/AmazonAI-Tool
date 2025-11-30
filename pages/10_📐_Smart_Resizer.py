@@ -65,20 +65,22 @@ if uploaded_file:
             st.subheader("AI 重构结果")
             status_container = st.empty()
             
+# ... (保留上面的代码)
+            
             try:
-                # --- 第一阶段：视觉分析 (Gemini) ---
-                with status_container.status("🧠 Gemini 正在观察图片背景...", expanded=True) as status:
-                    # 1. 准备遮罩和底图
+                # --- 第一阶段：视觉分析 ---
+                with status_container.status("🧠 Google 全家桶正在工作中...", expanded=True) as status:
+                    # 1. 准备数据
                     processed_image, mask_image = image_tools.prepare_canvas(original_image, target_ratio)
                     
-                    # 2. 调用视觉服务提取 Prompt
-                    status.write("正在提取光影与材质特征...")
+                    # 2. Gemini 分析
+                    status.write("👁️ Gemini 正在分析背景纹理...")
                     prompt_text = vision_service.analyze_background(original_image)
-                    status.write(f"识别到的环境特征: {prompt_text[:50]}...")
+                    status.write(f"生成绘图指令: {prompt_text}")
                     
-                    # --- 第二阶段：图像生成 (Flux) ---
-                    status.update(label="🎨 Flux 正在根据理解重绘画面...", state="running")
-                    final_image_url = generation_service.fill_image(
+                    # 3. Google Imagen 绘图 (替代了 Flux)
+                    status.update(label="🎨 Google Imagen 正在扩展画布...", state="running")
+                    final_image = generation_service.fill_image(
                         image=processed_image,
                         mask=mask_image,
                         prompt=prompt_text
@@ -87,7 +89,9 @@ if uploaded_file:
                     status.update(label="✅ 重构完成！", state="complete", expanded=False)
 
                 # 展示结果
-                st.image(final_image_url, caption="Smart Resizer Output", use_column_width=True)
+                st.image(final_image, caption="Google AI Output", use_column_width=True)
+                
+                # ... (保留下面的下载代码)
                 
                 # 提供下载
                 # (实际项目中通常需要将URL转为bytes下载，这里简化处理)
