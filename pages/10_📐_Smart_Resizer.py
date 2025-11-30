@@ -44,7 +44,7 @@ with st.sidebar:
 
     # 4. 状态显示
     if "api_cost" not in st.session_state:
-        st.info("💡 本功能将组合使用 Google Gemini (视觉分析) 和 Flux Fill (图像生成)。")
+        st.info("💡 本功能使用 Google Gemini (视觉分析)")
 
 # --- 主区域：执行逻辑 ---
 if uploaded_file:
