@@ -2,47 +2,39 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image
 
-# 初始化配置
 API_KEY = st.secrets.get("GOOGLE_API_KEY") or st.secrets["google"]["api_key"]
 genai.configure(api_key=API_KEY)
 
 def analyze_background(image: Image.Image) -> str:
     """
-    使用 Gemini 快速分析图片背景特征。
-    【关键修复】：强制 Gemini 忽略主体，只输出极简的环境纹理描述。
+    使用 Gemini 分析图片，为 Imagen 生成提示词。
     """
     try:
-        # 使用最新的 Flash 模型
+        # 使用最新的 Flash 模型进行快速分析
         model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
         
-        # --- 核心修改：极简主义 Prompt ---
-        # 我们不需要 Gemini 写小作文，只需要几个关键词。
+        # 针对 Google Imagen 优化的 Prompt
         prompt = """
-        Task: You are an AI visual analyst assisting an image outpainting model.
-        The center subject of this image will be masked and protected. Your ONLY job is to describe the empty surrounding environment to fill the canvas seamlessly.
-
-        Rules:
-        1. CRITICAL: DO NOT mention any person, product, object, costume, or subject in the image.
-        2. Describe ONLY background texture, lighting, and color.
-        3. Keep it extremely concise (under 15 words).
-        4. If the background is plain studio, just say "seamless studio background".
-
-        Example good output: "soft diffused studio lighting, clean white seamless wall, minimal texture"
-        Example BAD output: "A person standing on a white floor" (Do not do this).
-
-        Analyze the provided image and output the prompt now:
+        Task: Describe the BACKGROUND texture and lighting of this image for an outpainting task.
+        
+        CRITICAL RULES:
+        1. DO NOT describe the person, product, or central subject. IGNORE THEM.
+        2. Focus ONLY on the empty space.
+        3. Use keywords like "seamless", "clean", "studio lighting".
+        4. Output format: A comma-separated list of visual qualities.
+        
+        Example Output: "pure white studio background, soft shadows, seamless extension, high key lighting"
         """
         
         response = model.generate_content([prompt, image])
-        cleaned_prompt = response.text.strip()
-        # 兜底，如果 Gemini 还是废话太多，截断它
-        if len(cleaned_prompt) > 100:
-             cleaned_prompt = cleaned_prompt[:100]
-             
-        print(f"Generated Prompt: {cleaned_prompt}") # 在控制台打印出来看看
-        return cleaned_prompt
+        analysis = response.text.strip()
+        
+        # 强制加上这句 Magic Prompt，Imagen 对此非常受用
+        final_prompt = f"{analysis}, empty background, high quality, photorealistic, 8k"
+        
+        print(f"Google Prompt: {final_prompt}")
+        return final_prompt
         
     except Exception as e:
-        print(f"Gemini Error: {e}")
-        # 降级方案：对于电商白底图，最稳妥的通用提示
-        return "seamless clean studio background, soft uniform lighting, high quality."
+        print(f"Vision Error: {e}")
+        return "pure white studio background, seamless, empty, high quality"
