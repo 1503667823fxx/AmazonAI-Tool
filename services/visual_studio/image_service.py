@@ -22,7 +22,7 @@ def generate_image_replicate(prompt: str, aspect_ratio: str, output_format: str 
     # 2. 确定模型 ID (使用官方别名)
     # flux-schnell: 速度快 (0.01$/图)
     # flux-dev: 质量高 (0.025$/图)
-    model_id = "black-forest-labs/flux-schnell, black-forest-labs/flux-dev"
+    model_id = "black-forest-labs/flux-schnell"
     
     # 3. 构建参数
     # 注意: Flux 对 aspect_ratio 的要求必须是特定字符串
