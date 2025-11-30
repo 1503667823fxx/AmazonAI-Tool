@@ -19,16 +19,11 @@ def fill_image(image: Image.Image, mask: Image.Image, prompt: str) -> Image.Imag
         # 如果失败，自动回退到标准的 'imagen-3.0-generate-001'
         # ------------------------------------------------------------------
         target_model = "models/gemini-3-pro-image-preview" 
-        fallback_model = "imagen-3.0-generate-001"
 
         try:
             # 尝试初始化指定的模型
             model = genai.ImageGenerationModel(target_model)
             print(f"尝试使用模型: {target_model}")
-        except Exception:
-            # 初始化失败，使用 fallback
-            print(f"指定模型不可用，切换至: {fallback_model}")
-            model = genai.ImageGenerationModel(fallback_model)
 
         # Google 的 edit_image 接口参数略有不同
         # prompt: 提示词
