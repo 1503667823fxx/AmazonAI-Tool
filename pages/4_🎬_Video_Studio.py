@@ -29,9 +29,14 @@ tab_script, tab_assets, tab_render = st.tabs([
     "🎨 第二幕：素材生成", 
     "🎞️ 第三幕：剪辑合成"
 ])
+# ... (之前的 import)
+# 引入新写好的服务
+from services.video_studio.script_engine import generate_video_script 
+
+# ... (UI 代码)
 
 # ==========================================
-# TAB 1: 剧本创作 (Scripting)
+# TAB 1: 剧本创作 (Scripting) - 更新版
 # ==========================================
 with tab_script:
     ui_components.render_step_indicator(0)
@@ -40,39 +45,64 @@ with tab_script:
     
     with col1:
         st.subheader("📦 商品输入")
+        # 从 secrets 获取 Key (需要在 Streamlit Cloud 设置里配置 'OPENAI_API_KEY')
+        # 或者使用 sidebar 用户输入的 Key (config['api_key'])
+        # 这里优先使用 secrets，如果没有则使用侧边栏输入的
+        
+        system_api_key = st.secrets.get("OPENAI_API_KEY", None)
+        user_api_key = config.get("api_key") 
+        final_api_key = system_api_key if system_api_key else user_api_key
+        
         product_url = st.text_input("亚马逊商品链接 (ASIN)")
-        product_features = st.text_area("或直接输入核心卖点", height=150, placeholder="例如：这款蓝牙耳机拥有30小时续航，IPX7防水，适合运动...")
+        product_features = st.text_area("或直接输入核心卖点", height=150, placeholder="例如：这款蓝牙耳机拥有30小时续航...")
+        
+        # 视频时长选择
+        target_duration = st.slider("目标视频时长 (秒)", 10, 60, 15)
         
         generate_btn = st.button("✨ AI 生成分镜脚本", type="primary", use_container_width=True)
 
     with col2:
         st.subheader("📜 分镜脚本编辑器")
+        
         if generate_btn:
-            with st.spinner("AI 导演正在构思剧本..."):
-                # TODO: 这里调用 services.video_studio.script_engine
-                time.sleep(1.5) # 模拟延迟
-                st.session_state.video_script = """[场景1]
-画面：近景，产品在阳光下旋转，展示金属质感。
-旁白：体验前所未有的音质，就在此刻。
-时长：3秒
+            if not final_api_key:
+                st.error("🚫 未检测到 API Key。请在侧边栏输入或在 Secrets 中配置。")
+            elif not product_features:
+                 st.warning("⚠️ 请输入商品卖点信息。")
+            else:
+                with st.spinner("🧠 AI 导演正在拆解卖点、规划分镜..."):
+                    # === 调用核心服务 ===
+                    script_result = generate_video_script(
+                        api_key=final_api_key,
+                        product_info=product_features,
+                        video_duration=target_duration,
+                        style=config['style'] # 从侧边栏获取风格
+                    )
+                    
+                    if "error" in script_result:
+                        st.error(f"生成失败: {script_result['error']}")
+                    else:
+                        st.session_state.video_script = json.dumps(script_result, indent=4, ensure_ascii=False)
+                        st.toast("脚本生成成功！", icon="✅")
+                        st.rerun() # 刷新页面以显示脚本
 
-[场景2]
-画面：模特在健身房佩戴耳机跑步，汗水挥洒。
-旁白：IPX7级深度防水，无惧汗水挑战。
-时长：4秒"""
-                st.toast("脚本已生成！", icon="✅")
-
-        # 允许用户手动修改脚本
-        new_script = st.text_area(
-            "您可以直接修改生成的脚本，确认无误后进入下一步",
-            value=st.session_state.video_script,
-            height=300
-        )
-        st.session_state.video_script = new_script
-
+        # 显示和编辑脚本
         if st.session_state.video_script:
-            st.info("👉 脚本确认无误后，请点击上方 '素材生成' 标签页继续。")
-
+            # 允许用户编辑 JSON，这对后续步骤至关重要
+            new_script = st.text_area(
+                "请确认或微调生成的 JSON 脚本 (JSON 格式决定了后续画面的生成)",
+                value=st.session_state.video_script,
+                height=400,
+                help="请勿破坏 JSON 的大括号 {} 结构"
+            )
+            st.session_state.video_script = new_script
+            
+            # 简单的 JSON 校验可视化
+            try:
+                parsed = json.loads(st.session_state.video_script)
+                st.info(f"✅ 脚本有效：共包含 {len(parsed.get('scenes', []))} 个场景")
+            except:
+                st.error("⚠️ JSON 格式错误，请检查大括号和逗号。")
 # ==========================================
 # TAB 2: 素材生成 (Assets Generation)
 # ==========================================
