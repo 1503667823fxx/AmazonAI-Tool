@@ -27,7 +27,7 @@ def render_sidebar():
         st.subheader("2. 图片比例")
         aspect_ratio = st.radio(
             "选择画幅",
-            options=["1:1", "4:3", "21:9"],
+            options=["1:1", "16:9", "9:16", "4:3", "3:4"],
             index=1,
             horizontal=True
         )
