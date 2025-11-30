@@ -14,9 +14,9 @@ def render_sidebar():
         st.subheader("1. 模型版本")
         model_version = st.selectbox(
             "选择 Flux 模型",
-            options=["flux-schnell (极速版)", "flux-dev (高质量版)"],
+            options=["flux-fast (极速版)", "flux-pro (高质量版)"],
             index=0,
-            help="Schnell 速度快成本低；Dev 细节更丰富但稍慢。"
+            help="fast 速度快成本低；pro 细节更丰富但稍慢。"
         )
         # 映射回 API 能够识别的字符串标识 (稍后在 service 层会用到)
         model_code = "schnell" if "schnell" in model_version else "dev"
@@ -27,7 +27,7 @@ def render_sidebar():
         st.subheader("2. 图片比例")
         aspect_ratio = st.radio(
             "选择画幅",
-            options=["1:1", "16:9", "9:16", "4:3", "3:4"],
+            options=["1:1", "4:3", "21:9"],
             index=1,
             horizontal=True
         )
