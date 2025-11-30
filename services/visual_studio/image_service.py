@@ -4,7 +4,7 @@ import os
 
 # 确保环境变量中有 Token，供 replicate SDK 使用
 if "replicate_api_token" in st.secrets:
-    os.environ["REPLICATE_API_TOKEN"] = st.secrets["replicate_api_token"]
+    os.environ["REPLICATE_API_TOKEN"] = st.secrets["REPLICATE_API_TOKEN"]
 
 def generate_image_replicate(prompt: str, aspect_ratio: str, output_format: str = "png", safety_tolerance: int = 2) -> str:
     """
