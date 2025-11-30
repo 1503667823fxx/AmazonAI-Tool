@@ -4,7 +4,7 @@ import google.generativeai as genai
 def _get_gemini_client():
     """配置并获取 Gemini 客户端"""
     try:
-        api_key = st.secrets["google_api_key"]
+        api_key = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=api_key)
         # 使用最新的 Flash 模型，速度快且免费额度高
         model = genai.GenerativeModel('models/gemini-flash-latest')
