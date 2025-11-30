@@ -109,8 +109,8 @@ with col_text:
 tools = {
     # 核心创作 - Stable
     "copywriter": {"path": "pages/1_✍️_Listing_Copywriter.py", "status": "Stable", "icon": "✍️", "title": "Listing 智能文案", "desc": "SEO 文案、五点描述、关键词优化 (V2.5)"},
-    "visual": {"path": "pages/6_🎨_Visual_Studio.py", "status": "Stable", "icon": "🎨", "title": "Visual Studio (文生图)", "desc": "产品海报生成、场景图绘制 (Flux 引擎)"},
-    "smart_edit": {"path": "pages/2_🖼️_Smart_Edit.py", "status": "Stable", "icon": "🖼️", "title": "Smart Edit (图生图)", "desc": "改款变体、场景置换、参考图生成"},
+    "visual": {"path": "pages/6_🎨_Visual_Studio.py", "status": "Stable", "icon": "🎨", "title": "Visual Studio 文生图", "desc": "产品海报生成、场景图绘制 (Flux 引擎)"},
+    "smart_edit": {"path": "pages/2_🖼️_Smart_Edit.py", "status": "Stable", "icon": "🖼️", "title": "Smart Edit 图生图", "desc": "改款变体、场景置换、参考图生成"},
     
     # 视觉后期与工具 - Stable
     "batch": {"path": "pages/7_🔄_Batch_Variant.py", "status": "Stable", "icon": "🔄", "title": "批量变体工厂", "desc": "SKU 矩阵批量生产与处理"},
@@ -217,3 +217,4 @@ with c10:
 # --- 9. 底部状态栏 ---
 st.divider()
 st.caption("© 2025 Amazon AI Team | Build 2.0.1 | Powered by Gemini & Flux")
+
