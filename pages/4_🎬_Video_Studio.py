@@ -2,6 +2,9 @@ import streamlit as st
 import time
 from auth import check_password  # 引入门禁系统
 from app_utils.video_studio import ui_components
+from services.video_studio.script_engine import generate_video_script 
+from services.video_studio.visual_engine import batch_generate_videos
+import json
 # 预留服务接口，暂时注释，等你写好 logic 后解开
 # from services.video_studio import script_engine, visual_engine, render_engine
 
@@ -31,7 +34,7 @@ tab_script, tab_assets, tab_render = st.tabs([
 ])
 # ... (之前的 import)
 # 引入新写好的服务
-from services.video_studio.script_engine import generate_video_script 
+
 
 # ... (UI 代码)
 
@@ -104,43 +107,72 @@ with tab_script:
             except:
                 st.error("⚠️ JSON 格式错误，请检查大括号和逗号。")
 # ==========================================
-# TAB 2: 素材生成 (Assets Generation)
+# TAB 2: 素材生成 (Assets Generation) - 更新版
 # ==========================================
 with tab_assets:
     ui_components.render_step_indicator(1)
     
     if not st.session_state.video_script:
-        st.warning("⚠️ 请先在 '剧本创作' 页面生成或输入脚本。")
+        st.warning("⚠️ 请先在 '剧本创作' 页面生成脚本。")
     else:
         col_viz, col_audio = st.columns(2)
         
         with col_viz:
-            st.subheader("🖼️ 视频画面生成")
-            st.markdown("AI 将根据脚本自动提取 Prompt 并生成视频片段。")
-            if st.button("🎥 开始生成视频片段"):
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                # 模拟生成过程
-                for i in range(101):
-                    # TODO: 调用 services.video_studio.visual_engine
-                    time.sleep(0.02)
-                    status_text.text(f"正在渲染第 {i//20 + 1} 个分镜... {i}%")
-                    progress_bar.progress(i)
-                
-                st.success("所有分镜生成完毕！")
-                # 模拟展示生成的素材
-                st.image("https://placehold.co/600x400/png?text=Scene+1+Video+Preview", caption="场景 1 预览")
-                
+            st.subheader("🖼️ 视频画面生成 (Luma Dream Machine)")
+            
+            # 获取脚本对象
+            try:
+                script_obj = json.loads(st.session_state.video_script)
+                scenes = script_obj.get('scenes', [])
+                st.write(f"检测到 {len(scenes)} 个分镜场景")
+            except:
+                st.error("脚本格式错误，无法解析")
+                st.stop()
+            
+            # 上传参考图 (关键步骤)
+            ref_image = st.file_uploader("📸 上传商品参考图 (用于保持产品一致性)", type=['png', 'jpg', 'jpeg'])
+            # 注意：实际生产中需要将此图片上传到图床获取 URL 传给 Luma
+            # 这里为了演示，假设你有一个图床服务的函数 upload_to_s3(file) -> url
+            # 暂时用 None 或硬编码 URL 测试
+            
+            luma_key = st.secrets.get("LUMA_API_KEY")
+            
+            if st.button("🎥 启动并发渲染引擎"):
+                if not luma_key:
+                    st.error("请配置 LUMA_API_KEY")
+                else:
+                    with st.status("🚀 正在连接 Luma 高性能集群...", expanded=True) as status:
+                        st.write("📡 正在分发渲染任务...")
+                        
+                        # 调用我们刚写的并发服务
+                        # 注意：如果 ref_image 没处理成 URL，这里 ref_img_url 传 None，就是纯文生视频
+                        generated_videos_map = batch_generate_videos(
+                            api_key=luma_key,
+                            scenes_list=scenes,
+                            ref_img_url=None # TODO: 填入实际图片URL
+                        )
+                        
+                        status.write("✅ 所有分镜渲染完毕！正在下载...")
+                        status.update(label="素材准备就绪", state="complete", expanded=False)
+                    
+                    # 保存结果到 Session
+                    st.session_state.generated_scenes = generated_videos_map
+                    st.success(f"成功生成 {len(generated_videos_map)} 个视频片段")
+
+            # 预览生成结果
+            if 'generated_scenes' in st.session_state and st.session_state.generated_scenes:
+                st.divider()
+                st.write("##### 🎞️ 素材预览")
+                cols = st.columns(3)
+                for idx, (scene_id, video_path) in enumerate(st.session_state.generated_scenes.items()):
+                    with cols[idx % 3]:
+                        st.video(video_path)
+                        st.caption(f"场景 {scene_id}")
+
         with col_audio:
             st.subheader("🎙️ 配音与音效")
-            voice_type = st.selectbox("选择配音嘴替", ["美式男声 - Deep", "美式女声 - Cheerful", "英式男声 - Formal"])
-            bgm_type = st.selectbox("背景音乐风格", ["Upbeat Pop", "Cinematic", "Relaxing"])
-            
-            if st.button("🔊 生成合成语音"):
-                st.audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", format="audio/mp3")
-                st.success("语音合成完成")
-
+            # ... (音频逻辑待开发)
+            st.info("视频生成完毕后，将在下一步进行合成。")
 # ==========================================
 # TAB 3: 剪辑合成 (Rendering)
 # ==========================================
