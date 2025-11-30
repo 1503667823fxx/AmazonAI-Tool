@@ -37,8 +37,8 @@ def render_comparison_result(original_file, result_url, download_data):
     """
     渲染 原图 vs 高清图 的对比结果
     :param original_file: 上传的原图文件对象
-    :param result_url: 高清图 URL (用于显示)
-    :param download_data: 已经转换好的 JPEG 二进制数据 (用于下载)
+    :param result_url: 高清图 URL (不再用于直接显示，仅作备用)
+    :param download_data: 已经转换好的 JPEG 二进制数据 (用于显示和下载)
     """
     st.markdown("---")
     st.subheader("🎉 处理完成 | Result")
@@ -51,9 +51,15 @@ def render_comparison_result(original_file, result_url, download_data):
         
     with col2:
         st.success(f"Upscaled (高清图)")
-        st.image(result_url, use_container_width=True)
         
-        # 下载按钮：直接使用传入的 download_data，零延迟
+        # [核心修复] 优先使用二进制数据展示，避开 URL/格式错误
+        if download_data:
+            st.image(download_data, use_container_width=True)
+        else:
+            # 兜底：如果没有二进制数据，才尝试用 URL
+            st.image(result_url, use_container_width=True)
+        
+        # 下载按钮：零延迟
         if download_data:
             st.download_button(
                 label="📥 下载高清大图 (JPEG)",
