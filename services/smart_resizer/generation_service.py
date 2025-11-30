@@ -18,7 +18,7 @@ def fill_image(image: Image.Image, mask: Image.Image, prompt: str) -> Image.Imag
         # 优先使用你指定的 'models/gemini-3-pro-image-preview' (如果有权限)
         # 如果失败，自动回退到标准的 'imagen-3.0-generate-001'
         # ------------------------------------------------------------------
-         target_model = "models/gemini-3-pro-image-preview" 
+        target_model = "models/gemini-3-pro-image-preview" 
         fallback_model = "imagen-3.0-generate-001"
 
         try:
