@@ -11,7 +11,7 @@ class UpscaleEngine:
             self.client = replicate.Client(api_token=self.api_token)
         except Exception:
             self.client = None
-            st.error("❌ 未检测到 REPLICATE_API_TOKEN，请检查 Streamlit Secrets 配置。")
+            # 注意：初始化时不报错，留到点击按钮时再报错，体验更好
 
     def process_image(self, image_file, scale=4, face_enhance=False):
         """
@@ -19,10 +19,10 @@ class UpscaleEngine:
         :param image_file: Streamlit UploadedFile 对象
         :param scale: 放大倍数 (2 或 4)
         :param face_enhance: 是否开启面部修复
-        :return: 放大后的图片 URL
+        :return: 放大后的图片 URL (字符串)
         """
         if not self.client:
-            raise ValueError("API Client 未初始化")
+            raise ValueError("API Client 未初始化，请检查 Secrets 配置")
 
         try:
             # Replicate Python Client 可以直接处理文件流
@@ -37,7 +37,13 @@ class UpscaleEngine:
                 input=input_params
             )
             
-            # Real-ESRGAN 通常返回一个 URL 字符串
+            # --- [修复核心] ---
+            # Replicate 的 Real-ESRGAN 模型返回的是一个列表: ["https://..."]
+            # 我们需要提取出里面的字符串
+            if isinstance(output, list) and len(output) > 0:
+                return output[0]  # 提取列表里的第一个元素
+            
+            # 如果它本身就是字符串（部分模型版本差异），直接返回
             return output
 
         except Exception as e:
