@@ -27,7 +27,7 @@ def generate_image_replicate(prompt: str, aspect_ratio: str, output_format: str 
     
     # 示例中使用black-forest-labs/flux-2-pro因为它生成极致画质
 
-    model_id = "black-forest-labs/flux-2-pro" 
+    model_id = "black-forest-labs/flux-2-pro, prunaai/flux-fast" 
     
     input_params = {
         "prompt": prompt,
