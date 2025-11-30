@@ -3,6 +3,9 @@ import io
 from PIL import Image
 import auth
 
+if not auth.check_password():
+    st.stop()
+
 # 引入模块化依赖 (稍后在下面创建这些文件)
 # 注意：Streamlit 运行时默认根目录为项目主目录，所以可以直接从 services 和 app_utils 导入
 try:
