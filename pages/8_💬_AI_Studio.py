@@ -14,7 +14,7 @@ try:
     import auth
     from app_utils.ai_studio.state_manager import init_session_state, clear_history, undo_last_turn
     from app_utils.ai_studio.css_injector import inject_studio_css
-    from app_utils.ai_studio.message_renderer import render_studio_message
+    from app_utils.ai_studio.message_renderer import show_image_modal, render_studio_message
     from services.ai_studio.vision_service import StudioVisionService
     from services.ai_studio.chat_service import StudioChatService
 except ImportError as e:
