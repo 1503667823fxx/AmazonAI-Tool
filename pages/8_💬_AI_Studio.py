@@ -15,7 +15,7 @@ try:
     from app_utils.ai_studio.state_manager import init_session_state, clear_history, undo_last_turn
     from app_utils.ai_studio.css_injector import inject_studio_css
     from app_utils.ai_studio.message_renderer import render_studio_message
-    from app_utils.image_processing import create_preview_thumbnail
+    from services.ai_studio.vision_service import StudioVisionService
     from services.ai_studio.chat_service import StudioChatService
 except ImportError as e:
     st.error(f"❌ 模块缺失: {e}")
