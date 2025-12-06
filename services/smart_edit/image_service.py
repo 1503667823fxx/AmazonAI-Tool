@@ -40,7 +40,7 @@ class SmartEditGenerator:
         target_model = model_name if model_name in allowed_models else "models/gemini-2.5-flash-image"
 
         # 2. 构建 Prompt
-        clean_prompt = prompt.replace("16:9", "").replace("4:3", "").replace("3:4", "").replace("1:1", "")
+        clean_prompt = prompt.replace("16:9", "").replace("3:4", "").replace("4:3", "").replace("1:1", "")
         final_prompt = f"{clean_prompt} {ratio_suffix}"
         
         if negative_prompt:
