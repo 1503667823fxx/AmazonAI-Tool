@@ -33,8 +33,8 @@ class SmartEditGenerator:
         """
         # 1. 强制模型白名单检查
         allowed_models = [
-            "models/gemini-3-pro-image-preview", 
             "models/gemini-2.5-flash-image",
+            "models/gemini-3-pro-image-preview", 
         ]
         
         target_model = model_name if model_name in allowed_models else "models/gemini-2.5-flash-image"
