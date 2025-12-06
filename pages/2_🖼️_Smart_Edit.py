@@ -79,8 +79,8 @@ history = st.session_state.se_history
 
 # --- 3. 常量定义 ---
 GOOGLE_IMG_MODELS = [
-    "models/gemini-3-pro-image-preview", 
     "models/gemini-2.5-flash-image",
+    "models/gemini-3-pro-image-preview", 
 ]
 RATIO_MAP = {
     "1:1 (Square)": ", crop to 1:1 aspect ratio",
