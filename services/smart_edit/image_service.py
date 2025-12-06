@@ -34,12 +34,10 @@ class SmartEditGenerator:
         # 1. 强制模型白名单检查
         allowed_models = [
             "models/gemini-3-pro-image-preview", 
-            "models/gemini-3-pro-preview",       
-            "models/gemini-flash-latest",
-            "models/gemini-flash-lite-latest"
+            "models/gemini-2.5-flash-image",
         ]
         
-        target_model = model_name if model_name in allowed_models else "models/gemini-3-pro-image-preview"
+        target_model = model_name if model_name in allowed_models else "models/gemini-2.5-flash-image"
 
         # 2. 构建 Prompt
         clean_prompt = prompt.replace("16:9", "").replace("4:3", "").replace("1:1", "")
