@@ -85,6 +85,7 @@ GOOGLE_IMG_MODELS = [
 RATIO_MAP = {
     "1:1 (Square)": ", crop to 1:1 aspect ratio",
     "4:3 (Landscape)": ", 4:3 landscape aspect ratio",
+    "3:4",
     "21:9 (Cinematic)": ", cinematic 21:9 ultrawide"
 }
 
