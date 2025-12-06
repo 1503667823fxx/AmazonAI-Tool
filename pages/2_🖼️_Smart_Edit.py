@@ -91,7 +91,7 @@ RATIO_MAP = {
 # --- 4. 侧边栏 ---
 with st.sidebar:
     st.title("🗂️ 工作区")
-    st.info("💡 **提示**：生成的图片会自动保存在这里，刷新页面也不会丢失。")
+    st.info("💡 **提示**：生成的图片会自动保存在这里，切换页面也不会丢失")
     render_history_sidebar(history) 
 
 # --- 5. 主逻辑区 (双栏布局) ---
@@ -214,7 +214,7 @@ with c_config:
             real_seed = None if seed_input == -1 else int(seed_input)
 
         # 执行按钮
-        if st.button("🚀 开始生成图片", type="primary", use_container_width=True):
+        if st.button("🚀 开始生成图片（请优先使用flash模型哦，省钱）", type="primary", use_container_width=True):
             st.session_state.se_std_results = [] 
             
             ref_img_to_pass = None
