@@ -106,10 +106,6 @@ class ModelSelector:
         # Determine if this is image generation mode
         is_image_mode = self._is_image_generation_mode(selected_model_id)
         
-        # Render system prompt editor for non-image models
-        if not is_image_mode:
-            self._render_enhanced_system_prompt_editor(selected_model_id)
-        
         return selected_model_id, is_image_mode
     
     def _handle_enhanced_model_switch(self, old_model: str, new_model: str) -> None:
