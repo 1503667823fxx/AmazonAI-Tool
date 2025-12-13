@@ -64,7 +64,7 @@ def render_fallback_interface():
         "Gemini Pro": "models/gemini-3-pro-preview"
     }
     
-    selected_model = st.selectbox("Select Model", list(model_options.keys()))
+    selected_model = st.selectbox("Select Model", list(model_options.keys()), key="fallback_model_selector")
     
     # Basic chat input
     user_input = st.chat_input("Enter your message...")
