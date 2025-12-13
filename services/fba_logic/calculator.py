@@ -90,9 +90,7 @@ class FBACalculator:
         # ----------------------------------------------------------------------
         return "Special Oversize"
 
-
-
-def calculate_fulfillment_fee(self, price, is_apparel=False, is_dangerous=False, season="Off-Peak"):
+    def calculate_fulfillment_fee(self, price=None, is_apparel=False, is_dangerous=False, season="Off-Peak"):
         """
         计算基础配送费 (升级版)
         新增参数: 
@@ -104,12 +102,35 @@ def calculate_fulfillment_fee(self, price, is_apparel=False, is_dangerous=False,
         tier = self.get_size_tier()
         billable_weight = max(self.weight, self.get_dim_weight())
         
+        # 如果没有提供价格，使用默认逻辑（旧版本兼容）
+        if price is None:
+            # 使用默认费率表查找
+            try:
+                rate_card = FULFILLMENT_FEES.get(season, {}).get("Price_10_50", {}).get("Standard", {}).get(tier, [])
+            except (KeyError, AttributeError):
+                return 0, billable_weight, tier
+            
+            final_fee = 0
+            found_bracket = False
+            
+            for bracket in rate_card:
+                if billable_weight <= bracket.get("max_weight", float('inf')):
+                    found_bracket = True
+                    if "fee" in bracket:
+                        final_fee = bracket["fee"]
+                    break
+            
+            if not found_bracket and rate_card:
+                final_fee = rate_card[-1].get("fee", 0)
+            
+            return final_fee, billable_weight, tier
+        
         # 1. 确定价格段 (Price Tier)
         if price < 10:
             price_tier = "Under_10"
         elif price > 50:
             # 如果配置里没填 Over_50，通常默认使用 Price_10_50 的费率
-            price_tier = "Over_50" if "Over_50" in FULFILLMENT_FEES[season] else "Price_10_50"
+            price_tier = "Over_50" if "Over_50" in FULFILLMENT_FEES.get(season, {}).keys() else "Price_10_50"
         else:
             price_tier = "Price_10_50"
             
@@ -123,18 +144,18 @@ def calculate_fulfillment_fee(self, price, is_apparel=False, is_dangerous=False,
             
         # 3. 逐层查找费率表
         # 路径: 季节 -> 价格段 -> 类型 -> 尺寸
-     try:
+        try:
             rate_card = FULFILLMENT_FEES[season][price_tier][prod_type].get(tier, [])
         except KeyError:
-             # 如果找不到具体的 key，尝试回退到标准逻辑或报错
-             return 0, billable_weight, f"未找到费率配置: {season}-{price_tier}-{prod_type}-{tier}"
+            # 如果找不到具体的 key，尝试回退到标准逻辑或报错
+            return 0, billable_weight, f"未找到费率配置: {season}-{price_tier}-{prod_type}-{tier}"
             
-# 4. 匹配重量档位
+        # 4. 匹配重量档位
         final_fee = 0
         found_bracket = False
         
         for bracket in rate_card:
-            # 找到第一个“上限重量”大于等于“当前计费重量”的档位
+            # 找到第一个"上限重量"大于等于"当前计费重量"的档位
             if billable_weight <= bracket["max_weight"]:
                 found_bracket = True
                 
@@ -156,7 +177,7 @@ def calculate_fulfillment_fee(self, price, is_apparel=False, is_dangerous=False,
                         excess_weight = billable_weight - base_weight
                         
                         # 计算有多少个计费单位 (比如每 4oz 一个单位，即 0.25lb)
-                        # 亚马逊规则通常是“向上取整”：不足4oz按4oz算
+                        # 亚马逊规则通常是"向上取整"：不足4oz按4oz算
                         units = math.ceil(excess_weight / unit_step)
                         
                         final_fee = base_fee + (units * unit_fee)
@@ -166,7 +187,7 @@ def calculate_fulfillment_fee(self, price, is_apparel=False, is_dangerous=False,
                 
                 break # 找到后立即停止循环
         
-      # 5. 如果超过了所有档位的最大值 (Over max_weight)
+        # 5. 如果超过了所有档位的最大值 (Over max_weight)
         if not found_bracket and rate_card:
             # 取最后一个档位的规则继续算，通常超大件的最后一个档位 max_weight 会设得很大
             last_bracket = rate_card[-1]
@@ -180,15 +201,15 @@ def calculate_fulfillment_fee(self, price, is_apparel=False, is_dangerous=False,
                 units = math.ceil(excess_weight / f["unit_step"])
                 final_fee = base_fee + (units * f["unit_fee"])
             else:
-                 # 旧逻辑的 fallback
-                 final_fee = last_bracket.get("fee", 0)
+                # 旧逻辑的 fallback
+                final_fee = last_bracket.get("fee", 0)
 
         return final_fee, billable_weight, tier
 
 
-    def calculate_total_cost(self, season="Jan-Sep", low_inv_days=None):
+    def calculate_total_cost(self, season="Jan-Sep", low_inv_days=None, price=None, is_apparel=False, is_dangerous=False):
         """高级计算：包含仓储和附加费"""
-        fba_fee, _, tier = self.calculate_fulfillment_fee()
+        fba_fee, _, tier = self.calculate_fulfillment_fee(price=price, is_apparel=is_apparel, is_dangerous=is_dangerous, season=season)
         
         # 1. 仓储费
         storage_rate = STORAGE_FEES[season]["Standard" if "Standard" in tier else "Oversize"]
