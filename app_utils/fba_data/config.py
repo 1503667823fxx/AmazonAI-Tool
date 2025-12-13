@@ -2056,12 +2056,11 @@ FULFILLMENT_FEES = {
                             "base_weight": 151.0,
                             "unit_fee": 0.19,     # ⏳ 请填入每磅加收多少
                             "unit_step": 1.0
-                                  }
-                             }
-                        ]
-                   }
-              }
-         }
+                        }
+                    }
+                ]
+            }
+        }
     }
 }
 
