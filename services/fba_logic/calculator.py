@@ -43,23 +43,64 @@ class FBACalculator:
 
         return "Large Bulky (Oversize)"
 
-    def calculate_fulfillment_fee(self):
-        """计算基础配送费"""
+def calculate_fulfillment_fee(self, price, is_apparel=False, is_dangerous=False, season="Off-Peak"):
+        """
+        计算基础配送费 (升级版)
+        新增参数: 
+        - price: 商品售价 (用于判断是否低价/高价)
+        - is_apparel: 是否服装
+        - is_dangerous: 是否危险品
+        - season: 季节 (Off-Peak / Peak)
+        """
         tier = self.get_size_tier()
         billable_weight = max(self.weight, self.get_dim_weight())
         
-        # 简单的查表逻辑 (实际应用中需完善 config.py 中的费率表)
-        rate_card = FULFILLMENT_FEES.get(tier, [])
+        # 1. 确定价格段 (Price Tier)
+        if price < 10:
+            price_tier = "Under_10"
+        elif price > 50:
+            # 如果配置里没填 Over_50，通常默认使用 Price_10_50 的费率
+            price_tier = "Over_50" if "Over_50" in FULFILLMENT_FEES[season] else "Price_10_50"
+        else:
+            price_tier = "Price_10_50"
+            
+        # 2. 确定商品类型 (Product Category)
+        if is_dangerous:
+            prod_type = "Dangerous"
+        elif is_apparel:
+            prod_type = "Apparel"
+        else:
+            prod_type = "Standard"
+            
+        # 3. 逐层查找费率表
+        # 路径: 季节 -> 价格段 -> 类型 -> 尺寸
+        try:
+            # 安全获取，防止字典这就没配
+            category_data = FULFILLMENT_FEES.get(season, {}).get(price_tier, {}).get(prod_type, {})
+            rate_card = category_data.get(tier, [])
+        except Exception as e:
+            return 0, billable_weight, f"Error: 费率配置缺失 ({str(e)})"
+
+        if not rate_card:
+            # 如果没找到对应尺寸的费率表 (比如该类型不支持该尺寸)
+            return 0, billable_weight, tier
+
+        # 4. 匹配重量档位
         base_fee = 0
+        found = False
         
         for bracket in rate_card:
             if billable_weight <= bracket["max_weight"]:
                 base_fee = bracket["fee"]
+                found = True
                 break
         
-        # 如果超过了表里的最大值，通常有每磅附加费，这里简化处理，返回找到的最后一档
-        if base_fee == 0 and rate_card:
-            base_fee = rate_card[-1]["fee"]
+        # 5. 处理超重情况 (如果没有在表里找到，取最后一档 + 附加费)
+        # 这里的逻辑比较复杂，为了简化，您可以暂时先取最后一档的价格
+        # 或者后续我们再完善“每磅附加费”的计算逻辑
+        if not found and rate_card:
+             base_fee = rate_card[-1]["fee"]
+             # TODO: 这里可以加上超重部分的计算逻辑
             
         return base_fee, billable_weight, tier
 
