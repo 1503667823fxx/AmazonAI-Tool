@@ -61,17 +61,17 @@ class InputPanel:
         upload_key = f"uploader_{state.uploader_key_id}"
         
         # File upload popover
-        with st.popover("📎", use_container_width=False, help="Upload reference images"):
+        with st.popover("📎", use_container_width=False, help="上传参考图片"):
             uploaded_files = st.file_uploader(
-                "Reference Images",
+                "参考图片",
                 type=self.supported_formats,
                 accept_multiple_files=True,
                 key=upload_key,
-                help=f"Upload up to {self.max_files} images ({', '.join(self.supported_formats)})"
+                help=f"最多上传 {self.max_files} 张图片 ({', '.join(self.supported_formats)})"
             )
             
             if uploaded_files:
-                st.caption(f"Selected {len(uploaded_files)} image(s)")
+                st.caption(f"已选择 {len(uploaded_files)} 张图片")
                 
                 # Show image previews
                 if len(uploaded_files) <= 4:
@@ -123,7 +123,7 @@ class InputPanel:
     def _render_text_input(self, disabled: bool = False) -> Optional[str]:
         """Render the text input field with auto-resize and keyboard handling"""
         
-        placeholder = "Enter your message..." if not disabled else "Please wait..."
+        placeholder = "输入您的消息..." if not disabled else "请稍候..."
         
         # Enhanced chat input with keyboard interaction support
         user_input = st.chat_input(
