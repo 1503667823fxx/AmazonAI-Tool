@@ -8,22 +8,9 @@ def show_fba_calculator():
     
     # --- 侧边栏：输入区域 ---
     with st.sidebar:
-        st.header("1. 产品属性")
-        price = st.number_input("商品售价 ($)", value=19.99)
-        is_apparel = st.checkbox("是服装类目 (Apparel)?")
-        is_dangerous = st.checkbox("是危险品 (Hazmat)?")
-# ... 其他长宽高重输入不变
-
-# 调用时传入新参数
-    fba_fee, billable_weight, tier = calc.calculate_fulfillment_fee(
-        price=price,
-        is_apparel=is_apparel,
-        is_dangerous=is_dangerous,
-        season=season
-    )
         st.header("1. 产品参数输入")
         
-# 1. 选择单位
+        # 1. 选择单位
         unit_mode = st.radio("输入单位", ["inch/lb", "cm/kg"], horizontal=True)
         dim_label, wt_label = get_display_unit(unit_mode)
         
@@ -42,16 +29,18 @@ def show_fba_calculator():
             raw_l, raw_w, raw_h, raw_wt, unit_mode
         )
 
-        # ... (其余输入如价格、类目等保持不变)
         st.divider()
+        st.header("2. 产品属性")
         price = st.number_input("商品售价 ($)", value=19.99)
-        # ...
+        is_apparel = st.checkbox("是服装类目 (Apparel)?")
+        is_dangerous = st.checkbox("是危险品 (Hazmat)?")
         
-        st.header("2. 高级选项")
+        st.divider()
+        st.header("3. 高级选项")
         season = st.selectbox("当前季节", ["Jan-Sep", "Oct-Dec"], index=0)
         low_inv_days = st.slider("历史供货天数 (用于计算低库存费)", 0, 90, 45)
 
-# --- 主界面展示 ---
+    # --- 主界面展示 ---
     
     # 💡 增加一个提示，让用户知道系统实际是用什么数据在算
     if unit_mode == "cm/kg":
@@ -63,10 +52,21 @@ def show_fba_calculator():
     
     # --- 核心计算 ---
     # 1. 基础配送费计算
-    fba_fee, billable_weight, tier = calc.calculate_fulfillment_fee()
+    fba_fee, billable_weight, tier = calc.calculate_fulfillment_fee(
+        price=price,
+        is_apparel=is_apparel,
+        is_dangerous=is_dangerous,
+        season=season
+    )
     
     # 2. 总成本计算
-    costs = calc.calculate_total_cost(season=season, low_inv_days=low_inv_days)
+    costs = calc.calculate_total_cost(
+        season=season, 
+        low_inv_days=low_inv_days,
+        price=price,
+        is_apparel=is_apparel,
+        is_dangerous=is_dangerous
+    )
     
     # --- 主界面展示 ---
     
@@ -74,7 +74,7 @@ def show_fba_calculator():
     st.subheader("📊 计算结果")
     c1, c2, c3 = st.columns(3)
     c1.metric("尺寸分段", tier)
-    c2.metric("计费重量", f"{billable_weight:.2f} lb", delta=f"实重: {weight} lb", delta_color="off")
+    c2.metric("计费重量", f"{billable_weight:.2f} lb", delta=f"实重: {final_wt:.2f} lb", delta_color="off")
     c3.metric("基础 FBA 配送费", f"${fba_fee:.2f}")
     
     st.divider()
