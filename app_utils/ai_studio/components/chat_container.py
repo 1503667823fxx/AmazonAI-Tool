@@ -5,6 +5,7 @@ Provides the main conversation interface with auto-scroll and message management
 
 import streamlit as st
 import time
+from datetime import datetime
 from typing import List, Callable, Optional
 from ..models import BaseMessage, UserMessage, AIMessage
 from ..enhanced_state_manager import state_manager
@@ -319,9 +320,10 @@ class ChatContainer:
         with col2:
             if st.button("📋", key=f"copy_{message.id}", help="Copy message content"):
                 # Use JavaScript to copy to clipboard
+                escaped_content = message.content.replace('`', '\\`')
                 copy_js = f"""
                 <script>
-                navigator.clipboard.writeText(`{message.content.replace('`', '\\`')}`).then(function() {{
+                navigator.clipboard.writeText(`{escaped_content}`).then(function() {{
                     console.log('Message copied to clipboard');
                 }});
                 </script>
