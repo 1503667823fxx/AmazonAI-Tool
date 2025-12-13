@@ -110,16 +110,24 @@ class FBACalculator:
         - price: 商品售价 (用于判断是否低价/高价)
         - is_apparel: 是否服装
         - is_dangerous: 是否危险品
-        - season: 季节 (Off-Peak / Peak)
+        - season: 季节 (Off-Peak / Peak 或 Jan-Sep / Oct-Dec)
         """
         tier = self.get_size_tier()
         billable_weight = max(self.weight, self.get_dim_weight())
+        
+        # 季节参数映射：将用户友好的参数映射到配置文件中的键
+        season_mapping = {
+            "Jan-Sep": "Off-Peak",
+            "Oct-Dec": "Peak"
+        }
+        # 如果传入的是用户友好的季节参数，则进行映射
+        fulfillment_season = season_mapping.get(season, season)
         
         # 如果没有提供价格，使用默认逻辑（旧版本兼容）
         if price is None:
             # 使用默认费率表查找
             try:
-                rate_card = FULFILLMENT_FEES.get(season, {}).get("Price_10_50", {}).get("Standard", {}).get(tier, [])
+                rate_card = FULFILLMENT_FEES.get(fulfillment_season, {}).get("Price_10_50", {}).get("Standard", {}).get(tier, [])
             except (KeyError, AttributeError):
                 return 0, billable_weight, tier
             
@@ -143,7 +151,7 @@ class FBACalculator:
             price_tier = "Under_10"
         elif price > 50:
             # 如果配置里没填 Over_50，通常默认使用 Price_10_50 的费率
-            price_tier = "Over_50" if "Over_50" in FULFILLMENT_FEES.get(season, {}).keys() else "Price_10_50"
+            price_tier = "Over_50" if "Over_50" in FULFILLMENT_FEES.get(fulfillment_season, {}).keys() else "Price_10_50"
         else:
             price_tier = "Price_10_50"
             
@@ -158,10 +166,11 @@ class FBACalculator:
         # 3. 逐层查找费率表
         # 路径: 季节 -> 价格段 -> 类型 -> 尺寸
         try:
-            rate_card = FULFILLMENT_FEES[season][price_tier][prod_type].get(tier, [])
-        except KeyError:
+            rate_card = FULFILLMENT_FEES[fulfillment_season][price_tier][prod_type].get(tier, [])
+        except KeyError as e:
             # 如果找不到具体的 key，尝试回退到标准逻辑或报错
-            return 0, billable_weight, f"未找到费率配置: {season}-{price_tier}-{prod_type}-{tier}"
+            error_msg = f"未找到费率配置: {fulfillment_season}-{price_tier}-{prod_type}-{tier} (KeyError: {str(e)})"
+            return 0, billable_weight, error_msg
             
         # 4. 匹配重量档位
         final_fee = 0
