@@ -7,27 +7,58 @@ def show_fba_calculator():
     
     # --- 侧边栏：输入区域 ---
     with st.sidebar:
+        st.header("1. 产品属性")
+        price = st.number_input("商品售价 ($)", value=19.99)
+        is_apparel = st.checkbox("是服装类目 (Apparel)?")
+        is_dangerous = st.checkbox("是危险品 (Hazmat)?")
+# ... 其他长宽高重输入不变
+
+# 调用时传入新参数
+    fba_fee, billable_weight, tier = calc.calculate_fulfillment_fee(
+        price=price,
+        is_apparel=is_apparel,
+        is_dangerous=is_dangerous,
+        season=season
+    )
         st.header("1. 产品参数输入")
         
+# 1. 选择单位
+        unit_mode = st.radio("输入单位", ["inch/lb", "cm/kg"], horizontal=True)
+        dim_label, wt_label = get_display_unit(unit_mode)
+        
+        # 2. 输入数值 (根据选择的单位动态显示 Label)
         col1, col2 = st.columns(2)
         with col1:
-            unit = st.radio("单位", ["inch/lb", "cm/kg"])
-        
-        # 如果是 cm/kg 需要转换逻辑，这里为了简化演示，默认 inch/lb
-        # 实际生产中您可以在这里加一个简单的转换函数
-        
-        length = st.number_input("长 (Length)", value=10.0, step=0.1)
-        width = st.number_input("宽 (Width)", value=8.0, step=0.1)
-        height = st.number_input("高 (Height)", value=1.0, step=0.1)
-        weight = st.number_input("重量 (Weight lb)", value=1.0, step=0.1)
+            raw_l = st.number_input(f"长 ({dim_label})", value=10.0, step=0.5)
+            raw_h = st.number_input(f"高 ({dim_label})", value=1.0, step=0.1)
+        with col2:
+            raw_w = st.number_input(f"宽 ({dim_label})", value=8.0, step=0.5)
+            raw_wt = st.number_input(f"重 ({wt_label})", value=1.0, step=0.1)
+
+        # 🆕 3. 实时自动转换 (关键步骤)
+        # 无论用户输入的是什么，这里都会变成 inch/lb 传给计算器
+        final_l, final_w, final_h, final_wt = convert_inputs(
+            raw_l, raw_w, raw_h, raw_wt, unit_mode
+        )
+
+        # ... (其余输入如价格、类目等保持不变)
+        st.divider()
+        price = st.number_input("商品售价 ($)", value=19.99)
+        # ...
         
         st.header("2. 高级选项")
         season = st.selectbox("当前季节", ["Jan-Sep", "Oct-Dec"], index=0)
         low_inv_days = st.slider("历史供货天数 (用于计算低库存费)", 0, 90, 45)
 
+# --- 主界面展示 ---
+    
+    # 💡 增加一个提示，让用户知道系统实际是用什么数据在算
+    if unit_mode == "cm/kg":
+        st.caption(f"ℹ️ 系统已自动转换用于计算: {final_l} x {final_w} x {final_h} in, {final_wt} lb")
+        
     # --- 实例化计算器 ---
     # 注意：这里假设用户输入的是 inch 和 lb，如果选了 cm 需要先转换
-    calc = FBACalculator(length, width, height, weight)
+    calc = FBACalculator(final_l, final_w, final_h, final_wt)
     
     # --- 核心计算 ---
     # 1. 基础配送费计算
