@@ -105,7 +105,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                 # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $6.78 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -323,7 +323,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                  # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $7.5 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -437,7 +437,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                 # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $6.78 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -655,7 +655,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                  # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $8.27 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -770,7 +770,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                 # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $6.78 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -988,7 +988,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                  # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $8.27 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -1104,7 +1104,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                 # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $9.88 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -1322,7 +1322,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                  # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $7.5 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -1436,7 +1436,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                 # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $10.65 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -1654,7 +1654,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                  # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $11.89 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -1769,7 +1769,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                 # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $10.65 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
@@ -1987,7 +1987,7 @@ FULFILLMENT_FEES = {
                             "unit_step": 4/16      # 增量步长 (4盎司 = 0.25磅)
                         }
                     }
-                ]
+                ],
                  # 🔴 难点 2: 小号大件 (Small Bulky/Oversize)
                  # 0-50磅: $11.89 + 超出首磅(1lb)的部分每磅 $0.38
                 "Small Bulky": [
