@@ -63,7 +63,7 @@ class UIController:
         """Render the sidebar with model selection and controls"""
         
         with st.sidebar:
-            st.title("🧪 AI Workbench")
+            st.title("🧪 AI 工作台")
             
             # Model selection
             current_model, is_image_mode = model_selector.render_model_selector()
@@ -85,7 +85,7 @@ class UIController:
     def _render_conversation_controls(self) -> None:
         """Render enhanced conversation management controls"""
         
-        st.subheader("💬 Conversation")
+        st.subheader("💬 对话管理")
         
         state = state_manager.get_state()
         
@@ -183,8 +183,7 @@ class UIController:
         # Add user message to conversation
         message_id = state_manager.add_user_message(user_input, uploaded_images)
         
-        # Clear input and trigger inference
-        input_panel.clear_input()
+        # Trigger inference without clearing input (Streamlit handles this automatically)
         st.session_state.trigger_inference = True
         st.rerun()
     
@@ -430,12 +429,24 @@ class UIController:
                 response = chat_session.send_message(current_payload, stream=True)
                 
                 for chunk in response:
-                    if chunk.text:
+                    # Check if chunk has text content
+                    if hasattr(chunk, 'text') and chunk.text:
                         full_response += chunk.text
                         placeholder.markdown(full_response + "▌")
+                    elif hasattr(chunk, 'parts') and chunk.parts:
+                        # Handle parts-based response
+                        for part in chunk.parts:
+                            if hasattr(part, 'text') and part.text:
+                                full_response += part.text
+                                placeholder.markdown(full_response + "▌")
                 
                 # Finalize response
-                placeholder.markdown(full_response)
+                if full_response.strip():
+                    placeholder.markdown(full_response)
+                else:
+                    # Handle empty response
+                    full_response = "抱歉，我无法生成回复。请重试。"
+                    placeholder.markdown(full_response)
                 
                 # Add AI message to conversation
                 state_manager.add_ai_message(
