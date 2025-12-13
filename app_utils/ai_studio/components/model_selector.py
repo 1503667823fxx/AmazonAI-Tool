@@ -338,6 +338,7 @@ class ModelSelector:
             selected_preset = st.selectbox(
                 "Quick Presets",
                 list(preset_prompts.keys()),
+                key="system_prompt_presets",
                 help="Choose a preset or select 'Custom' to write your own"
             )
         
