@@ -1,6 +1,19 @@
 import math
+import sys
+import os
+
+# 路径设置（确保可以导入 app_utils）
+current_file_path = os.path.abspath(__file__)
+services_dir = os.path.dirname(current_file_path)
+root_dir = os.path.dirname(os.path.dirname(services_dir))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
 # 引入第一步建立的数据
-from app_utils.fba_data.config import SIZE_TIERS, DIM_DIVISOR, FULFILLMENT_FEES, STORAGE_FEES, LOW_INVENTORY_FEES
+try:
+    from app_utils.fba_data.config import SIZE_TIERS, DIM_DIVISOR, FULFILLMENT_FEES, STORAGE_FEES, LOW_INVENTORY_FEES
+except ImportError as e:
+    raise ImportError(f"无法导入 FBA 配置模块: {e}. 请检查 app_utils/fba_data/config.py 文件是否存在且语法正确。")
 
 class FBACalculator:
     def __init__(self, length, width, height, weight_lb, category="Standard"):
