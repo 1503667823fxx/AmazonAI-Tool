@@ -1,5 +1,5 @@
 import streamlit as st
-from app_utils.image_processing import process_image_for_download
+from app_utils.ai_studio.tools import process_image_for_download
 
 def show_image_modal(image_bytes, title="Preview"):
     @st.dialog("🔍 图片预览")
