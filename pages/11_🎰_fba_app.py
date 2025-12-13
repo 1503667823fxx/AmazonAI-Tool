@@ -1,9 +1,23 @@
 import streamlit as st
-from services.fba_logic.calculator import FBACalculator
-from app_utils.fba_data.unit_converter import convert_inputs, get_display_unit
+import sys
+import os
+
+# --- 路径环境设置 ---
+current_script_path = os.path.abspath(__file__)
+pages_dir = os.path.dirname(current_script_path)
+root_dir = os.path.dirname(pages_dir)
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+
+try:
+    from services.fba_logic.calculator import FBACalculator
+    from app_utils.fba_data.unit_converter import convert_inputs, get_display_unit
+except ImportError as e:
+    st.error(f"❌ 核心模块导入失败: {e}")
+    st.stop()
 
 def show_fba_calculator():
-    st.title("📦 亚马逊 FBA 智能计算器 (2025版)")
+    st.title("📦 亚马逊 FBA 智能计算器 (2026版)")
     st.markdown("基于最新规则：尺寸分段、低库存费、仓储费自动测算")
     
     # --- 侧边栏：输入区域 ---
