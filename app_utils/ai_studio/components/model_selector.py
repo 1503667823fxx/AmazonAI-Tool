@@ -14,9 +14,9 @@ class ModelSelector:
     
     def __init__(self):
         self.model_map = {
-            "⚡ Gemini Flash (Fast)": "models/gemini-flash-latest",
-            "🎨 Gemini 3 Image (Image Gen)": "models/gemini-3-pro-image-preview", 
-            "🧠 Gemini 3 Pro (Reasoning)": "models/gemini-3-pro-preview",
+            "⚡ Gemini Flash (快速)": "models/gemini-flash-latest",
+            "🎨 Gemini 3 图像 (图像生成)": "models/gemini-3-pro-image-preview", 
+            "🧠 Gemini 3 Pro (推理)": "models/gemini-3-pro-preview",
         }
         
         self.model_capabilities = {
@@ -25,21 +25,21 @@ class ModelSelector:
                 "supports_image_gen": False,
                 "max_tokens": 8192,
                 "speed": "fast",
-                "description": "Fast, efficient model for general conversations"
+                "description": "快速高效的通用对话模型"
             },
             "models/gemini-3-pro-image-preview": {
                 "supports_vision": True,
                 "supports_image_gen": True,
                 "max_tokens": 8192,
                 "speed": "medium",
-                "description": "Advanced model with image generation capabilities"
+                "description": "具备图像生成能力的高级模型"
             },
             "models/gemini-3-pro-preview": {
                 "supports_vision": True,
                 "supports_image_gen": False,
                 "max_tokens": 32768,
                 "speed": "slow",
-                "description": "Most capable model for complex reasoning tasks"
+                "description": "最强大的复杂推理任务模型"
             }
         }
     
@@ -71,22 +71,22 @@ class ModelSelector:
         # Enhanced model selection header with status
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.subheader("🤖 AI Model Selection")
+            st.subheader("🤖 AI 模型选择")
         with col2:
             # Show current model status
             caps = self.model_capabilities.get(current_model, {})
             if caps.get('supports_image_gen'):
-                st.success("🎨 Image Mode")
+                st.success("🎨 图像模式")
             else:
-                st.info("💬 Chat Mode")
+                st.info("💬 对话模式")
         
         # Enhanced model selector with better UX
         selected_label = st.selectbox(
-            "Choose your AI model",
+            "选择 AI 模型",
             list(self.model_map.keys()),
             index=list(self.model_map.keys()).index(current_label) if current_label else 0,
             key="enhanced_model_selector",
-            help="Select the AI model that best matches your task requirements"
+            help="选择最适合您任务需求的 AI 模型"
         )
         
         selected_model_id = self.model_map[selected_label]
@@ -214,23 +214,25 @@ class ModelSelector:
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                speed = caps.get('speed', 'unknown').title()
-                speed_color = {"Fast": "🟢", "Medium": "🟡", "Slow": "🔴"}.get(speed, "⚪")
-                st.metric("Speed", f"{speed_color} {speed}")
+                speed = caps.get('speed', 'unknown')
+                speed_map = {"fast": "快速", "medium": "中等", "slow": "较慢"}
+                speed_text = speed_map.get(speed, "未知")
+                speed_color = {"fast": "🟢", "medium": "🟡", "slow": "🔴"}.get(speed, "⚪")
+                st.metric("速度", f"{speed_color} {speed_text}")
             
             with col2:
                 tokens = caps.get('max_tokens', 0)
-                st.metric("Max Tokens", f"{tokens:,}")
+                st.metric("最大令牌", f"{tokens:,}")
             
             with col3:
                 capabilities = []
                 if caps.get('supports_vision'):
-                    capabilities.append("👁️ Vision")
+                    capabilities.append("👁️ 视觉")
                 if caps.get('supports_image_gen'):
-                    capabilities.append("🎨 Image Gen")
+                    capabilities.append("🎨 图像生成")
                 
-                cap_text = " • ".join(capabilities) if capabilities else "💬 Text Only"
-                st.metric("Capabilities", cap_text)
+                cap_text = " • ".join(capabilities) if capabilities else "💬 纯文本"
+                st.metric("功能", cap_text)
             
             # Detailed info in expandable section
             with st.expander("📋 Detailed Model Information", expanded=False):
@@ -313,7 +315,7 @@ class ModelSelector:
         if self._is_image_generation_mode(model_id):
             return  # Don't show system prompt for image generation models
         
-        st.subheader("🎭 System Persona & Instructions")
+        st.subheader("🎭 系统角色与指令")
         
         state = state_manager.get_state()
         current_prompt = state.system_prompt
@@ -323,35 +325,35 @@ class ModelSelector:
         
         with col2:
             preset_prompts = {
-                "Default Assistant": "You are a helpful AI assistant for Amazon E-commerce sellers.",
-                "E-commerce Expert": "You are an expert in Amazon e-commerce, specializing in product listings, SEO optimization, and seller strategies. Provide detailed, actionable advice.",
-                "Creative Writer": "You are a creative copywriter specializing in compelling product descriptions and marketing content for e-commerce.",
-                "Data Analyst": "You are a data analyst expert who helps interpret business metrics, sales data, and market trends for e-commerce businesses.",
-                "Customer Service": "You are a customer service expert who helps create professional, empathetic responses and resolve customer issues effectively.",
-                "Custom": ""
+                "默认助手": "你是一个专为亚马逊电商卖家服务的AI助手。",
+                "电商专家": "你是亚马逊电商专家，专精于产品listing、SEO优化和卖家策略。请提供详细、可操作的建议。",
+                "创意文案": "你是专门为电商撰写引人注目的产品描述和营销内容的创意文案专家。",
+                "数据分析师": "你是数据分析专家，帮助解读业务指标、销售数据和电商业务的市场趋势。",
+                "客服专家": "你是客户服务专家，帮助创建专业、有同理心的回复并有效解决客户问题。",
+                "自定义": ""
             }
             
             selected_preset = st.selectbox(
-                "Quick Presets",
+                "快速预设",
                 list(preset_prompts.keys()),
                 key="system_prompt_presets",
-                help="Choose a preset or select 'Custom' to write your own"
+                help="选择一个预设或选择'自定义'来编写您自己的指令"
             )
         
         with col1:
             # Determine initial value based on preset selection
-            if selected_preset != "Custom":
+            if selected_preset != "自定义":
                 initial_prompt = preset_prompts[selected_preset]
             else:
                 initial_prompt = current_prompt
             
             new_prompt = st.text_area(
-                "System Instructions",
+                "系统指令",
                 value=initial_prompt,
-                height=120,
-                help="Define how the AI should behave and respond. Be specific about tone, expertise, and response style.",
+                height=100,
+                help="定义AI的行为和回应方式。请具体说明语调、专业程度和回应风格。",
                 key="enhanced_system_prompt_editor",
-                placeholder="Enter custom instructions for the AI's behavior and personality..."
+                placeholder="输入AI行为和个性的自定义指令..."
             )
         
         # Real-time validation feedback
