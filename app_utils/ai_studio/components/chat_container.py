@@ -71,7 +71,7 @@ class ChatContainer:
     
     def _render_empty_state(self) -> None:
         """Render empty conversation state"""
-        st.info("👋 Start your conversation. Upload images or enter a message...")
+        st.info("👋 开始您的对话。上传图片或输入消息...")
     
     def _render_message_with_actions(self, message: BaseMessage, idx: int,
                                    on_delete: Optional[Callable] = None,
