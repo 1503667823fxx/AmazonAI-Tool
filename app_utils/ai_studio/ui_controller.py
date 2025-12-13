@@ -71,7 +71,8 @@ class UIController:
             st.divider()
             
             # System prompt editor (for non-image models)
-            model_selector.render_system_prompt_editor(current_model)
+            if not is_image_mode:
+                model_selector.render_system_prompt_editor(current_model)
             
             st.divider()
             
