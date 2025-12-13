@@ -301,6 +301,16 @@ class ModelSelector:
         caps = self.model_capabilities.get(model_id, {})
         return caps.get('supports_image_gen', False)
     
+    def render_system_prompt_editor(self, model_id: str) -> None:
+        """Public method to render system prompt editor"""
+        self._render_enhanced_system_prompt_editor(model_id)
+    
+    def render_model_comparison(self) -> None:
+        """Public method to render model comparison"""
+        if len(self.model_map) > 1:
+            with st.expander("📊 Compare Models", expanded=False):
+                self._render_model_comparison_table()
+    
     def _render_enhanced_system_prompt_editor(self, model_id: str) -> None:
         """Render enhanced system prompt editor with validation and presets"""
         
