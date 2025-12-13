@@ -17,7 +17,7 @@ except ImportError as e:
     st.stop()
 
 def show_fba_calculator():
-    st.title("📦 亚马逊 FBA 智能计算器 (2026版)")
+    st.title("📦 亚马逊 FBA 智能计算器 (2025版)")
     st.markdown("基于最新规则：尺寸分段、低库存费、仓储费自动测算")
     
     # --- 侧边栏：输入区域 ---
