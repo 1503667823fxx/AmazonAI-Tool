@@ -17,7 +17,7 @@ except ImportError as e:
     st.stop()
 
 def show_fba_calculator():
-    st.title("📦 亚马逊 FBA 智能计算器 (2025版)")
+    st.title("📦 亚马逊 FBA 智能计算器 (2026版)")
     st.markdown("基于最新规则：尺寸分段、低库存费、仓储费自动测算")
     
     # --- 侧边栏：输入区域 ---
@@ -59,28 +59,84 @@ def show_fba_calculator():
     # 💡 增加一个提示，让用户知道系统实际是用什么数据在算
     if unit_mode == "cm/kg":
         st.caption(f"ℹ️ 系统已自动转换用于计算: {final_l} x {final_w} x {final_h} in, {final_wt} lb")
+    
+    # 调试信息（可选显示）
+    with st.expander("🔧 调试信息", expanded=False):
+        st.write(f"**输入参数:**")
+        st.write(f"- 尺寸: {final_l} x {final_w} x {final_h} 英寸")
+        st.write(f"- 重量: {final_wt} 磅")
+        st.write(f"- 价格: ${price}")
+        st.write(f"- 服装类目: {is_apparel}")
+        st.write(f"- 危险品: {is_dangerous}")
+        st.write(f"- 季节: {season}")
+        
+        # 预先计算一些调试信息
+        debug_tier = calc.get_size_tier()
+        debug_billable_weight = max(final_wt, calc.get_dim_weight())
+        
+        st.write(f"**计算中间结果:**")
+        st.write(f"- 体积重: {calc.get_dim_weight():.2f} 磅")
+        st.write(f"- 计费重量: {debug_billable_weight:.2f} 磅")
+        st.write(f"- 尺寸分段: {debug_tier}")
+        
+        # 检查配置路径
+        from app_utils.fba_data.config import FULFILLMENT_FEES
+        season_mapping = {"Jan-Sep": "Off-Peak", "Oct-Dec": "Peak"}
+        fulfillment_season = season_mapping.get(season, season)
+        price_tier = "Price_10_50" if 10 <= price <= 50 else ("Under_10" if price < 10 else "Price_10_50")
+        prod_type = "Dangerous" if is_dangerous else ("Apparel" if is_apparel else "Standard")
+        
+        st.write(f"**配置路径:**")
+        st.write(f"- 映射后季节: {fulfillment_season}")
+        st.write(f"- 价格段: {price_tier}")
+        st.write(f"- 产品类型: {prod_type}")
+        
+        # 检查配置是否存在
+        config_exists = (fulfillment_season in FULFILLMENT_FEES and 
+                        price_tier in FULFILLMENT_FEES[fulfillment_season] and
+                        prod_type in FULFILLMENT_FEES[fulfillment_season][price_tier] and
+                        debug_tier in FULFILLMENT_FEES[fulfillment_season][price_tier][prod_type])
+        
+        st.write(f"- 配置路径存在: {config_exists}")
+        
+        if config_exists:
+            rate_card = FULFILLMENT_FEES[fulfillment_season][price_tier][prod_type][debug_tier]
+            st.write(f"- 费率表长度: {len(rate_card)}")
+            st.write(f"- 费率表: {rate_card[:3]}...")  # 只显示前3个
         
     # --- 实例化计算器 ---
     # 注意：这里假设用户输入的是 inch 和 lb，如果选了 cm 需要先转换
     calc = FBACalculator(final_l, final_w, final_h, final_wt)
     
     # --- 核心计算 ---
-    # 1. 基础配送费计算
-    fba_fee, billable_weight, tier = calc.calculate_fulfillment_fee(
-        price=price,
-        is_apparel=is_apparel,
-        is_dangerous=is_dangerous,
-        season=season
-    )
-    
-    # 2. 总成本计算
-    costs = calc.calculate_total_cost(
-        season=season, 
-        low_inv_days=low_inv_days,
-        price=price,
-        is_apparel=is_apparel,
-        is_dangerous=is_dangerous
-    )
+    try:
+        # 1. 基础配送费计算
+        fba_fee, billable_weight, tier = calc.calculate_fulfillment_fee(
+            price=price,
+            is_apparel=is_apparel,
+            is_dangerous=is_dangerous,
+            season=season
+        )
+        
+        # 检查是否有错误信息
+        if isinstance(tier, str) and "未找到费率配置" in tier:
+            st.error(f"❌ 计算错误: {tier}")
+            st.info("请检查输入参数或联系技术支持")
+            st.stop()
+        
+        # 2. 总成本计算
+        costs = calc.calculate_total_cost(
+            season=season, 
+            low_inv_days=low_inv_days,
+            price=price,
+            is_apparel=is_apparel,
+            is_dangerous=is_dangerous
+        )
+        
+    except Exception as e:
+        st.error(f"❌ 计算过程中发生错误: {str(e)}")
+        st.info("请检查输入参数或联系技术支持")
+        st.stop()
     
     # --- 主界面展示 ---
     
