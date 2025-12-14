@@ -320,12 +320,6 @@ class UIController:
                 # Step 2: Generate image with enhanced progress tracking
                 update_progress("Starting image generation...", 0.2)
                 
-                # Debug: Log generation parameters
-                with status:
-                    st.info(f"🔍 Generating with model: {model_name}")
-                    st.info(f"🔍 Prompt: {user_message.content[:100]}...")
-                    st.info(f"🔍 Has reference image: {target_ref_img is not None}")
-                
                 result = vision_svc.generate_image_with_progress(
                     prompt=user_message.content,
                     model_name=model_name,
@@ -333,65 +327,73 @@ class UIController:
                     progress_callback=update_progress
                 )
                 
-                # Debug: Log result details
-                with status:
-                    st.info(f"🔍 Generation result - Success: {result.success}")
-                    st.info(f"🔍 Generation result - Error: {result.error}")
-                    if result.image_data:
-                        st.info(f"🔍 Image data size: {len(result.image_data)} bytes")
-                    else:
-                        st.warning("🔍 No image data returned")
-                
                 if result.success and result.image_data:
-                    # Step 3: Process successful result
+                    # Step 3: Process successful result using ai_studio tools
                     update_progress("Processing generated image...", 0.9)
                     
-                    # Get image metadata for user feedback
-                    metadata = vision_svc.get_image_metadata(result.image_data)
-                    
-                    # Create high-quality preview
-                    preview_data = vision_svc.create_high_quality_preview(result.image_data)
-                    
-                    # Display generation info
-                    with status:
-                        st.success(f"✅ Image generated successfully!")
+                    try:
+                        # Import ai_studio tools for proper image handling
+                        from app_utils.ai_studio.tools import create_preview_thumbnail, process_image_for_download
                         
-                        # Show generation details
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Generation Time", f"{result.generation_time:.1f}s" if result.generation_time else "N/A")
-                        with col2:
-                            st.metric("Image Size", f"{metadata.get('size', 'Unknown')}")
-                        with col3:
-                            st.metric("File Size", f"{metadata.get('file_size_mb', 0):.1f} MB")
+                        # Create preview thumbnail for display
+                        preview_data = create_preview_thumbnail(result.image_data, max_width=800)
                         
-                        if result.reference_indicator:
-                            st.info(result.reference_indicator)
-                    
-                    # Add AI message with enhanced image result
-                    state_manager.add_ai_message(
-                        content=f"Generated image from prompt: {user_message.content[:100]}{'...' if len(user_message.content) > 100 else ''}",
-                        model_used=model_name,
-                        message_type="image_result",
-                        hd_data=result.image_data,
-                        metadata={
-                            'generation_time': result.generation_time,
-                            'image_metadata': metadata,
-                            'reference_used': target_ref_img is not None,
-                            'reference_indicator': result.reference_indicator
-                        }
-                    )
-                    
-                    # Final progress update
-                    update_progress("Image generation complete!", 1.0)
-                    status.update(label="✅ Image generation complete!", state="complete")
-                    
-                    # Clear progress indicators after a moment
-                    import time
-                    time.sleep(1)
-                    progress_container.empty()
-                    
-                    st.rerun()
+                        # Process image for download
+                        download_data, mime_type = process_image_for_download(result.image_data, format="JPEG", quality=95)
+                        
+                        # Display the generated image
+                        st.image(preview_data, use_container_width=True, caption="Generated Image")
+                        
+                        # Download button
+                        st.download_button(
+                            "📥 Download Image",
+                            data=download_data,
+                            file_name=f"ai_generated_{int(time.time())}.jpg",
+                            mime=mime_type,
+                            use_container_width=True
+                        )
+                        
+                        # Display generation info
+                        with status:
+                            st.success(f"✅ Image generated successfully!")
+                            
+                            # Show generation details
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Generation Time", f"{result.generation_time:.1f}s" if result.generation_time else "N/A")
+                            with col2:
+                                st.metric("File Size", f"{len(result.image_data) / (1024*1024):.1f} MB")
+                            
+                            if result.reference_indicator:
+                                st.info(result.reference_indicator)
+                        
+                        # Add AI message with image result
+                        state_manager.add_ai_message(
+                            content=f"Generated image from prompt: {user_message.content[:100]}{'...' if len(user_message.content) > 100 else ''}",
+                            model_used=model_name,
+                            message_type="image_result",
+                            hd_data=result.image_data
+                        )
+                        
+                        # Final progress update
+                        update_progress("Image generation complete!", 1.0)
+                        status.update(label="✅ Image generation complete!", state="complete")
+                        
+                        # Clear progress indicators
+                        progress_container.empty()
+                        
+                        st.rerun()
+                        
+                    except Exception as display_error:
+                        with status:
+                            st.error(f"❌ Error displaying image: {str(display_error)}")
+                            # Still try to save the raw data
+                            st.download_button(
+                                "📥 Download Raw Image Data",
+                                data=result.image_data,
+                                file_name=f"ai_generated_raw_{int(time.time())}.jpg",
+                                mime="image/jpeg"
+                            )
                     
                 else:
                     # Handle generation failure
