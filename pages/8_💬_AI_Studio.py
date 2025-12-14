@@ -87,7 +87,27 @@ def main():
         </style>
         """, unsafe_allow_html=True)
         
-        # Debug: Check if vision service is available
+        # Debug: Test vision service import directly
+        try:
+            from services.ai_studio.vision_service import StudioVisionService
+            st.success("✅ Vision service import successful")
+            
+            # Test API key
+            api_key = st.secrets.get("GOOGLE_API_KEY")
+            if api_key:
+                st.success("✅ Google API key found")
+            else:
+                st.warning("⚠️ Google API key not found")
+                
+        except ImportError as e:
+            st.error(f"❌ Vision service import failed: {e}")
+        except Exception as e:
+            st.error(f"❌ Other error: {e}")
+        
+        # Initialize and render the enhanced UI
+        ui_controller.render_main_interface()
+        
+        # Debug: Check if vision service is available (after initialization)
         if "studio_vision_svc" in st.session_state:
             vision_svc = st.session_state.studio_vision_svc
             if hasattr(vision_svc, '__class__') and 'Dummy' in vision_svc.__class__.__name__:
@@ -95,10 +115,7 @@ def main():
             else:
                 st.success("✅ Vision service is fully available")
         else:
-            st.error("❌ Vision service not found in session state")
-        
-        # Initialize and render the enhanced UI
-        ui_controller.render_main_interface()
+            st.error("❌ Vision service not found in session state - initialization may have failed")
         
     except Exception as e:
         st.error(f"❌ Application Error: {e}")
