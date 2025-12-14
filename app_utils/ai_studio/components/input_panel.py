@@ -132,10 +132,8 @@ class InputPanel:
             key="enhanced_chat_input"
         )
         
-        # Handle keyboard interactions
-        if user_input:
-            # Message was submitted (Enter was pressed)
-            self._handle_message_submission(user_input)
+        # Note: Message submission is handled by UI controller
+        # No need to handle it here to avoid duplicate processing
         
         return user_input
     
