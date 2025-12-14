@@ -53,8 +53,8 @@ class InpaintService:
                 st.error("❌ 未配置Google API密钥")
                 return None
             
-            # 使用Gemini 1.5 Pro Vision模型
-            model = genai.GenerativeModel('gemini-1.5-pro-latest')
+            # 使用models/gemini-3-pro-image-preview模型
+            model = genai.GenerativeModel('models/gemini-3-pro-image-preview')
             
             # 创建上下文图像，显示要修改的区域
             context_image = self.create_context_image(original_image, mask_image)
