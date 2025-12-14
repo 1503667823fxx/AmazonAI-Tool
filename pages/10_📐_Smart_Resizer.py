@@ -43,26 +43,8 @@ with st.sidebar:
     }
     target_ratio = ratio_map[target_ratio_name]
 
-    # 3. 模型选择
-    with st.expander("⚙️ 高级设置"):
-        use_gemini_generation = st.checkbox(
-            "使用 Gemini 画幅重构", 
-            value=True,
-            help="启用后将使用 models/gemini-3-pro-image-preview 进行画幅重构"
-        )
-        
-        test_mode = st.checkbox(
-            "简化测试模式",
-            value=False,
-            help="使用最简单的提示词直接测试Gemini画幅重构"
-        )
-        
-        if use_gemini_generation:
-            st.info("🎨 将使用 Gemini 进行画幅重构")
-            if test_mode:
-                st.warning("🧪 测试模式：使用最简单提示词")
-        else:
-            st.info("🔧 将使用传统算法进行背景扩展")
+    # 3. 简单设置
+    st.info("🎨 使用 Gemini 进行画幅重构")
     
     # 4. 触发按钮
     generate_btn = st.button("🚀 开始重构画幅", type="primary", use_container_width=True)
@@ -148,25 +130,18 @@ if uploaded_file:
                     status.write(f"🎯 目标画幅: {target_ratio[0]}:{target_ratio[1]} (比例值: {target_ratio[0]/target_ratio[1]:.2f})")
                     status.write(f"📏 原始画幅: {orig_w}×{orig_h} (比例值: {orig_ratio:.2f})")
                     
-                    # 3. 智能背景扩展
-                    if use_gemini_generation:
-                        if test_mode:
-                            status.update(label="🧪 Gemini 测试模式运行中...", state="running")
-                            status.write(f"🔤 使用提示词: 'Change this image to {target_ratio[0]}:{target_ratio[1]} aspect ratio.'")
-                        else:
-                            status.update(label="🎨 Gemini 正在重构画幅...", state="running")
-                            status.write(f"🔤 使用提示词: '请将这张图片改为 {target_ratio[0]}:{target_ratio[1]} 的画幅比例'")
-                    else:
-                        status.update(label="🎨 智能算法扩展背景中...", state="running")
+                    # 3. Gemini画幅重构
+                    status.update(label="🎨 Gemini 正在重构画幅...", state="running")
+                    status.write(f"🔤 提示词: '请将这张图片改为 {target_ratio[0]}:{target_ratio[1]} 的画幅比例'")
                     
-                    # 统一调用，让generation_service内部处理逻辑
+                    # 简单调用Gemini
                     final_image = generation_service.fill_image(
-                        image=original_image,  # 始终传递原图
-                        mask=mask_image,       # 传递遮罩（函数内部会处理尺寸匹配）
+                        image=original_image,
+                        mask=None,
                         prompt=prompt_text,
-                        use_gemini=use_gemini_generation,
+                        use_gemini=True,
                         target_ratio=target_ratio,
-                        test_mode=test_mode
+                        test_mode=False
                     )
                     
                     status.update(label="✅ 画幅重构完成！", state="complete", expanded=False)
@@ -199,12 +174,7 @@ if uploaded_file:
                         st.metric("目标比例", f"{target_ratio_val:.2f}")
                     with col_info3:
                         st.write("**使用的模型:**")
-                        if use_gemini_generation:
-                            st.success("🤖 Gemini 图像生成")
-                            st.code("models/gemini-3-pro-image-preview")
-                        else:
-                            st.info("🔧 智能算法扩展")
-                        st.write(f"**背景分析:** Gemini")
+                        st.success("🤖 Gemini 画幅重构")
                         st.code("models/gemini-3-pro-image-preview")
 
             except Exception as e:
