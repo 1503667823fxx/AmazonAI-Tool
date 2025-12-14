@@ -41,19 +41,29 @@ class EnhancedStateManager:
         
         # Initialize vision service if not present
         if "studio_vision_svc" not in st.session_state:
+            print(f"🔍 Debug: Initializing vision service, available={VISION_SERVICE_AVAILABLE}")
             if VISION_SERVICE_AVAILABLE and StudioVisionService:
                 try:
                     api_key = st.secrets.get("GOOGLE_API_KEY")
                     if not api_key:
                         st.warning("⚠️ Google API key not found. Image generation will not be available.")
-                    st.session_state.studio_vision_svc = StudioVisionService(api_key)
-                    st.success("✅ Vision service initialized successfully")
+                        st.session_state.studio_vision_svc = self._create_dummy_vision_service()
+                    else:
+                        st.session_state.studio_vision_svc = StudioVisionService(api_key)
+                        st.success("✅ Vision service initialized successfully")
+                        print("🔍 Debug: Vision service created successfully")
                 except Exception as e:
                     st.error(f"❌ Failed to initialize vision service: {e}")
+                    print(f"🔍 Debug: Vision service initialization failed: {e}")
                     st.session_state.studio_vision_svc = self._create_dummy_vision_service()
             else:
                 st.warning("⚠️ Vision service not available. Image generation features will be disabled.")
+                print(f"🔍 Debug: Creating dummy vision service")
                 st.session_state.studio_vision_svc = self._create_dummy_vision_service()
+        else:
+            print("🔍 Debug: Vision service already exists in session state")
+        
+        return st.session_state[self.state_key]
     
     def _create_dummy_vision_service(self):
         """Create a dummy vision service to prevent crashes"""
