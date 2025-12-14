@@ -49,6 +49,39 @@ def main():
             font-size: 0.85rem;
         }
         
+        /* 优化聊天界面中的图片显示 */
+        .stChatMessage img {
+            border-radius: 8px !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+            margin: 8px 0 !important;
+        }
+        
+        /* 图片容器样式 */
+        .stImage > div {
+            display: flex !important;
+            justify-content: center !important;
+        }
+        
+        /* 紧凑的按钮样式 */
+        .stButton > button {
+            font-size: 0.8rem !important;
+            padding: 0.25rem 0.5rem !important;
+            margin: 0.1rem !important;
+        }
+        
+        /* 聊天消息间距优化 */
+        .stChatMessage {
+            margin-bottom: 1rem !important;
+        }
+        
+        /* 图片标题样式 */
+        .stImage > div > div {
+            text-align: center !important;
+            font-size: 0.8rem !important;
+            color: #666 !important;
+            margin-top: 0.5rem !important;
+        }
+        
         /* 减小标题大小 */
         .css-10trblm {
             font-size: 1.1rem;
