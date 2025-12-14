@@ -342,40 +342,6 @@ class UIController:
                         # Process image for download
                         download_data, mime_type = process_image_for_download(result.image_data, format="JPEG", quality=95)
                         
-                        # Display the generated image
-                        st.image(preview_data, use_container_width=True, caption="Generated Image")
-                        
-                        # Download button
-                        st.download_button(
-                            "📥 Download Image",
-                            data=download_data,
-                            file_name=f"ai_generated_{int(time.time())}.jpg",
-                            mime=mime_type,
-                            use_container_width=True
-                        )
-                        
-                        # Display generation info
-                        with status:
-                            st.success(f"✅ Image generated successfully!")
-                            
-                            # Show generation details
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.metric("Generation Time", f"{result.generation_time:.1f}s" if result.generation_time else "N/A")
-                            with col2:
-                                st.metric("File Size", f"{len(result.image_data) / (1024*1024):.1f} MB")
-                            
-                            if result.reference_indicator:
-                                st.info(result.reference_indicator)
-                        
-                        # Add AI message with image result (without storing large image data)
-                        state_manager.add_ai_message(
-                            content=f"✅ Successfully generated image from prompt: {user_message.content[:100]}{'...' if len(user_message.content) > 100 else ''}",
-                            model_used=model_name,
-                            message_type="image_result"
-                            # Note: Not storing hd_data to avoid memory issues
-                        )
-                        
                         # Final progress update
                         update_progress("Image generation complete!", 1.0)
                         status.update(label="✅ Image generation complete!", state="complete")
@@ -383,6 +349,18 @@ class UIController:
                         # Clear progress indicators
                         progress_container.empty()
                         
+                        # Add AI message with image result - store the image data for display
+                        message_id = state_manager.add_ai_message(
+                            content=f"Generated image from prompt: {user_message.content[:100]}{'...' if len(user_message.content) > 100 else ''}",
+                            model_used=model_name,
+                            message_type="image_result",
+                            hd_data=result.image_data  # Store image data for persistent display
+                        )
+                        
+                        # Show success message
+                        st.success(f"✅ Image generated successfully!")
+                        
+                        # Trigger rerun to display the saved image in conversation history
                         st.rerun()
                         
                     except Exception as display_error:
