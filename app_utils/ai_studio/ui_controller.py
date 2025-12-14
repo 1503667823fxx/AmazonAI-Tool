@@ -28,6 +28,9 @@ class UIController:
             # Initialize state management
             state_manager.initialize_state()
             
+            # Ensure vision service is initialized
+            self._ensure_vision_service_initialized()
+            
             # Inject modern CSS styles
             inject_modern_styles()
             
@@ -35,6 +38,30 @@ class UIController:
             self._setup_default_callbacks()
             
             self.initialized = True
+    
+    def _ensure_vision_service_initialized(self) -> None:
+        """Ensure vision service is properly initialized"""
+        if "studio_vision_svc" not in st.session_state:
+            try:
+                from services.ai_studio.vision_service import StudioVisionService
+                api_key = st.secrets.get("GOOGLE_API_KEY")
+                if not api_key:
+                    st.error("❌ Google API key not found in secrets. Please configure GOOGLE_API_KEY.")
+                    return
+                st.session_state.studio_vision_svc = StudioVisionService(api_key)
+                st.success("✅ Vision service initialized successfully")
+            except Exception as e:
+                st.error(f"❌ Failed to initialize vision service: {e}")
+                # Create a dummy service to prevent crashes
+                class DummyVisionService:
+                    def resolve_reference_image(self, *args, **kwargs):
+                        return None, "❌ Vision service not available"
+                    def generate_image_with_progress(self, *args, **kwargs):
+                        from services.ai_studio.vision_service import ImageGenerationResult
+                        result = ImageGenerationResult()
+                        result.error = "Vision service not available"
+                        return result
+                st.session_state.studio_vision_svc = DummyVisionService()
     
     def render_main_interface(self) -> None:
         """Render the complete AI Studio interface"""
@@ -243,14 +270,12 @@ class UIController:
             with status_container:
                 status = st.status("🎨 Preparing image generation...", expanded=True)
             
-            # Import vision service with safety check
-            if "studio_vision_svc" not in st.session_state:
-                # Initialize vision service if missing
-                from services.ai_studio.vision_service import StudioVisionService
-                api_key = st.secrets.get("GOOGLE_API_KEY")
-                st.session_state.studio_vision_svc = StudioVisionService(api_key)
-            
-            vision_svc = st.session_state.studio_vision_svc
+            # Get vision service (should be initialized by now)
+            vision_svc = st.session_state.get("studio_vision_svc")
+            if not vision_svc:
+                with status:
+                    st.error("❌ Vision service not available. Please refresh the page.")
+                return
             
             # Get conversation state
             state = state_manager.get_state()
