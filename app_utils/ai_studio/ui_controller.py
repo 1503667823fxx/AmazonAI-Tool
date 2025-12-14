@@ -243,7 +243,13 @@ class UIController:
             with status_container:
                 status = st.status("🎨 Preparing image generation...", expanded=True)
             
-            # Import vision service
+            # Import vision service with safety check
+            if "studio_vision_svc" not in st.session_state:
+                # Initialize vision service if missing
+                from services.ai_studio.vision_service import StudioVisionService
+                api_key = st.secrets.get("GOOGLE_API_KEY")
+                st.session_state.studio_vision_svc = StudioVisionService(api_key)
+            
             vision_svc = st.session_state.studio_vision_svc
             
             # Get conversation state
