@@ -6,11 +6,9 @@ import auth
 if not auth.check_password():
     st.stop()
 
-# 引入模块化依赖 (稍后在下面创建这些文件)
-# 注意：Streamlit 运行时默认根目录为项目主目录，所以可以直接从 services 和 app_utils 导入
+# 引入简化的模块
 try:
-    from services.smart_resizer import vision_service, generation_service
-    from app_utils.smart_resizer import image_tools, ui_helper
+    from services.smart_resizer import generation_service
 except ImportError as e:
     st.error(f"模块加载失败，请检查文件结构是否完整: {e}")
     st.stop()
@@ -88,24 +86,15 @@ if uploaded_file:
         st.info(f"原图尺寸: {orig_w}×{orig_h} (比例: {orig_ratio:.2f})")
         st.info(f"目标比例: {target_w_ratio}:{target_h_ratio} ({target_ratio_val:.2f})")
         
-        # 调用工具计算预览效果
-        preview_image, mask_image = image_tools.prepare_canvas(original_image, target_ratio)
-        new_w, new_h = preview_image.size
+        # 显示原图
+        st.image(original_image, caption="原始图片", use_column_width=True)
         
-        st.info(f"扩展后尺寸: {new_w}×{new_h}")
-        st.image(preview_image, caption=f"目标构图预览 (灰色区域为AI扩充区)", use_column_width=True)
-        
-        # 显示遮罩预览（调试用）
-        with st.expander("🔧 查看处理详情 (调试)"):
-            col_debug1, col_debug2 = st.columns(2)
-            with col_debug1:
-                st.image(mask_image, caption="处理遮罩：白色=AI填充区域，黑色=保留原图", use_column_width=True)
-            with col_debug2:
-                st.write("**处理参数:**")
-                st.write(f"- 原图比例: {orig_ratio:.3f}")
-                st.write(f"- 目标比例: {target_ratio_val:.3f}")
-                st.write(f"- 需要扩展: {'是' if abs(orig_ratio - target_ratio_val) > 0.01 else '否'}")
-                st.write(f"- 扩展方向: {'宽度' if target_ratio_val > orig_ratio else '高度' if target_ratio_val < orig_ratio else '无需扩展'}")
+        # 显示处理参数
+        with st.expander("🔧 查看处理参数"):
+            st.write(f"- 原图比例: {orig_ratio:.3f}")
+            st.write(f"- 目标比例: {target_ratio_val:.3f}")
+            st.write(f"- 需要扩展: {'是' if abs(orig_ratio - target_ratio_val) > 0.01 else '否'}")
+            st.write(f"- 扩展方向: {'宽度' if target_ratio_val > orig_ratio else '高度' if target_ratio_val < orig_ratio else '无需扩展'}")
 
     if generate_btn:
         with col2:
@@ -115,30 +104,18 @@ if uploaded_file:
 # ... (保留上面的代码)
             
             try:
-                # --- 第一阶段：视觉分析 ---
-                with status_container.status("🧠 AI 智能分析中...", expanded=True) as status:
-                    # 1. 准备数据
-                    status.write("📐 准备扩展画布...")
-                    processed_image, mask_image = image_tools.prepare_canvas(original_image, target_ratio)
-                    
-                    # 2. Gemini 分析
-                    status.write("👁️ Gemini 正在分析背景特征...")
-                    prompt_text = vision_service.analyze_background(original_image)
-                    status.write(f"✨ 分析结果: {prompt_text}")
-                    
-                    # 显示目标比例信息
+                # --- Gemini画幅重构 ---
+                with status_container.status("🎨 Gemini 正在重构画幅...", expanded=True) as status:
+                    # 显示处理信息
                     status.write(f"🎯 目标画幅: {target_ratio[0]}:{target_ratio[1]} (比例值: {target_ratio[0]/target_ratio[1]:.2f})")
                     status.write(f"📏 原始画幅: {orig_w}×{orig_h} (比例值: {orig_ratio:.2f})")
-                    
-                    # 3. Gemini画幅重构
-                    status.update(label="🎨 Gemini 正在重构画幅...", state="running")
                     status.write(f"🔤 提示词: 'Outpaint this image to {target_ratio[0]}:{target_ratio[1]} aspect ratio'")
                     
-                    # 简单调用Gemini
+                    # 调用Gemini进行画幅重构
                     final_image = generation_service.fill_image(
                         image=original_image,
                         mask=None,
-                        prompt=prompt_text,
+                        prompt="",
                         use_gemini=True,
                         target_ratio=target_ratio,
                         test_mode=False
@@ -182,4 +159,10 @@ if uploaded_file:
                 st.info("💡 提示：请确保上传的是有效的图片文件，并检查网络连接。")
 else:
     # 空状态提示
-    ui_helper.show_empty_state()
+    st.info("👈 请在左侧侧边栏上传图片并选择目标比例。")
+    st.markdown("""
+    **功能说明：**
+    * **1:1** - 适合亚马逊主图
+    * **4:3** - 适合A+页面标准插图
+    * **21:9** - 适合品牌故事模块或Banner
+    """)
