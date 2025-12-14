@@ -31,62 +31,119 @@ st.markdown("""
     
     /* 2. 全局字体与背景优化 */
     .main {
-        background-color: #f8f9fa; /* 浅灰背景，提升层次感 */
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        min-height: 100vh;
     }
     
     /* 3. 标题样式 */
     .hero-title {
-        font-size: 2.5rem;
-        font-weight: 800;
-        background: linear-gradient(120deg, #232F3E, #FF9900); /* Amazon 配色渐变 */
+        font-size: 3rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #232F3E, #FF9900, #146EB4);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
+        text-align: center;
         margin-bottom: 0.5rem;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .hero-subtitle {
-        font-size: 1.1rem;
-        color: #555;
-        margin-bottom: 2rem;
+        font-size: 1.2rem;
+        color: #666;
+        text-align: center;
+        margin-bottom: 3rem;
+        font-weight: 300;
     }
 
     /* 4. 卡片容器样式 */
-    .tool-card {
-        background-color: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        transition: transform 0.2s, box-shadow 0.2s;
+    .feature-card {
+        background: rgba(255, 255, 255, 0.95);
+        border: none;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
         height: 100%;
+        border: 1px solid rgba(255, 255, 255, 0.2);
     }
-    .tool-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+    .feature-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 16px 48px rgba(0,0,0,0.15);
         border-color: #FF9900;
     }
 
     /* 5. 状态徽章样式 */
-    .badge {
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 0.75rem;
+    .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.7rem;
         font-weight: 600;
         margin-left: 8px;
-        vertical-align: middle;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
-    .badge-stable { background-color: #e6fffa; color: #047857; border: 1px solid #047857; }
-    .badge-beta { background-color: #fffaf0; color: #dd6b20; border: 1px solid #dd6b20; }
-    .badge-dev { background-color: #f7fafc; color: #718096; border: 1px solid #718096; }
+    .badge-stable { 
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    }
+    .badge-beta { 
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: white;
+        box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+    }
+    .badge-dev { 
+        background: linear-gradient(135deg, #6b7280, #4b5563);
+        color: white;
+        box-shadow: 0 2px 8px rgba(107, 114, 128, 0.3);
+    }
     
-    /* 6. 分割线 */
-    .section-header {
-        font-size: 1.4rem;
+    /* 6. 分类标题 */
+    .category-title {
+        font-size: 1.8rem;
         font-weight: 700;
-        color: #232F3E;
-        margin-top: 30px;
-        margin-bottom: 15px;
-        border-left: 5px solid #FF9900;
-        padding-left: 10px;
+        color: #1f2937;
+        margin: 40px 0 20px 0;
+        text-align: center;
+        position: relative;
+    }
+    .category-title::after {
+        content: '';
+        position: absolute;
+        bottom: -8px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60px;
+        height: 3px;
+        background: linear-gradient(135deg, #FF9900, #232F3E);
+        border-radius: 2px;
+    }
+
+    /* 7. 按钮样式优化 */
+    .stButton > button {
+        background: linear-gradient(135deg, #FF9900, #e68900);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 12px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 16px rgba(255, 153, 0, 0.3);
+    }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(255, 153, 0, 0.4);
+    }
+
+    /* 8. 统计卡片 */
+    .stats-card {
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        border: 1px solid rgba(255, 255, 255, 0.3);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -97,124 +154,248 @@ if 'auth' in sys.modules:
         st.stop()
 
 # --- 4. 欢迎头部 ---
-col_logo, col_text = st.columns([1, 8])
-with col_logo:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/4/4a/Amazon_icon.svg", width=60) # 示例Logo，可换本地
-with col_text:
-    st.markdown('<div class="hero-title">Amazon AI Operation Hub</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">全能智造工作台 · 高效赋能运营 | 当前状态: <span style="color:green">● System Online</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-title">🚀 Amazon AI Hub</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-subtitle">智能运营工作台 · 让AI为你的电商业务赋能</div>', unsafe_allow_html=True)
+
+# 添加快速统计
+col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+with col_stat1:
+    st.markdown('<div class="stats-card"><h3>9</h3><p>稳定功能</p></div>', unsafe_allow_html=True)
+with col_stat2:
+    st.markdown('<div class="stats-card"><h3>1</h3><p>测试功能</p></div>', unsafe_allow_html=True)
+with col_stat3:
+    st.markdown('<div class="stats-card"><h3>2</h3><p>开发中</p></div>', unsafe_allow_html=True)
+with col_stat4:
+    st.markdown('<div class="stats-card"><h3>🟢</h3><p>系统状态</p></div>', unsafe_allow_html=True)
 
 # --- 5. 功能模块配置 ---
-# 这是一个配置字典，方便统一管理状态
-tools = {
-    # 核心创作 - Stable
-    "copywriter": {"path": "pages/1_✍️_Listing_Copywriter.py", "status": "Stable", "icon": "✍️", "title": "Listing 智能文案", "desc": "SEO 文案、五点描述、关键词优化 (V2.5)"},
-    "visual": {"path": "pages/6_🎨_Visual_Studio.py", "status": "Stable", "icon": "🎨", "title": "Visual Studio 文生图", "desc": "产品海报生成、场景图绘制 (Flux 引擎)"},
-    "smart_edit": {"path": "pages/2_🖼️_Smart_Edit.py", "status": "Stable", "icon": "🖼️", "title": "Smart Edit 图生图", "desc": "改款变体、场景置换、参考图生成"},
-    
-    # 视觉后期与工具 - Stable
-    "batch": {"path": "pages/7_🔄_Batch_Variant.py", "status": "Stable", "icon": "🔄", "title": "批量变体工厂", "desc": "SKU 矩阵批量生产与处理"},
-    "upscale": {"path": "pages/9_🔍_HD_Upscale.py", "status": "Stable", "icon": "🔍", "title": "HD Upscale 高清化", "desc": "图片无损放大、画质增强修复"},
-    "resizer": {"path": "pages/10_📐_Smart_Resizer.py", "status": "Stable", "icon": "📐", "title": "Smart Resizer", "desc": "智能画幅调整、多平台尺寸适配"},
-
-    # AI 实验室 - Beta/Dev
-    "chat": {"path": "pages/8_💬_AI_Studio.py", "status": "Beta", "icon": "💬", "title": "AI 助手 (Chat)", "desc": "运营知识库问答、自由对话 (待优化)"},
-    "canvas": {"path": "pages/3_🖌️_Magic_Canvas.py", "status": "Dev", "icon": "🖌️", "title": "Magic Canvas", "desc": "局部重绘与扩展 (开发攻坚中)"},
-
-    # 规划中 - Roadmap
-    "video": {"path": "pages/4_🎬_Video_Studio.py", "status": "Plan", "icon": "🎬", "title": "Video Studio", "desc": "电商短视频生成 (即将到来)"},
-    "aplus": {"path": "pages/5_🧩_APlus_Studio.py", "status": "Plan", "icon": "🧩", "title": "A+ 创意工场", "desc": "A+ 页面长图拼接与切片 (概念阶段)"}
+# 重新整理功能模块，突出核心功能
+core_tools = {
+    "copywriter": {
+        "path": "pages/1_✍️_Listing_Copywriter.py", 
+        "icon": "✍️", 
+        "title": "智能文案", 
+        "desc": "SEO文案生成、五点描述优化",
+        "status": "stable"
+    },
+    "visual": {
+        "path": "pages/6_🎨_Visual_Studio.py", 
+        "icon": "🎨", 
+        "title": "AI绘图", 
+        "desc": "产品海报、场景图生成",
+        "status": "stable"
+    },
+    "smart_edit": {
+        "path": "pages/2_🖼️_Smart_Edit.py", 
+        "icon": "🖼️", 
+        "title": "图片编辑", 
+        "desc": "智能修图、场景替换",
+        "status": "stable"
+    },
+    "batch": {
+        "path": "pages/7_🔄_Batch_Variant.py", 
+        "icon": "🔄", 
+        "title": "批量变体", 
+        "desc": "快速生成产品变体图",
+        "status": "stable"
+    }
 }
 
-# 辅助函数：渲染徽章
-def get_badge(status):
-    if status == "Stable": return '<span class="badge badge-stable">✅ 稳定版</span>'
-    if status == "Beta": return '<span class="badge badge-beta">🚧 公测版</span>'
-    return '<span class="badge badge-dev">🛠️ 开发中</span>'
+utility_tools = {
+    "upscale": {
+        "path": "pages/9_🔍_HD_Upscale.py", 
+        "icon": "🔍", 
+        "title": "高清放大", 
+        "desc": "图片无损放大增强",
+        "status": "stable"
+    },
+    "resizer": {
+        "path": "pages/10_📐_Smart_Resizer.py", 
+        "icon": "📐", 
+        "title": "尺寸调整", 
+        "desc": "智能画幅适配",
+        "status": "stable"
+    },
+    "fba": {
+        "path": "pages/11_🎰_fba_app.py", 
+        "icon": "📦", 
+        "title": "FBA计算器", 
+        "desc": "费用计算与优化建议",
+        "status": "stable"
+    },
+    "chat": {
+        "path": "pages/8_💬_AI_Studio.py", 
+        "icon": "💬", 
+        "title": "AI助手", 
+        "desc": "智能问答对话",
+        "status": "beta"
+    }
+}
 
-# --- 6. 核心创作区 (Tier 1: 高频使用) ---
-st.markdown('<div class="section-header">🚀 核心创作 (Core Creative)</div>', unsafe_allow_html=True)
-c1, c2, c3 = st.columns(3)
+# 辅助函数：渲染状态徽章
+def get_status_badge(status):
+    if status == "stable":
+        return '<span class="status-badge badge-stable">稳定</span>'
+    elif status == "beta":
+        return '<span class="status-badge badge-beta">测试</span>'
+    else:
+        return '<span class="status-badge badge-dev">开发中</span>'
 
-with c1:
-    t = tools["copywriter"]
-    with st.container(border=True):
-        st.markdown(f"### {t['icon']} {t['title']} {get_badge(t['status'])}", unsafe_allow_html=True)
-        st.caption(t['desc'])
-        st.page_link(t['path'], label="开始撰写文案", icon="🚀", use_container_width=True)
+# --- 6. 核心功能区 ---
+st.markdown('<div class="category-title">🎯 核心功能</div>', unsafe_allow_html=True)
 
-with c2:
-    t = tools["visual"]
-    with st.container(border=True):
-        st.markdown(f"### {t['icon']} {t['title']} {get_badge(t['status'])}", unsafe_allow_html=True)
-        st.caption(t['desc'])
-        st.page_link(t['path'], label="开始生成海报", icon="🎨", use_container_width=True)
+# 使用2x2网格布局展示核心功能
+col1, col2 = st.columns(2, gap="large")
 
-with c3:
-    t = tools["smart_edit"]
-    with st.container(border=True):
-        st.markdown(f"### {t['icon']} {t['title']} {get_badge(t['status'])}", unsafe_allow_html=True)
-        st.caption(t['desc'])
-        st.page_link(t['path'], label="进入修图中心", icon="🖼️", use_container_width=True)
+with col1:
+    # 智能文案
+    t = core_tools["copywriter"]
+    st.markdown(f'''
+    <div class="feature-card">
+        <h3>{t['icon']} {t['title']} {get_status_badge(t['status'])}</h3>
+        <p style="color: #666; margin: 12px 0;">{t['desc']}</p>
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link(t['path'], label="开始创作文案", icon="✍️", use_container_width=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 图片编辑
+    t = core_tools["smart_edit"]
+    st.markdown(f'''
+    <div class="feature-card">
+        <h3>{t['icon']} {t['title']} {get_status_badge(t['status'])}</h3>
+        <p style="color: #666; margin: 12px 0;">{t['desc']}</p>
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link(t['path'], label="开始编辑图片", icon="🖼️", use_container_width=True)
 
-# --- 7. 生产力工具箱 (Tier 2: 实用工具) ---
-st.markdown('<div class="section-header">🛠️ 视觉后期与工具 (Utilities)</div>', unsafe_allow_html=True)
-c4, c5, c6 = st.columns(3)
+with col2:
+    # AI绘图
+    t = core_tools["visual"]
+    st.markdown(f'''
+    <div class="feature-card">
+        <h3>{t['icon']} {t['title']} {get_status_badge(t['status'])}</h3>
+        <p style="color: #666; margin: 12px 0;">{t['desc']}</p>
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link(t['path'], label="开始AI绘图", icon="🎨", use_container_width=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 批量变体
+    t = core_tools["batch"]
+    st.markdown(f'''
+    <div class="feature-card">
+        <h3>{t['icon']} {t['title']} {get_status_badge(t['status'])}</h3>
+        <p style="color: #666; margin: 12px 0;">{t['desc']}</p>
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link(t['path'], label="批量生成变体", icon="🔄", use_container_width=True)
 
-with c4:
-    t = tools["batch"]
-    with st.container(border=True):
-        st.markdown(f"**{t['title']}** {get_badge(t['status'])}", unsafe_allow_html=True)
-        st.caption(t['desc'])
-        st.page_link(t['path'], label="进入批量任务", icon="⚡", use_container_width=True)
+# --- 7. 实用工具区 ---
+st.markdown('<div class="category-title">🛠️ 实用工具</div>', unsafe_allow_html=True)
 
-with c5:
-    t = tools["upscale"]
-    with st.container(border=True):
-        st.markdown(f"**{t['title']}** {get_badge(t['status'])}", unsafe_allow_html=True)
-        st.caption(t['desc'])
-        st.page_link(t['path'], label="图片高清化", icon="🔍", use_container_width=True)
+# 使用4列网格展示工具
+col1, col2, col3, col4 = st.columns(4, gap="medium")
 
-with c6:
-    t = tools["resizer"]
-    with st.container(border=True):
-        st.markdown(f"**{t['title']}** {get_badge(t['status'])}", unsafe_allow_html=True)
-        st.caption(t['desc'])
-        st.page_link(t['path'], label="调整尺寸", icon="📐", use_container_width=True)
+with col1:
+    t = utility_tools["upscale"]
+    st.markdown(f'''
+    <div class="feature-card">
+        <h4>{t['icon']} {t['title']}</h4>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">{t['desc']}</p>
+        {get_status_badge(t['status'])}
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link(t['path'], label="开始使用", use_container_width=True)
 
-# --- 8. 实验室与规划 (Tier 3: Beta & Roadmap) ---
-st.markdown('<div class="section-header">🧪 实验室与未来规划 (Labs & Roadmap)</div>', unsafe_allow_html=True)
-c7, c8, c9, c10 = st.columns(4)
+with col2:
+    t = utility_tools["resizer"]
+    st.markdown(f'''
+    <div class="feature-card">
+        <h4>{t['icon']} {t['title']}</h4>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">{t['desc']}</p>
+        {get_status_badge(t['status'])}
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link(t['path'], label="开始使用", use_container_width=True)
 
-with c7:
-    t = tools["chat"]
-    with st.container(border=True):
-        st.markdown(f"**{t['title']}** {get_badge(t['status'])}", unsafe_allow_html=True)
-        st.caption(t['desc'])
-        st.page_link(t['path'], label="进入对话", icon="💬", use_container_width=True)
+with col3:
+    t = utility_tools["fba"]
+    st.markdown(f'''
+    <div class="feature-card">
+        <h4>{t['icon']} {t['title']}</h4>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">{t['desc']}</p>
+        {get_status_badge(t['status'])}
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link(t['path'], label="开始使用", use_container_width=True)
 
-with c8:
-    t = tools["canvas"]
-    with st.container(border=True):
-        st.markdown(f"**{t['title']}**", unsafe_allow_html=True) # Dev状态不强调Badge，或手动置灰
-        st.caption(f"状态: 🔴 维护中 | {t['desc']}")
-        st.button("暂不可用", key="btn_canvas", disabled=True, use_container_width=True)
+with col4:
+    t = utility_tools["chat"]
+    st.markdown(f'''
+    <div class="feature-card">
+        <h4>{t['icon']} {t['title']}</h4>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">{t['desc']}</p>
+        {get_status_badge(t['status'])}
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link(t['path'], label="开始使用", use_container_width=True)
 
-with c9:
-    t = tools["video"]
-    with st.container(border=True):
-        st.markdown(f"**{t['title']}**", unsafe_allow_html=True)
-        st.caption("状态: ⚪ 规划中 | 视频生成引擎")
-        st.button("敬请期待", key="btn_video", disabled=True, use_container_width=True)
+# --- 8. 开发中功能 ---
+st.markdown('<div class="category-title">🚧 开发中功能</div>', unsafe_allow_html=True)
 
-with c10:
-    t = tools["aplus"]
-    with st.container(border=True):
-        st.markdown(f"**{t['title']}**", unsafe_allow_html=True)
-        st.caption("状态: ⚪ 规划中 | A+ 拼图工具")
-        st.button("待开发", key="btn_aplus", disabled=True, use_container_width=True)
+col1, col2 = st.columns(2, gap="large")
 
-# --- 9. 底部状态栏 ---
+with col1:
+    st.markdown(f'''
+    <div class="feature-card" style="opacity: 0.7;">
+        <h4>🖌️ Magic Canvas</h4>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">局部重绘与智能扩展</p>
+        <span class="status-badge badge-dev">开发中</span>
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link("pages/3_🖌️_Magic_Canvas.py", label="体验测试版", use_container_width=True)
+
+with col2:
+    st.markdown(f'''
+    <div class="feature-card" style="opacity: 0.5;">
+        <h4>🎬 Video Studio</h4>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">电商短视频生成 (即将推出)</p>
+        <span class="status-badge badge-dev">规划中</span>
+    </div>
+    ''', unsafe_allow_html=True)
+    st.button("敬请期待", disabled=True, use_container_width=True)
+
+# --- 9. 底部信息 ---
+st.markdown("<br><br>", unsafe_allow_html=True)
+
+# 添加使用提示
+with st.expander("💡 使用提示", expanded=False):
+    col_tip1, col_tip2 = st.columns(2)
+    with col_tip1:
+        st.markdown("""
+        **🚀 快速上手：**
+        1. 从智能文案开始，生成产品描述
+        2. 使用AI绘图创建产品海报
+        3. 通过图片编辑优化视觉效果
+        4. 利用批量变体快速扩展SKU
+        """)
+    with col_tip2:
+        st.markdown("""
+        **🛠️ 实用工具：**
+        - 高清放大：提升图片质量
+        - 尺寸调整：适配不同平台
+        - FBA计算器：优化成本结构
+        - AI助手：获取运营建议
+        """)
+
 st.divider()
-st.caption("© 2025 Amazon AI Team | Build 2.0.1 | Powered by Gemini & Flux")
+col_footer1, col_footer2, col_footer3 = st.columns([1, 2, 1])
+with col_footer2:
+    st.markdown(
+        '<p style="text-align: center; color: #666; font-size: 0.9rem;">© 2025 Amazon AI Hub | Powered by Gemini & Flux | Build 2.1.0</p>', 
+        unsafe_allow_html=True
+    )
 
