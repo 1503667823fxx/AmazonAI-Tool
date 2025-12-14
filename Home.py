@@ -421,49 +421,7 @@ with st.expander("📰 Amazon实时资讯", expanded=True):
             st.cache_data.clear()
             st.rerun()
     
-    # 调试按钮：测试RSS连接
-    if st.button("🔧 测试RSS连接", key="test_rss"):
-        try:
-            import feedparser
-            st.write("📡 正在测试多个RSS源...")
-            
-            test_feeds = [
-                ('Amazon新闻', 'https://press.aboutamazon.com/rss/news-releases.xml'),
-                ('Amazon博客', 'https://blog.aboutamazon.com/feed'),
-                ('AWS博客', 'https://aws.amazon.com/blogs/aws/feed/'),
-                ('广告博客', 'https://advertising.amazon.com/blog/feed')
-            ]
-            
-            total_entries = 0
-            for name, url in test_feeds:
-                try:
-                    feed = feedparser.parse(url)
-                    entry_count = len(feed.entries)
-                    total_entries += entry_count
-                    
-                    if entry_count > 0:
-                        st.success(f"✅ {name}: {entry_count} 条资讯")
-                        # 显示最新一条的标题和日期
-                        latest = feed.entries[0]
-                        pub_date = "未知日期"
-                        if hasattr(latest, 'published_parsed') and latest.published_parsed:
-                            try:
-                                from datetime import datetime
-                                pub_date = datetime(*latest.published_parsed[:6]).strftime('%Y-%m-%d')
-                            except:
-                                pass
-                        st.write(f"   最新: {latest.title[:60]}... ({pub_date})")
-                    else:
-                        st.warning(f"⚠️ {name}: 连接成功但无内容")
-                        
-                except Exception as e:
-                    st.error(f"❌ {name}: 连接失败 - {str(e)[:50]}...")
-            
-            st.info(f"📊 总计获取到 {total_entries} 条资讯")
-                
-        except Exception as e:
-            st.error(f"❌ RSS测试失败: {e}")
-    
+
     with col_btn2:
         st.link_button(
             "🌐 更多资讯", 
@@ -541,7 +499,7 @@ utility_tools = {
     "canvas": {
         "path": "pages/3_🖌️_Magic_Canvas.py", 
         "icon": "🖌️", 
-        "title": "Magic Canvas", 
+        "title": "局部重绘", 
         "desc": "局部重绘与智能扩展",
         "status": "stable"
     },
