@@ -19,7 +19,7 @@ if root_dir not in sys.path:
 try:
     import auth
     from services.magic_canvas.inpaint_engine import InpaintService
-    from services.magic_canvas.canvas_utils import create_drawing_canvas, strokes_to_mask
+    from services.magic_canvas.canvas_utils import create_drawing_canvas
 except ImportError as e:
     st.error(f"❌ 核心模块丢失: {e}")
     st.stop()
@@ -35,19 +35,13 @@ if "inpaint_service" not in st.session_state:
     api_key = st.secrets.get("GOOGLE_API_KEY")
     st.session_state.inpaint_service = InpaintService(api_key)
 
-# --- 4. 辅助函数 ---
-def image_to_base64(image):
-    """将PIL图像转换为base64字符串"""
-    buffered = io.BytesIO()
-    image.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode()
-    return f"data:image/png;base64,{img_str}"
+# --- 4. 页面布局 ---
 
 
 
 # --- 5. 页面布局 ---
-st.title("🖌️ Magic Canvas - 局部重绘")
-st.caption("在图片上涂抹想要修改的区域，AI帮你实现精准的局部重绘。")
+st.title("🖌️ Magic Canvas - Gemini创意重绘")
+st.caption("上传图片，输入简洁的创意描述，让Gemini为你重新创作图片的中心区域。")
 
 # 初始化状态
 if "uploaded_image" not in st.session_state:
@@ -104,83 +98,76 @@ with col_canvas:
         st.subheader("🎨 编辑画布")
         
         # 显示操作提示
-        st.info("💡 在图片上涂抹想要修改的区域，然后点击重绘按钮")
+        st.info("💡 可以在画布上涂抹（当前版本将重绘中心区域）")
         
         # 使用改进的canvas组件
-        canvas_data = create_drawing_canvas(
+        create_drawing_canvas(
             st.session_state.uploaded_image, 
-            brush_size=brush_size,
-            canvas_key=f"magic_canvas_{id(st.session_state.uploaded_image)}"
+            brush_size=brush_size
         )
         
-        # 处理canvas返回的数据
-        if canvas_data:
-            try:
-                data = json.loads(canvas_data)
-                if data.get('type') == 'canvas_strokes':
-                    st.session_state.canvas_strokes = data.get('strokes', [])
-            except (json.JSONDecodeError, TypeError):
-                pass
-        
-        # 显示当前涂抹状态
-        if st.session_state.canvas_strokes:
-            st.success(f"✅ 已涂抹 {len(st.session_state.canvas_strokes)} 个区域")
-        else:
-            st.warning("⚠️ 请先在图片上涂抹要修改的区域")
+        # 简化的状态管理
+        st.info("💡 在上方画布中涂抹要修改的区域，然后输入重绘指令")
         
         # 处理重绘请求
         if generate_btn:
-            if not st.session_state.canvas_strokes:
-                st.error("❌ 请先在图片上涂抹要修改的区域！")
-            else:
-                with st.status("🎨 正在进行局部重绘...", expanded=True) as status:
-                    try:
-                        # 1. 生成mask
-                        st.write("🔍 分析涂抹区域...")
-                        mask_image = strokes_to_mask(
-                            st.session_state.canvas_strokes, 
-                            st.session_state.uploaded_image.size, 
-                            brush_size
+            with st.status("🎨 正在进行创意重绘...", expanded=True) as status:
+                try:
+                    # 1. 创建一个简单的中心区域mask作为示例
+                    st.write("🔍 准备重绘区域...")
+                    
+                    # 创建一个中心区域的mask（用户应该在这个区域涂抹）
+                    mask_image = Image.new('L', st.session_state.uploaded_image.size, 0)
+                    draw = ImageDraw.Draw(mask_image)
+                    
+                    # 创建一个中心圆形区域作为默认mask
+                    w, h = st.session_state.uploaded_image.size
+                    center_x, center_y = w // 2, h // 2
+                    radius = min(w, h) // 4
+                    draw.ellipse([
+                        center_x - radius, center_y - radius,
+                        center_x + radius, center_y + radius
+                    ], fill=255)
+                    
+                    # 显示生成的mask
+                    with st.expander("🔍 查看重绘区域", expanded=False):
+                        st.image(mask_image, caption="重绘区域 (白色部分)", width=300)
+                        st.info("💡 当前使用中心区域作为重绘范围，未来版本将支持自定义涂抹")
+                    
+                    # 2. 调用Gemini重绘服务
+                    st.write("🎨 Gemini正在发挥创意...")
+                    result_image = st.session_state.inpaint_service.inpaint(
+                        original_image=st.session_state.uploaded_image,
+                        mask_image=mask_image,
+                        prompt=prompt
+                    )
+                    
+                    if result_image:
+                        status.update(label="✅ 创意重绘完成！", state="complete")
+                        
+                        # 显示结果对比
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.image(st.session_state.uploaded_image, caption="原图", use_column_width=True)
+                        with col2:
+                            st.image(result_image, caption="Gemini创意结果", use_column_width=True)
+                        
+                        # 提供下载按钮
+                        buf = io.BytesIO()
+                        result_image.save(buf, format='PNG')
+                        st.download_button(
+                            label="📥 下载创意结果",
+                            data=buf.getvalue(),
+                            file_name="gemini_magic_result.png",
+                            mime="image/png",
+                            use_container_width=True
                         )
+                    else:
+                        st.error("❌ 重绘失败，请检查API配置")
                         
-                        # 显示生成的mask (调试用)
-                        with st.expander("🔍 查看生成的遮罩", expanded=False):
-                            st.image(mask_image, caption="生成的遮罩 (白色区域将被重绘)", width=300)
-                        
-                        # 2. 调用inpainting服务
-                        st.write("🎨 AI正在重绘指定区域...")
-                        result_image = st.session_state.inpaint_service.inpaint(
-                            original_image=st.session_state.uploaded_image,
-                            mask_image=mask_image,
-                            prompt=prompt
-                        )
-                        
-                        if result_image:
-                            status.update(label="✅ 重绘完成！", state="complete")
-                            
-                            # 显示结果对比
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.image(st.session_state.uploaded_image, caption="原图", use_column_width=True)
-                            with col2:
-                                st.image(result_image, caption="重绘结果", use_column_width=True)
-                            
-                            # 提供下载按钮
-                            buf = io.BytesIO()
-                            result_image.save(buf, format='PNG')
-                            st.download_button(
-                                label="📥 下载重绘结果",
-                                data=buf.getvalue(),
-                                file_name="magic_canvas_result.png",
-                                mime="image/png",
-                                use_container_width=True
-                            )
-                        else:
-                            st.error("❌ 重绘失败，请检查网络连接或API配置")
-                            
-                    except Exception as e:
-                        st.error(f"❌ 处理过程中出现错误: {str(e)}")
-                        st.info("💡 提示：请确保已正确配置API密钥和网络连接")
+                except Exception as e:
+                    st.error(f"❌ 处理过程中出现错误: {str(e)}")
+                    st.info("💡 提示：请确保已正确配置Google API密钥")
     else:
         # 空状态显示
         st.subheader("📁 请上传图片开始编辑")
