@@ -183,6 +183,12 @@ class UIController:
         # Add user message to conversation
         message_id = state_manager.add_user_message(user_input, uploaded_images)
         
+        # Reset file uploader to clear uploaded files from UI
+        if uploaded_images:  # Only reset if there were uploaded images
+            state = state_manager.get_state()
+            state.uploader_key_id += 1
+            state_manager.update_state(state)
+        
         # Trigger inference without clearing input (Streamlit handles this automatically)
         st.session_state.trigger_inference = True
         st.rerun()
