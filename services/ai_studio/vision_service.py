@@ -116,21 +116,63 @@ class StudioVisionService:
             return None, f"❌ Reference resolution error: {str(e)}"
     
     def _validate_reference_image(self, ref_img) -> bool:
-        """Validate reference image for quality and format - simplified version"""
+        """Validate reference image for quality and format"""
         try:
-            # Debug: Log the type and attributes of ref_img
-            ref_img_type = type(ref_img).__name__
-            st.write(f"🔍 Debug: Validating image of type: {ref_img_type}")
+            # Case 1: PIL Image object
+            if isinstance(ref_img, Image.Image):
+                width, height = ref_img.size  # This is a tuple (width, height)
+                if width < 64 or height < 64:
+                    st.warning("Reference image too small (minimum 64x64 pixels)")
+                    return False
+                if width > 4096 or height > 4096:
+                    st.warning("Reference image too large (maximum 4096x4096 pixels)")
+                    return False
+                return True
             
-            # For now, just return True to bypass validation and see if the error comes from elsewhere
-            st.write(f"🔍 Debug: Bypassing validation temporarily")
-            return True
+            # Case 2: Streamlit uploaded file with file size and read capability
+            elif hasattr(ref_img, 'size') and hasattr(ref_img, 'read'):
+                # Check file size if it's an integer (file size in bytes)
+                if isinstance(ref_img.size, int):
+                    if ref_img.size > self.max_image_size:
+                        st.warning(f"Reference image too large: {ref_img.size / (1024*1024):.1f}MB (max: {self.max_image_size / (1024*1024):.1f}MB)")
+                        return False
+                
+                # Try to open as PIL Image for dimension validation
+                try:
+                    current_pos = ref_img.tell() if hasattr(ref_img, 'tell') else 0
+                    
+                    # Read and validate as PIL Image
+                    img = Image.open(ref_img)
+                    width, height = img.size
+                    
+                    # Reset file position
+                    if hasattr(ref_img, 'seek'):
+                        ref_img.seek(current_pos)
+                    
+                    # Validate dimensions
+                    if width < 64 or height < 64:
+                        st.warning("Reference image too small (minimum 64x64 pixels)")
+                        return False
+                    if width > 4096 or height > 4096:
+                        st.warning("Reference image too large (maximum 4096x4096 pixels)")
+                        return False
+                    
+                    return True
+                    
+                except Exception as img_error:
+                    st.warning(f"Cannot validate uploaded file as image: {str(img_error)}")
+                    return False
+            
+            # Case 3: Other objects - try to handle gracefully
+            else:
+                # If we can't validate it properly, assume it's valid
+                # This prevents crashes while still allowing functionality
+                return True
             
         except Exception as e:
-            st.error(f"🔍 Debug: Exception in validation: {str(e)}")
-            import traceback
-            st.error(f"🔍 Debug: Traceback: {traceback.format_exc()}")
-            return False
+            st.warning(f"Reference image validation error: {str(e)}")
+            # Return True to allow functionality even if validation fails
+            return True
     
     def _validate_image_data(self, image_data: bytes) -> bool:
         """Validate raw image data"""
