@@ -40,6 +40,81 @@ class StudioVisionService:
         self.supported_formats = ['JPEG', 'PNG', 'WEBP']
         self.max_image_size = 20 * 1024 * 1024  # 20MB
 
+    def resolve_reference_images(self, current_msg: Dict[str, Any], message_history: List[Dict[str, Any]]) -> Tuple[List[Image.Image], Optional[str]]:
+        """
+        Enhanced reference image resolution with multi-image support
+        
+        Returns all valid uploaded images for multi-image processing
+        
+        Args:
+            current_msg: Current user message with potential reference images
+            message_history: Previous conversation messages
+            
+        Returns:
+            Tuple of (list_of_reference_images, indicator_text)
+        """
+        try:
+            # Current message uploaded images - return all valid images
+            if current_msg.get("ref_images") and len(current_msg["ref_images"]) > 0:
+                ref_images = current_msg["ref_images"]
+                valid_images = []
+                
+                # Validate each image and collect all valid ones
+                for i, ref_img in enumerate(ref_images):
+                    try:
+                        if self._validate_reference_image(ref_img):
+                            valid_images.append(ref_img)
+                        else:
+                            # Log validation failure
+                            img_name = getattr(ref_img, 'name', f'image_{i+1}')
+                            st.warning(f"Skipping invalid image: {img_name}")
+                    except Exception as img_error:
+                        # Log error and continue to next image
+                        img_name = getattr(ref_img, 'name', f'image_{i+1}')
+                        st.warning(f"Error processing {img_name}: {str(img_error)}")
+                
+                if valid_images:
+                    if len(valid_images) == 1:
+                        indicator = f"📸 Using uploaded reference image"
+                        if hasattr(valid_images[0], 'name'):
+                            indicator += f": {valid_images[0].name}"
+                    else:
+                        indicator = f"📸 Using {len(valid_images)} uploaded reference images for multi-image processing"
+                    return valid_images, indicator
+                else:
+                    return [], f"⚠️ None of the {len(ref_images)} uploaded images could be validated"
+            
+            # 2. Visual relay: Check for previous AI-generated images (iterative editing)
+            if len(message_history) >= 1:
+                # Look for the most recent AI message with image result
+                for i in range(len(message_history) - 1, -1, -1):
+                    prev_msg = message_history[i]
+                    
+                    if (prev_msg.get("role") == "model" and 
+                        prev_msg.get("type") == "image_result" and 
+                        prev_msg.get("hd_data")):
+                        
+                        try:
+                            prev_bytes = prev_msg["hd_data"]
+                            img = Image.open(io.BytesIO(prev_bytes))
+                            
+                            # Validate the previous image
+                            if self._validate_image_data(prev_bytes):
+                                indicator = "🔗 Auto-referencing previous generated image (iterative editing)"
+                                return [img], indicator
+                            else:
+                                continue  # Try next image in history
+                                
+                        except Exception as e:
+                            st.warning(f"Could not load previous image: {str(e)}")
+                            continue
+            
+            return [], None
+            
+        except Exception as e:
+            st.error(f"Error resolving reference images: {str(e)}")
+            return [], f"❌ Reference resolution error: {str(e)}"
+
     def resolve_reference_image(self, current_msg: Dict[str, Any], message_history: List[Dict[str, Any]]) -> Tuple[Optional[Image.Image], Optional[str]]:
         """
         Enhanced reference image resolution with better visual feedback and error handling
@@ -192,7 +267,7 @@ class StudioVisionService:
             return False
 
     def generate_image_with_progress(self, prompt: str, model_name: str, ref_image=None, 
-                                   progress_callback=None) -> ImageGenerationResult:
+                                   ref_images=None, progress_callback=None) -> ImageGenerationResult:
         """
         Enhanced image generation with progress indicators and better error handling
         
@@ -228,8 +303,35 @@ class StudioVisionService:
             model = genai.GenerativeModel(model_name)
             inputs = [prompt]
             
-            # Process reference image if provided
-            if ref_image:
+            # Process reference images if provided (support both single and multiple images)
+            reference_images_to_use = []
+            
+            # Handle multiple reference images (new parameter)
+            if ref_images and len(ref_images) > 0:
+                if progress_callback:
+                    progress_callback(f"Processing {len(ref_images)} reference images...", 0.2)
+                
+                for i, ref_img in enumerate(ref_images):
+                    try:
+                        if self._validate_reference_image(ref_img):
+                            reference_images_to_use.append(ref_img)
+                        else:
+                            st.warning(f"Skipping invalid reference image {i+1}")
+                    except Exception as validation_error:
+                        st.warning(f"Error validating reference image {i+1}: {str(validation_error)}")
+                
+                if reference_images_to_use:
+                    inputs.extend(reference_images_to_use)
+                    if len(reference_images_to_use) == 1:
+                        result.reference_indicator = "🔗 Using 1 reference image for generation"
+                    else:
+                        result.reference_indicator = f"🔗 Using {len(reference_images_to_use)} reference images for multi-image generation"
+                else:
+                    result.error = "No valid reference images found"
+                    return result
+            
+            # Handle single reference image (backward compatibility)
+            elif ref_image:
                 if progress_callback:
                     progress_callback("Processing reference image...", 0.2)
                 
