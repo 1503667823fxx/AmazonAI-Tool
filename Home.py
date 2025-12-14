@@ -295,78 +295,46 @@ with st.expander("📰 Amazon实时资讯", expanded=True):
     if not news_list:
         st.warning("暂时无法获取资讯，请稍后刷新")
     else:
-        # 使用2x2网格显示资讯
+        # 使用简单的容器显示资讯，避免HTML渲染问题
         col1, col2 = st.columns(2)
         
         for i, news in enumerate(news_list):
             target_col = col1 if i % 2 == 0 else col2
             
             with target_col:
-                # 根据来源设置颜色
-                colors = {
-                    '官方': '#10b981',
-                    '官方博客': '#059669',
-                    '广告': '#8b5cf6',
-                    '品牌': '#ef4444',
-                    'FBA': '#f59e0b',
-                    '新闻': '#6b7280',
-                    'NewsAPI': '#3b82f6'
-                }
-                color = colors.get(news['source'], '#6b7280')
-                
-                # 创建资讯卡片
-                st.markdown(f"""
-                <div style="
-                    background: rgba(255,255,255,0.95);
-                    border-radius: 10px;
-                    padding: 16px;
-                    margin-bottom: 12px;
-                    border-left: 4px solid {color};
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                ">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="
-                            background: {color};
-                            color: white;
-                            padding: 3px 10px;
-                            border-radius: 15px;
-                            font-size: 0.7rem;
-                            font-weight: 600;
-                        ">{news['source']}</span>
-                        <span style="color: #9ca3af; font-size: 0.75rem;">{news['date']}</span>
-                    </div>
+                # 使用Streamlit原生组件而不是HTML
+                with st.container(border=True):
+                    # 来源标签
+                    source_colors = {
+                        '官方': '🟢',
+                        '官方博客': '🟢', 
+                        '广告': '🟣',
+                        '品牌': '🔴',
+                        'FBA': '🟠',
+                        '新闻': '⚪',
+                        'NewsAPI': '🔵'
+                    }
+                    source_icon = source_colors.get(news['source'], '⚪')
                     
-                    <h4 style="
-                        margin: 0 0 8px 0; 
-                        color: #1f2937; 
-                        font-size: 0.95rem;
-                        line-height: 1.3;
-                        font-weight: 600;
-                    ">
-                        {news['title']}
-                    </h4>
+                    # 标题和来源
+                    st.markdown(f"**{source_icon} {news['source']}** · {news['date']}")
                     
-                    <p style="
-                        margin: 0 0 12px 0; 
-                        color: #6b7280; 
-                        font-size: 0.85rem; 
-                        line-height: 1.4;
-                    ">
-                        {news['desc']}
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # 添加跳转按钮
-                if news.get('link'):
-                    st.link_button(
-                        "🔗 查看详情", 
-                        news['link'], 
-                        use_container_width=True,
-                        help=f"跳转到 {news['source']} 查看完整内容"
-                    )
-                else:
-                    st.button("暂无链接", disabled=True, use_container_width=True)
+                    # 资讯标题
+                    st.markdown(f"### {news['title']}")
+                    
+                    # 描述
+                    st.markdown(news['desc'])
+                    
+                    # 跳转按钮
+                    if news.get('link'):
+                        st.link_button(
+                            "🔗 查看详情", 
+                            news['link'], 
+                            use_container_width=True,
+                            help=f"跳转到 {news['source']} 查看完整内容"
+                        )
+                    else:
+                        st.button("暂无链接", disabled=True, use_container_width=True)
     
     # 操作按钮
     col_btn1, col_btn2 = st.columns(2)
