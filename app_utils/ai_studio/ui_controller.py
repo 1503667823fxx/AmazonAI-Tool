@@ -258,12 +258,26 @@ class UIController:
             with status_container:
                 status = st.status("🎨 Preparing image generation...", expanded=True)
             
-            # Get vision service (should be initialized by now)
+            # Get vision service with fallback initialization
             vision_svc = st.session_state.get("studio_vision_svc")
             if not vision_svc:
-                with status:
-                    st.error("❌ Vision service not available. Please refresh the page.")
-                return
+                # Try to initialize vision service on demand
+                try:
+                    from services.ai_studio.vision_service import StudioVisionService
+                    api_key = st.secrets.get("GOOGLE_API_KEY")
+                    if api_key:
+                        st.session_state.studio_vision_svc = StudioVisionService(api_key)
+                        vision_svc = st.session_state.studio_vision_svc
+                        with status:
+                            st.success("✅ Vision service initialized on demand")
+                    else:
+                        with status:
+                            st.error("❌ Google API key not found. Please configure GOOGLE_API_KEY in secrets.")
+                        return
+                except Exception as e:
+                    with status:
+                        st.error(f"❌ Failed to initialize vision service: {str(e)}")
+                    return
             
             # Check if it's a dummy service
             if hasattr(vision_svc, '__class__') and 'Dummy' in vision_svc.__class__.__name__:
