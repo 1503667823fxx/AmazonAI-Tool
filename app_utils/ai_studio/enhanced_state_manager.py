@@ -33,9 +33,24 @@ class EnhancedStateManager:
                 st.session_state[self.state_key] = ConversationState()
         
         # Initialize vision service if not present
-        api_key = st.secrets.get("GOOGLE_API_KEY")
         if "studio_vision_svc" not in st.session_state:
-            st.session_state.studio_vision_svc = StudioVisionService(api_key)
+            try:
+                api_key = st.secrets.get("GOOGLE_API_KEY")
+                if not api_key:
+                    st.warning("⚠️ Google API key not found. Image generation will not be available.")
+                st.session_state.studio_vision_svc = StudioVisionService(api_key)
+            except Exception as e:
+                st.error(f"❌ Failed to initialize vision service: {e}")
+                # Create a minimal dummy service to prevent crashes
+                class DummyVisionService:
+                    def resolve_reference_image(self, *args, **kwargs):
+                        return None, "❌ Vision service initialization failed"
+                    def generate_image_with_progress(self, *args, **kwargs):
+                        from services.ai_studio.vision_service import ImageGenerationResult
+                        result = ImageGenerationResult()
+                        result.error = "Vision service initialization failed"
+                        return result
+                st.session_state.studio_vision_svc = DummyVisionService()
         
         return st.session_state[self.state_key]
     
