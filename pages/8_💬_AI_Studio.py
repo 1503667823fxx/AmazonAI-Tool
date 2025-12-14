@@ -89,9 +89,13 @@ def main():
         
         # Debug: Check if vision service is available
         if "studio_vision_svc" in st.session_state:
-            st.success("✅ Vision service is available")
+            vision_svc = st.session_state.studio_vision_svc
+            if hasattr(vision_svc, '__class__') and 'Dummy' in vision_svc.__class__.__name__:
+                st.warning("⚠️ Vision service is in fallback mode - image generation disabled")
+            else:
+                st.success("✅ Vision service is fully available")
         else:
-            st.warning("⚠️ Vision service not found in session state")
+            st.error("❌ Vision service not found in session state")
         
         # Initialize and render the enhanced UI
         ui_controller.render_main_interface()
