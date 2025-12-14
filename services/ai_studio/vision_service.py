@@ -54,16 +54,35 @@ class StudioVisionService:
         try:
             # 1. Priority: Use user-uploaded images from current message
             if current_msg.get("ref_images") and len(current_msg["ref_images"]) > 0:
-                ref_img = current_msg["ref_images"][0]
+                ref_images = current_msg["ref_images"]
                 
-                # Validate and process the reference image
-                if self._validate_reference_image(ref_img):
-                    indicator = f"📸 Using uploaded reference image"
-                    if hasattr(ref_img, 'name'):
-                        indicator += f": {ref_img.name}"
-                    return ref_img, indicator
-                else:
-                    return None, "⚠️ Reference image validation failed"
+                # Handle multiple images - validate each and use the first valid one
+                for i, ref_img in enumerate(ref_images):
+                    try:
+                        if self._validate_reference_image(ref_img):
+                            indicator = f"📸 Using uploaded reference image"
+                            if hasattr(ref_img, 'name'):
+                                indicator += f": {ref_img.name}"
+                            
+                            # Add info about multiple images if applicable
+                            if len(ref_images) > 1:
+                                indicator += f" (image {i+1} of {len(ref_images)})"
+                                
+                            return ref_img, indicator
+                        else:
+                            # Log validation failure for this image
+                            if hasattr(ref_img, 'name'):
+                                st.warning(f"Skipping invalid image: {ref_img.name}")
+                            continue
+                            
+                    except Exception as img_error:
+                        # Log error for this specific image and continue to next
+                        img_name = getattr(ref_img, 'name', f'image_{i+1}')
+                        st.warning(f"Error processing {img_name}: {str(img_error)}")
+                        continue
+                
+                # If we get here, no valid images were found
+                return None, f"⚠️ None of the {len(ref_images)} uploaded images could be validated"
             
             # 2. Visual relay: Check for previous AI-generated images (iterative editing)
             if len(message_history) >= 1:
@@ -99,20 +118,47 @@ class StudioVisionService:
     def _validate_reference_image(self, ref_img) -> bool:
         """Validate reference image for quality and format"""
         try:
-            if hasattr(ref_img, 'size'):
-                # Check file size
+            # Check if it's a Streamlit uploaded file with file size
+            if hasattr(ref_img, 'size') and isinstance(ref_img.size, int):
+                # Check file size (for uploaded files)
                 if ref_img.size > self.max_image_size:
                     st.warning(f"Reference image too large: {ref_img.size / (1024*1024):.1f}MB (max: {self.max_image_size / (1024*1024):.1f}MB)")
                     return False
             
             # If it's a PIL Image, validate dimensions
             if isinstance(ref_img, Image.Image):
-                width, height = ref_img.size
+                width, height = ref_img.size  # This is a tuple (width, height)
                 if width < 64 or height < 64:
                     st.warning("Reference image too small (minimum 64x64 pixels)")
                     return False
                 if width > 4096 or height > 4096:
                     st.warning("Reference image too large (maximum 4096x4096 pixels)")
+                    return False
+            
+            # If it's an uploaded file, try to open it as PIL Image for validation
+            elif hasattr(ref_img, 'read'):
+                try:
+                    # Save current position
+                    current_pos = ref_img.tell() if hasattr(ref_img, 'tell') else 0
+                    
+                    # Read and validate as PIL Image
+                    img = Image.open(ref_img)
+                    width, height = img.size
+                    
+                    # Reset file position
+                    if hasattr(ref_img, 'seek'):
+                        ref_img.seek(current_pos)
+                    
+                    # Validate dimensions
+                    if width < 64 or height < 64:
+                        st.warning("Reference image too small (minimum 64x64 pixels)")
+                        return False
+                    if width > 4096 or height > 4096:
+                        st.warning("Reference image too large (maximum 4096x4096 pixels)")
+                        return False
+                        
+                except Exception as img_error:
+                    st.warning(f"Cannot validate image format: {str(img_error)}")
                     return False
             
             return True
