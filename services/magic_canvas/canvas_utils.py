@@ -5,10 +5,10 @@ import base64
 import io
 import json
 
-def create_drawing_canvas(image, brush_size=20, canvas_key="drawing_canvas"):
+def create_drawing_canvas(image, brush_size=20):
     """
     创建一个基于HTML5 Canvas的绘图组件
-    返回用户的绘制数据
+    使用更简单的方式处理用户绘制
     """
     
     # 将图像转换为base64
@@ -17,95 +17,88 @@ def create_drawing_canvas(image, brush_size=20, canvas_key="drawing_canvas"):
     img_base64 = base64.b64encode(buffered.getvalue()).decode()
     img_data_url = f"data:image/png;base64,{img_base64}"
     
-    # HTML和JavaScript代码
+    # 简化的HTML Canvas实现
     canvas_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <style>
             body {{ margin: 0; padding: 10px; font-family: Arial, sans-serif; }}
-            #canvas-container {{ 
-                position: relative; 
-                display: inline-block; 
+            .canvas-wrapper {{ 
                 border: 2px solid #ddd; 
                 border-radius: 8px; 
                 overflow: hidden;
+                display: inline-block;
                 background: #f9f9f9;
             }}
-            #drawing-canvas {{ 
+            #canvas {{ 
                 display: block; 
                 cursor: crosshair;
                 background-image: url('{img_data_url}');
-                background-size: contain;
+                background-size: cover;
                 background-repeat: no-repeat;
                 background-position: center;
             }}
             .controls {{
-                margin: 10px 0;
                 text-align: center;
+                padding: 10px;
+                background: #f0f0f0;
+                border-bottom: 1px solid #ddd;
             }}
             button {{
-                padding: 8px 16px;
+                padding: 6px 12px;
                 margin: 0 5px;
                 border: none;
                 border-radius: 4px;
                 cursor: pointer;
-                font-size: 14px;
+                font-size: 12px;
             }}
-            .clear-btn {{ background: #ff4444; color: white; }}
-            .undo-btn {{ background: #4444ff; color: white; }}
-            .status {{ 
-                margin: 10px 0; 
+            .clear {{ background: #ff4444; color: white; }}
+            .info {{ 
                 padding: 8px; 
                 background: #e8f4f8; 
-                border-radius: 4px; 
                 font-size: 12px;
+                text-align: center;
             }}
         </style>
     </head>
     <body>
-        <div class="controls">
-            <button class="undo-btn" onclick="undoLastStroke()">↶ 撤销</button>
-            <button class="clear-btn" onclick="clearCanvas()">🗑️ 清除</button>
-            <span style="margin-left: 20px;">画笔大小: {brush_size}px</span>
-        </div>
-        
-        <div id="canvas-container">
-            <canvas id="drawing-canvas" width="{image.width}" height="{image.height}"></canvas>
-        </div>
-        
-        <div class="status" id="status">
-            准备就绪 - 在图片上涂抹想要修改的区域
+        <div class="canvas-wrapper">
+            <div class="controls">
+                <button class="clear" onclick="clearCanvas()">🗑️ 清除</button>
+                <span>画笔: {brush_size}px | </span>
+                <span id="status">准备绘制</span>
+            </div>
+            <canvas id="canvas" width="{image.width}" height="{image.height}"></canvas>
+            <div class="info">在图片上涂抹想要修改的区域</div>
         </div>
 
         <script>
-            const canvas = document.getElementById('drawing-canvas');
+            const canvas = document.getElementById('canvas');
             const ctx = canvas.getContext('2d');
             const status = document.getElementById('status');
             
             let isDrawing = false;
-            let strokes = [];
-            let currentStroke = [];
-            let strokeHistory = [];
+            let hasDrawn = false;
             
-            // 设置画笔样式
-            ctx.strokeStyle = 'rgba(255, 50, 50, 0.7)';
+            // 画笔设置
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.6)';
             ctx.lineWidth = {brush_size};
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             
-            // 鼠标事件
-            canvas.addEventListener('mousedown', startDrawing);
+            // 事件监听
+            canvas.addEventListener('mousedown', startDraw);
             canvas.addEventListener('mousemove', draw);
-            canvas.addEventListener('mouseup', stopDrawing);
-            canvas.addEventListener('mouseleave', stopDrawing);
+            canvas.addEventListener('mouseup', stopDraw);
+            canvas.addEventListener('mouseleave', stopDraw);
             
-            // 触摸事件支持
-            canvas.addEventListener('touchstart', handleTouch, {{ passive: false }});
-            canvas.addEventListener('touchmove', handleTouch, {{ passive: false }});
-            canvas.addEventListener('touchend', stopDrawing);
+            // 触摸支持
+            canvas.addEventListener('touchstart', handleTouch, {{passive: false}});
+            canvas.addEventListener('touchmove', handleTouch, {{passive: false}});
+            canvas.addEventListener('touchend', stopDraw);
             
-            function getEventPos(e) {{
+            function getPos(e) {{
                 const rect = canvas.getBoundingClientRect();
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
@@ -115,118 +108,72 @@ def create_drawing_canvas(image, brush_size=20, canvas_key="drawing_canvas"):
                         x: (e.touches[0].clientX - rect.left) * scaleX,
                         y: (e.touches[0].clientY - rect.top) * scaleY
                     }};
-                }} else {{
-                    return {{
-                        x: (e.clientX - rect.left) * scaleX,
-                        y: (e.clientY - rect.top) * scaleY
-                    }};
                 }}
+                return {{
+                    x: (e.clientX - rect.left) * scaleX,
+                    y: (e.clientY - rect.top) * scaleY
+                }};
             }}
             
-            function startDrawing(e) {{
+            function startDraw(e) {{
                 isDrawing = true;
-                currentStroke = [];
-                const pos = getEventPos(e);
-                currentStroke.push(pos);
-                
+                const pos = getPos(e);
                 ctx.beginPath();
                 ctx.moveTo(pos.x, pos.y);
-                
-                status.textContent = '正在绘制...';
+                status.textContent = '绘制中...';
             }}
             
             function draw(e) {{
                 if (!isDrawing) return;
-                
-                const pos = getEventPos(e);
-                currentStroke.push(pos);
-                
+                const pos = getPos(e);
                 ctx.lineTo(pos.x, pos.y);
                 ctx.stroke();
+                hasDrawn = true;
             }}
             
-            function stopDrawing() {{
-                if (isDrawing && currentStroke.length > 0) {{
-                    strokes.push([...currentStroke]);
-                    strokeHistory.push([...strokes]);
-                    sendDataToStreamlit();
-                    status.textContent = `已绘制 ${{strokes.length}} 个笔画`;
+            function stopDraw() {{
+                if (isDrawing) {{
+                    isDrawing = false;
+                    if (hasDrawn) {{
+                        status.textContent = '已涂抹区域';
+                    }}
                 }}
-                isDrawing = false;
-                currentStroke = [];
             }}
             
             function handleTouch(e) {{
                 e.preventDefault();
                 const touch = e.touches[0];
                 const mouseEvent = new MouseEvent(
-                    e.type === 'touchstart' ? 'mousedown' : 
-                    e.type === 'touchmove' ? 'mousemove' : 'mouseup',
-                    {{
-                        clientX: touch.clientX,
-                        clientY: touch.clientY
-                    }}
+                    e.type === 'touchstart' ? 'mousedown' : 'mousemove',
+                    {{ clientX: touch.clientX, clientY: touch.clientY }}
                 );
                 canvas.dispatchEvent(mouseEvent);
             }}
             
             function clearCanvas() {{
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                strokes = [];
-                strokeHistory = [];
-                sendDataToStreamlit();
-                status.textContent = '画布已清除';
+                hasDrawn = false;
+                status.textContent = '已清除';
             }}
             
-            function undoLastStroke() {{
-                if (strokes.length > 0) {{
-                    strokes.pop();
-                    redrawCanvas();
-                    sendDataToStreamlit();
-                    status.textContent = `撤销成功，剩余 ${{strokes.length}} 个笔画`;
-                }}
-            }}
+            // 全局函数供外部调用
+            window.hasDrawnContent = function() {{
+                return hasDrawn;
+            }};
             
-            function redrawCanvas() {{
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                strokes.forEach(stroke => {{
-                    if (stroke.length > 0) {{
-                        ctx.beginPath();
-                        ctx.moveTo(stroke[0].x, stroke[0].y);
-                        stroke.forEach(point => {{
-                            ctx.lineTo(point.x, point.y);
-                        }});
-                        ctx.stroke();
-                    }}
-                }});
-            }}
-            
-            function sendDataToStreamlit() {{
-                const data = {{
-                    type: 'canvas_strokes',
-                    strokes: strokes,
-                    stroke_count: strokes.length
-                }};
-                
-                // 发送数据给Streamlit
-                window.parent.postMessage(JSON.stringify(data), '*');
-            }}
-            
-            // 初始化
-            status.textContent = '准备就绪 - 在图片上涂抹想要修改的区域';
+            window.getCanvasImageData = function() {{
+                return canvas.toDataURL('image/png');
+            }};
         </script>
     </body>
     </html>
     """
     
-    # 渲染组件并获取返回数据
-    component_value = components.html(
-        canvas_html, 
-        height=image.height + 120,  # 额外空间给控制按钮
-        key=canvas_key
-    )
+    # 渲染组件
+    components.html(canvas_html, height=image.height + 100)
     
-    return component_value
+    # 返回简单的状态指示
+    return True
 
 def strokes_to_mask(strokes, image_size, brush_size):
     """
