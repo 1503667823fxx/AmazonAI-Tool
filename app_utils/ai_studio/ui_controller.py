@@ -41,27 +41,15 @@ class UIController:
     
     def _ensure_vision_service_initialized(self) -> None:
         """Ensure vision service is properly initialized"""
+        # This is now handled by enhanced_state_manager
+        # Just check if it exists
         if "studio_vision_svc" not in st.session_state:
-            try:
-                from services.ai_studio.vision_service import StudioVisionService
-                api_key = st.secrets.get("GOOGLE_API_KEY")
-                if not api_key:
-                    st.error("❌ Google API key not found in secrets. Please configure GOOGLE_API_KEY.")
-                    return
-                st.session_state.studio_vision_svc = StudioVisionService(api_key)
-                st.success("✅ Vision service initialized successfully")
-            except Exception as e:
-                st.error(f"❌ Failed to initialize vision service: {e}")
-                # Create a dummy service to prevent crashes
-                class DummyVisionService:
-                    def resolve_reference_image(self, *args, **kwargs):
-                        return None, "❌ Vision service not available"
-                    def generate_image_with_progress(self, *args, **kwargs):
-                        from services.ai_studio.vision_service import ImageGenerationResult
-                        result = ImageGenerationResult()
-                        result.error = "Vision service not available"
-                        return result
-                st.session_state.studio_vision_svc = DummyVisionService()
+            st.error("❌ Vision service initialization failed. Please check your configuration.")
+        else:
+            # Check if it's a dummy service
+            vision_svc = st.session_state.studio_vision_svc
+            if hasattr(vision_svc, '__class__') and 'Dummy' in vision_svc.__class__.__name__:
+                st.warning("⚠️ Using fallback vision service. Image generation may not work properly.")
     
     def render_main_interface(self) -> None:
         """Render the complete AI Studio interface"""
@@ -275,6 +263,13 @@ class UIController:
             if not vision_svc:
                 with status:
                     st.error("❌ Vision service not available. Please refresh the page.")
+                return
+            
+            # Check if it's a dummy service
+            if hasattr(vision_svc, '__class__') and 'Dummy' in vision_svc.__class__.__name__:
+                with status:
+                    st.error("❌ Image generation is currently disabled due to configuration issues.")
+                    st.info("💡 Please check that google-generativeai is installed and your API key is configured.")
                 return
             
             # Get conversation state
