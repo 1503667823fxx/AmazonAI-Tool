@@ -132,7 +132,7 @@ if uploaded_file:
                     
                     # 3. Gemini画幅重构
                     status.update(label="🎨 Gemini 正在重构画幅...", state="running")
-                    status.write(f"🔤 提示词: '请将这张图片改为 {target_ratio[0]}:{target_ratio[1]} 的画幅比例'")
+                    status.write(f"🔤 提示词: 'Outpaint this image to {target_ratio[0]}:{target_ratio[1]} aspect ratio'")
                     
                     # 简单调用Gemini
                     final_image = generation_service.fill_image(
