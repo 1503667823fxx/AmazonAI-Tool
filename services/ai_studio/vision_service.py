@@ -263,20 +263,46 @@ class StudioVisionService:
                     if progress_callback:
                         progress_callback(f"Generating image (attempt {attempt + 1}/{self.max_retries})...", 0.3 + (attempt * 0.2))
                     
+                    # Debug: Log API call details
+                    st.write(f"🔍 API Call - Attempt {attempt + 1}")
+                    st.write(f"🔍 Model: {model_name}")
+                    st.write(f"🔍 Inputs count: {len(inputs)}")
+                    st.write(f"🔍 Temperature: {config.temperature}")
+                    
                     response = model.generate_content(
                         inputs, 
                         generation_config=config, 
                         safety_settings=safety_settings
                     )
                     
+                    # Debug: Log response details
+                    st.write(f"🔍 Response received")
+                    st.write(f"🔍 Has parts: {hasattr(response, 'parts') and bool(response.parts)}")
+                    
+                    if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
+                        st.write(f"🔍 Prompt feedback: {response.prompt_feedback}")
+                    
+                    if hasattr(response, 'candidates') and response.candidates:
+                        st.write(f"🔍 Candidates count: {len(response.candidates)}")
+                        for i, candidate in enumerate(response.candidates):
+                            if hasattr(candidate, 'finish_reason'):
+                                st.write(f"🔍 Candidate {i} finish reason: {candidate.finish_reason}")
+                    else:
+                        st.write("🔍 No candidates in response")
+                    
                     if progress_callback:
                         progress_callback("Processing response...", 0.8)
                     
                     # Extract image data from response
                     if response.parts:
-                        for part in response.parts:
+                        st.write(f"🔍 Processing {len(response.parts)} parts")
+                        for i, part in enumerate(response.parts):
+                            st.write(f"🔍 Part {i}: type = {type(part)}")
+                            st.write(f"🔍 Part {i}: has inline_data = {hasattr(part, 'inline_data')}")
                             if hasattr(part, "inline_data") and part.inline_data:
+                                st.write(f"🔍 Part {i}: extracting image data...")
                                 image_data = part.inline_data.data
+                                st.write(f"🔍 Part {i}: image data size = {len(image_data)} bytes")
                                 
                                 # Validate generated image
                                 if self._validate_image_data(image_data):
