@@ -321,12 +321,16 @@ class UIController:
                 # Step 2: Generate image with enhanced progress tracking
                 update_progress("Starting image generation...", 0.2)
                 
+                # Get aspect ratio setting from model selector
+                aspect_ratio_prompt = model_selector.get_current_aspect_ratio_prompt()
+                
                 # Use multi-image generation if multiple images are available
                 if len(target_ref_images) > 1:
                     result = vision_svc.generate_image_with_progress(
                         prompt=user_message.content,
                         model_name=model_name,
                         ref_images=target_ref_images,  # Use multiple images
+                        aspect_ratio_prompt=aspect_ratio_prompt,
                         progress_callback=update_progress
                     )
                 elif len(target_ref_images) == 1:
@@ -334,12 +338,14 @@ class UIController:
                         prompt=user_message.content,
                         model_name=model_name,
                         ref_image=target_ref_images[0],  # Use single image (backward compatibility)
+                        aspect_ratio_prompt=aspect_ratio_prompt,
                         progress_callback=update_progress
                     )
                 else:
                     result = vision_svc.generate_image_with_progress(
                         prompt=user_message.content,
                         model_name=model_name,
+                        aspect_ratio_prompt=aspect_ratio_prompt,
                         progress_callback=update_progress
                     )
                 
