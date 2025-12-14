@@ -43,12 +43,48 @@ with st.sidebar:
     }
     target_ratio = ratio_map[target_ratio_name]
 
-    # 3. 触发按钮
+    # 3. 模型选择
+    with st.expander("⚙️ 高级设置"):
+        use_gemini_generation = st.checkbox(
+            "使用 Gemini 画幅重构", 
+            value=True,
+            help="启用后将使用 models/gemini-3-pro-image-preview 进行画幅重构"
+        )
+        
+        test_mode = st.checkbox(
+            "简化测试模式",
+            value=False,
+            help="使用最简单的提示词直接测试Gemini画幅重构"
+        )
+        
+        if use_gemini_generation:
+            st.info("🎨 将使用 Gemini 进行画幅重构")
+            if test_mode:
+                st.warning("🧪 测试模式：使用最简单提示词")
+        else:
+            st.info("🔧 将使用传统算法进行背景扩展")
+    
+    # 4. 触发按钮
     generate_btn = st.button("🚀 开始重构画幅", type="primary", use_container_width=True)
 
-    # 4. 状态显示
+    # 4. 状态显示和使用说明
     if "api_cost" not in st.session_state:
         st.info("💡 本功能使用 Google Gemini (视觉分析)")
+    
+    with st.expander("📖 使用说明"):
+        st.markdown("""
+        **功能特点:**
+        - 🧠 Gemini智能分析背景特征
+        - 🎨 保持原图完整，只扩展背景
+        - 🔄 自动适配目标画幅比例
+        - ✨ 无缝融合，自然过渡
+        
+        **最佳实践:**
+        1. 上传清晰的产品图片
+        2. 选择合适的目标比例
+        3. 检查预览效果
+        4. 点击"开始重构"按钮
+        """)
 
 # --- 主区域：执行逻辑 ---
 if uploaded_file:
@@ -78,8 +114,16 @@ if uploaded_file:
         st.image(preview_image, caption=f"目标构图预览 (灰色区域为AI扩充区)", use_column_width=True)
         
         # 显示遮罩预览（调试用）
-        with st.expander("查看处理遮罩 (调试)"):
-            st.image(mask_image, caption="白色=AI填充区域，黑色=保留原图", use_column_width=True)
+        with st.expander("🔧 查看处理详情 (调试)"):
+            col_debug1, col_debug2 = st.columns(2)
+            with col_debug1:
+                st.image(mask_image, caption="处理遮罩：白色=AI填充区域，黑色=保留原图", use_column_width=True)
+            with col_debug2:
+                st.write("**处理参数:**")
+                st.write(f"- 原图比例: {orig_ratio:.3f}")
+                st.write(f"- 目标比例: {target_ratio_val:.3f}")
+                st.write(f"- 需要扩展: {'是' if abs(orig_ratio - target_ratio_val) > 0.01 else '否'}")
+                st.write(f"- 扩展方向: {'宽度' if target_ratio_val > orig_ratio else '高度' if target_ratio_val < orig_ratio else '无需扩展'}")
 
     if generate_btn:
         with col2:
@@ -90,36 +134,81 @@ if uploaded_file:
             
             try:
                 # --- 第一阶段：视觉分析 ---
-                with status_container.status("🧠 Google 全家桶正在工作中...", expanded=True) as status:
+                with status_container.status("🧠 AI 智能分析中...", expanded=True) as status:
                     # 1. 准备数据
+                    status.write("📐 准备扩展画布...")
                     processed_image, mask_image = image_tools.prepare_canvas(original_image, target_ratio)
                     
                     # 2. Gemini 分析
-                    status.write("👁️ Gemini 正在分析背景纹理...")
+                    status.write("👁️ Gemini 正在分析背景特征...")
                     prompt_text = vision_service.analyze_background(original_image)
-                    status.write(f"生成绘图指令: {prompt_text}")
+                    status.write(f"✨ 分析结果: {prompt_text}")
                     
-                    # 3. Google Imagen 绘图 (替代了 Flux)
-                    status.update(label="🎨 Google Imagen 正在扩展画布...", state="running")
+                    # 显示目标比例信息
+                    status.write(f"🎯 目标画幅: {target_ratio[0]}:{target_ratio[1]} (比例值: {target_ratio[0]/target_ratio[1]:.2f})")
+                    status.write(f"📏 原始画幅: {orig_w}×{orig_h} (比例值: {orig_ratio:.2f})")
+                    
+                    # 3. 智能背景扩展
+                    if use_gemini_generation:
+                        if test_mode:
+                            status.update(label="🧪 Gemini 测试模式运行中...", state="running")
+                            status.write(f"🔤 使用提示词: 'Change this image to {target_ratio[0]}:{target_ratio[1]} aspect ratio.'")
+                        else:
+                            status.update(label="🎨 Gemini 正在重构画幅...", state="running")
+                            status.write(f"🔤 使用提示词: '请将这张图片改为 {target_ratio[0]}:{target_ratio[1]} 的画幅比例'")
+                    else:
+                        status.update(label="🎨 智能算法扩展背景中...", state="running")
+                    
                     final_image = generation_service.fill_image(
-                        image=processed_image,
+                        image=original_image,  # 直接使用原图，不用预处理的画布
                         mask=mask_image,
-                        prompt=prompt_text
+                        prompt=prompt_text,
+                        use_gemini=use_gemini_generation,
+                        target_ratio=target_ratio,
+                        test_mode=test_mode
                     )
                     
-                    status.update(label="✅ 重构完成！", state="complete", expanded=False)
+                    status.update(label="✅ 画幅重构完成！", state="complete", expanded=False)
 
                 # 展示结果
-                st.image(final_image, caption="Google AI Output", use_column_width=True)
+                st.image(final_image, caption="智能扩展结果", use_column_width=True)
                 
-                # ... (保留下面的下载代码)
+                # 提供下载功能
+                img_buffer = io.BytesIO()
+                final_image.save(img_buffer, format='PNG', quality=95)
+                img_buffer.seek(0)
                 
-                # 提供下载
-                # (实际项目中通常需要将URL转为bytes下载，这里简化处理)
-                st.success("图片已生成，右键另存为即可使用。")
+                st.download_button(
+                    label="📥 下载扩展后的图片",
+                    data=img_buffer.getvalue(),
+                    file_name=f"smart_resized_{target_ratio[0]}x{target_ratio[1]}.png",
+                    mime="image/png",
+                    use_container_width=True
+                )
+                
+                # 显示处理信息
+                with st.expander("📊 处理详情"):
+                    col_info1, col_info2, col_info3 = st.columns(3)
+                    with col_info1:
+                        st.metric("原始尺寸", f"{orig_w}×{orig_h}")
+                        st.metric("原始比例", f"{orig_ratio:.2f}")
+                    with col_info2:
+                        final_w, final_h = final_image.size
+                        st.metric("扩展尺寸", f"{final_w}×{final_h}")
+                        st.metric("目标比例", f"{target_ratio_val:.2f}")
+                    with col_info3:
+                        st.write("**使用的模型:**")
+                        if use_gemini_generation:
+                            st.success("🤖 Gemini 图像生成")
+                            st.code("models/gemini-3-pro-image-preview")
+                        else:
+                            st.info("🔧 智能算法扩展")
+                        st.write(f"**背景分析:** Gemini")
+                        st.code("models/gemini-3-pro-image-preview")
 
             except Exception as e:
                 st.error(f"处理过程中发生错误: {str(e)}")
+                st.info("💡 提示：请确保上传的是有效的图片文件，并检查网络连接。")
 else:
     # 空状态提示
     ui_helper.show_empty_state()
