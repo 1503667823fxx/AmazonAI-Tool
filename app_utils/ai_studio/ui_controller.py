@@ -4,6 +4,7 @@ Coordinates all UI components and manages complex interactions
 """
 
 import streamlit as st
+import time
 from typing import Dict, Any, Optional, Callable
 from .models import ConversationState
 from .enhanced_state_manager import state_manager
