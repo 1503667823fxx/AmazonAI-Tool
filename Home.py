@@ -29,6 +29,28 @@ st.markdown("""
         display: none !important;
     }
     
+    /* 隐藏Streamlit原生弹窗和工具栏 */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .stDeployButton {display: none;}
+    .stDecoration {display: none;}
+    
+    /* 隐藏右上角的Share按钮和菜单 */
+    [data-testid="stToolbar"] {
+        display: none !important;
+    }
+    
+    /* 隐藏右上角的设置按钮 */
+    button[title="View fullscreen"] {
+        display: none !important;
+    }
+    
+    /* 隐藏GitHub图标等 */
+    .css-1jc7ptx, .e1ewe7hr3, .viewerBadge_container__1QSob, .styles_viewerBadge__1yB5_, .viewerBadge_link__1S137, .viewerBadge_text__1JaDK {
+        display: none !important;
+    }
+    
     /* 2. 全局字体与背景优化 */
     .main {
         background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
@@ -160,7 +182,7 @@ st.markdown('<div class="hero-subtitle">智能运营工作台 · 让AI为你的�
 # 添加快速统计
 col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
 with col_stat1:
-    st.markdown('<div class="stats-card"><h3>9</h3><p>稳定功能</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="stats-card"><h3>10</h3><p>稳定功能</p></div>', unsafe_allow_html=True)
 with col_stat2:
     st.markdown('<div class="stats-card"><h3>1</h3><p>测试功能</p></div>', unsafe_allow_html=True)
 with col_stat3:
@@ -223,12 +245,19 @@ utility_tools = {
         "desc": "费用计算与优化建议",
         "status": "stable"
     },
+    "canvas": {
+        "path": "pages/3_�️A_Magic_Canvas.py", 
+        "icon": "�️", 
+        "title": "Magic Canvas", 
+        "desc": "局部重绘与智能扩展",
+        "status": "stable"
+    },
     "chat": {
         "path": "pages/8_💬_AI_Studio.py", 
         "icon": "💬", 
         "title": "AI助手", 
         "desc": "智能问答对话",
-        "status": "beta"
+        "status": "stable"
     }
 }
 
@@ -296,8 +325,8 @@ with col2:
 # --- 7. 实用工具区 ---
 st.markdown('<div class="category-title">🛠️ 实用工具</div>', unsafe_allow_html=True)
 
-# 使用4列网格展示工具
-col1, col2, col3, col4 = st.columns(4, gap="medium")
+# 使用5列网格展示工具
+col1, col2, col3, col4, col5 = st.columns(5, gap="medium")
 
 with col1:
     t = utility_tools["upscale"]
@@ -333,6 +362,17 @@ with col3:
     st.page_link(t['path'], label="开始使用", use_container_width=True)
 
 with col4:
+    t = utility_tools["canvas"]
+    st.markdown(f'''
+    <div class="feature-card">
+        <h4>{t['icon']} {t['title']}</h4>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">{t['desc']}</p>
+        {get_status_badge(t['status'])}
+    </div>
+    ''', unsafe_allow_html=True)
+    st.page_link(t['path'], label="开始使用", use_container_width=True)
+
+with col5:
     t = utility_tools["chat"]
     st.markdown(f'''
     <div class="feature-card">
@@ -350,23 +390,23 @@ col1, col2 = st.columns(2, gap="large")
 
 with col1:
     st.markdown(f'''
-    <div class="feature-card" style="opacity: 0.7;">
-        <h4>🖌️ Magic Canvas</h4>
-        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">局部重绘与智能扩展</p>
+    <div class="feature-card" style="opacity: 0.6;">
+        <h4>🎬 Video Studio</h4>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">电商短视频生成 (开发中)</p>
         <span class="status-badge badge-dev">开发中</span>
     </div>
     ''', unsafe_allow_html=True)
-    st.page_link("pages/3_🖌️_Magic_Canvas.py", label="体验测试版", use_container_width=True)
+    st.button("敬请期待", disabled=True, use_container_width=True)
 
 with col2:
     st.markdown(f'''
     <div class="feature-card" style="opacity: 0.5;">
-        <h4>🎬 Video Studio</h4>
-        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">电商短视频生成 (即将推出)</p>
+        <h4>🧩 A+ Studio</h4>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">A+ 页面创意工场 (规划中)</p>
         <span class="status-badge badge-dev">规划中</span>
     </div>
     ''', unsafe_allow_html=True)
-    st.button("敬请期待", disabled=True, use_container_width=True)
+    st.button("待开发", disabled=True, use_container_width=True)
 
 # --- 9. 底部信息 ---
 st.markdown("<br><br>", unsafe_allow_html=True)
