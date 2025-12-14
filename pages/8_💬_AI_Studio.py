@@ -87,6 +87,12 @@ def main():
         </style>
         """, unsafe_allow_html=True)
         
+        # Debug: Check if vision service is available
+        if "studio_vision_svc" in st.session_state:
+            st.success("✅ Vision service is available")
+        else:
+            st.warning("⚠️ Vision service not found in session state")
+        
         # Initialize and render the enhanced UI
         ui_controller.render_main_interface()
         
