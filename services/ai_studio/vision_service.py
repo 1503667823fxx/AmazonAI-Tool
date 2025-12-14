@@ -269,30 +269,13 @@ class StudioVisionService:
                         safety_settings=safety_settings
                     )
                     
-                    # Check if response was blocked
-                    if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
-                        st.write(f"🔍 Prompt feedback: {response.prompt_feedback}")
-                    
-                    # Check candidates
-                    if hasattr(response, 'candidates') and response.candidates:
-                        st.write(f"🔍 Number of candidates: {len(response.candidates)}")
-                        for i, candidate in enumerate(response.candidates):
-                            if hasattr(candidate, 'finish_reason'):
-                                st.write(f"🔍 Candidate {i} finish reason: {candidate.finish_reason}")
-                    else:
-                        st.write("🔍 No candidates in response")
-                    
                     if progress_callback:
                         progress_callback("Processing response...", 0.8)
                     
                     # Extract image data from response
-                    st.write(f"🔍 Response has parts: {bool(response.parts)}")
                     if response.parts:
-                        st.write(f"🔍 Number of parts: {len(response.parts)}")
-                        for i, part in enumerate(response.parts):
-                            st.write(f"🔍 Part {i}: has inline_data = {hasattr(part, 'inline_data')}")
+                        for part in response.parts:
                             if hasattr(part, "inline_data") and part.inline_data:
-                                st.write(f"🔍 Part {i}: inline_data exists, extracting...")
                                 image_data = part.inline_data.data
                                 
                                 # Validate generated image
@@ -312,33 +295,27 @@ class StudioVisionService:
                     if attempt < self.max_retries - 1:
                         if progress_callback:
                             progress_callback(f"Retrying generation...", 0.4 + (attempt * 0.2))
-                        st.warning(f"Attempt {attempt + 1}: No image data in response, retrying...")
                         time.sleep(self.retry_delay)
                         continue
                     else:
                         result.error = "No image data in response after all retries"
-                        st.error(f"Failed after {self.max_retries} attempts: No image data in response")
                         return result
                         
                 except Exception as e:
                     if attempt < self.max_retries - 1:
                         if progress_callback:
                             progress_callback(f"Retrying after error: {str(e)}", 0.4 + (attempt * 0.2))
-                        st.warning(f"Attempt {attempt + 1} failed: {str(e)}, retrying...")
                         time.sleep(self.retry_delay * (attempt + 1))  # Exponential backoff
                         continue
                     else:
                         result.error = f"Generation failed after {self.max_retries} attempts: {str(e)}"
-                        st.error(f"Final error after {self.max_retries} attempts: {str(e)}")
                         return result
             
         except Exception as e:
             result.error = f"Unexpected error: {str(e)}"
-            st.error(f"Unexpected error in image generation: {str(e)}")
             return result
         
-        result.error = "Unknown generation failure - reached end of method without success"
-        st.error("Unknown generation failure - this should not happen. Please check the logs.")
+        result.error = "Unknown generation failure"
         return result
     
     def generate_image(self, prompt: str, model_name: str, ref_image=None) -> Optional[bytes]:
