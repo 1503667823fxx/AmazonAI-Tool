@@ -203,14 +203,14 @@ core_tools = {
     "visual": {
         "path": "pages/6_🎨_Visual_Studio.py", 
         "icon": "🎨", 
-        "title": "AI绘图", 
+        "title": "AI绘图（文生图）", 
         "desc": "产品海报、场景图生成",
         "status": "stable"
     },
     "smart_edit": {
         "path": "pages/2_🖼️_Smart_Edit.py", 
         "icon": "🖼️", 
-        "title": "图片编辑", 
+        "title": "图片编辑（图生图）", 
         "desc": "智能修图、场景替换",
         "status": "stable"
     },
@@ -248,7 +248,7 @@ utility_tools = {
     "canvas": {
         "path": "pages/3_🖌️_Magic_Canvas.py", 
         "icon": "🖌️", 
-        "title": "Magic Canvas", 
+        "title": "局部重绘", 
         "desc": "局部重绘与智能扩展",
         "status": "stable"
     },
@@ -438,3 +438,4 @@ with col_footer2:
         '<p style="text-align: center; color: #666; font-size: 0.9rem;">© 2025 Amazon AI Hub | Powered by Gemini & Flux | Build 2.1.0</p>', 
         unsafe_allow_html=True
     )
+
