@@ -320,12 +320,27 @@ class UIController:
                 # Step 2: Generate image with enhanced progress tracking
                 update_progress("Starting image generation...", 0.2)
                 
+                # Debug: Log generation parameters
+                with status:
+                    st.info(f"🔍 Generating with model: {model_name}")
+                    st.info(f"🔍 Prompt: {user_message.content[:100]}...")
+                    st.info(f"🔍 Has reference image: {target_ref_img is not None}")
+                
                 result = vision_svc.generate_image_with_progress(
                     prompt=user_message.content,
                     model_name=model_name,
                     ref_image=target_ref_img,
                     progress_callback=update_progress
                 )
+                
+                # Debug: Log result details
+                with status:
+                    st.info(f"🔍 Generation result - Success: {result.success}")
+                    st.info(f"🔍 Generation result - Error: {result.error}")
+                    if result.image_data:
+                        st.info(f"🔍 Image data size: {len(result.image_data)} bytes")
+                    else:
+                        st.warning("🔍 No image data returned")
                 
                 if result.success and result.image_data:
                     # Step 3: Process successful result
