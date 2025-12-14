@@ -184,7 +184,7 @@ col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
 with col_stat1:
     st.markdown('<div class="stats-card"><h3>10</h3><p>稳定功能</p></div>', unsafe_allow_html=True)
 with col_stat2:
-    st.markdown('<div class="stats-card"><h3>1</h3><p>测试功能</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="stats-card"><h3>0</h3><p>测试功能</p></div>', unsafe_allow_html=True)
 with col_stat3:
     st.markdown('<div class="stats-card"><h3>2</h3><p>开发中</p></div>', unsafe_allow_html=True)
 with col_stat4:
@@ -246,8 +246,8 @@ utility_tools = {
         "status": "stable"
     },
     "canvas": {
-        "path": "pages/3_�️A_Magic_Canvas.py", 
-        "icon": "�️", 
+        "path": "pages/3_🖌️_Magic_Canvas.py", 
+        "icon": "🖌️", 
         "title": "Magic Canvas", 
         "desc": "局部重绘与智能扩展",
         "status": "stable"
@@ -396,7 +396,7 @@ with col1:
         <span class="status-badge badge-dev">开发中</span>
     </div>
     ''', unsafe_allow_html=True)
-    st.button("敬请期待", disabled=True, use_container_width=True)
+    st.button("敬请期待", disabled=True, use_container_width=True, key="video_btn")
 
 with col2:
     st.markdown(f'''
@@ -406,7 +406,7 @@ with col2:
         <span class="status-badge badge-dev">规划中</span>
     </div>
     ''', unsafe_allow_html=True)
-    st.button("待开发", disabled=True, use_container_width=True)
+    st.button("待开发", disabled=True, use_container_width=True, key="aplus_btn")
 
 # --- 9. 底部信息 ---
 st.markdown("<br><br>", unsafe_allow_html=True)
@@ -438,4 +438,3 @@ with col_footer2:
         '<p style="text-align: center; color: #666; font-size: 0.9rem;">© 2025 Amazon AI Hub | Powered by Gemini & Flux | Build 2.1.0</p>', 
         unsafe_allow_html=True
     )
-
