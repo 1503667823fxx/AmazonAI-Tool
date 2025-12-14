@@ -210,6 +210,17 @@ def get_real_amazon_news():
                     'url': 'https://advertising.amazon.com/blog/feed',
                     'source': '广告博客',
                     'timeout': 10
+                },
+                # 添加更多可能有内容的RSS源
+                {
+                    'url': 'https://aws.amazon.com/blogs/aws/feed/',
+                    'source': 'AWS博客',
+                    'timeout': 10
+                },
+                {
+                    'url': 'https://developer.amazon.com/blogs/alexa/feed.xml',
+                    'source': 'Alexa开发',
+                    'timeout': 10
                 }
             ]
             
@@ -219,8 +230,11 @@ def get_real_amazon_news():
                     feed = feedparser.parse(feed_info['url'])
                     
                     if feed.entries and len(feed.entries) > 0:
+                        # 找到有内容的源就标记成功
                         rss_success = True
-                        for entry in feed.entries[:2]:  # 每个源取2条
+                        
+                        # 处理每个条目，降低过滤条件
+                        for entry in feed.entries[:3]:  # 每个源取3条，增加机会
                             pub_date = datetime.now()
                             if hasattr(entry, 'published_parsed') and entry.published_parsed:
                                 try:
@@ -228,8 +242,9 @@ def get_real_amazon_news():
                                 except:
                                     pub_date = datetime.now()
                             
-                            # 放宽时间限制到180天
-                            if (datetime.now() - pub_date).days <= 180:
+                            # 几乎不过滤时间，只要有内容就要
+                            days_old = (datetime.now() - pub_date).days
+                            if days_old <= 730:  # 2年内的内容都要
                                 # 清理HTML标签和描述
                                 desc = getattr(entry, 'summary', getattr(entry, 'description', ''))
                                 if desc:
@@ -238,7 +253,7 @@ def get_real_amazon_news():
                                     desc = re.sub(r'\s+', ' ', desc).strip()
                                     desc = desc[:150] + '...' if len(desc) > 150 else desc
                                 else:
-                                    desc = '点击查看Amazon官方最新资讯详情'
+                                    desc = f'来自{feed_info["source"]}的最新资讯，点击查看详情'
                                 
                                 news_items.append({
                                     'title': entry.title[:80] + '...' if len(entry.title) > 80 else entry.title,
@@ -250,11 +265,11 @@ def get_real_amazon_news():
                                 })
                                 
                                 # 限制总数，避免过多
-                                if len(news_items) >= 6:
+                                if len(news_items) >= 8:
                                     break
                     
                     # 如果已经获取到足够内容，跳出循环
-                    if len(news_items) >= 4:
+                    if len(news_items) >= 6:
                         break
                         
                 except Exception as e:
@@ -410,18 +425,41 @@ with st.expander("📰 Amazon实时资讯", expanded=True):
     if st.button("🔧 测试RSS连接", key="test_rss"):
         try:
             import feedparser
-            st.write("📡 正在测试RSS源...")
+            st.write("📡 正在测试多个RSS源...")
             
-            test_url = 'https://press.aboutamazon.com/rss/news-releases.xml'
-            feed = feedparser.parse(test_url)
+            test_feeds = [
+                ('Amazon新闻', 'https://press.aboutamazon.com/rss/news-releases.xml'),
+                ('Amazon博客', 'https://blog.aboutamazon.com/feed'),
+                ('AWS博客', 'https://aws.amazon.com/blogs/aws/feed/'),
+                ('广告博客', 'https://advertising.amazon.com/blog/feed')
+            ]
             
-            if feed.entries:
-                st.success(f"✅ RSS连接成功！获取到 {len(feed.entries)} 条资讯")
-                st.write("📰 最新3条资讯标题:")
-                for i, entry in enumerate(feed.entries[:3]):
-                    st.write(f"  {i+1}. {entry.title}")
-            else:
-                st.warning("⚠️ RSS连接成功但无内容")
+            total_entries = 0
+            for name, url in test_feeds:
+                try:
+                    feed = feedparser.parse(url)
+                    entry_count = len(feed.entries)
+                    total_entries += entry_count
+                    
+                    if entry_count > 0:
+                        st.success(f"✅ {name}: {entry_count} 条资讯")
+                        # 显示最新一条的标题和日期
+                        latest = feed.entries[0]
+                        pub_date = "未知日期"
+                        if hasattr(latest, 'published_parsed') and latest.published_parsed:
+                            try:
+                                from datetime import datetime
+                                pub_date = datetime(*latest.published_parsed[:6]).strftime('%Y-%m-%d')
+                            except:
+                                pass
+                        st.write(f"   最新: {latest.title[:60]}... ({pub_date})")
+                    else:
+                        st.warning(f"⚠️ {name}: 连接成功但无内容")
+                        
+                except Exception as e:
+                    st.error(f"❌ {name}: 连接失败 - {str(e)[:50]}...")
+            
+            st.info(f"📊 总计获取到 {total_entries} 条资讯")
                 
         except Exception as e:
             st.error(f"❌ RSS测试失败: {e}")
