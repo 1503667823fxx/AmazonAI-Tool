@@ -106,6 +106,10 @@ class ModelSelector:
         # Determine if this is image generation mode
         is_image_mode = self._is_image_generation_mode(selected_model_id)
         
+        # Add aspect ratio selector for image generation models
+        if is_image_mode:
+            self._render_aspect_ratio_selector()
+        
         return selected_model_id, is_image_mode
     
     def _handle_enhanced_model_switch(self, old_model: str, new_model: str) -> None:
@@ -601,6 +605,77 @@ class ModelSelector:
             recommendations.append("💬 Current model selection looks good for your conversation type")
         
         return recommendations
+
+    def _render_aspect_ratio_selector(self) -> None:
+        """Render aspect ratio selector for image generation models"""
+        
+        st.markdown("---")  # Add separator
+        st.subheader("📐 图片比例设置")
+        
+        # Define aspect ratio options
+        aspect_ratios = {
+            "1:1 (正方形)": "1:1 square aspect ratio",
+            "4:3 (横向)": "4:3 landscape aspect ratio", 
+            "3:4 (竖向)": "3:4 portrait aspect ratio",
+            "16:9 (宽屏)": "16:9 cinematic widescreen aspect ratio",
+            "9:16 (手机竖屏)": "9:16 mobile portrait aspect ratio",
+            "21:9 (超宽屏)": "21:9 ultrawide cinematic aspect ratio"
+        }
+        
+        # Get current selection from session state
+        current_ratio = st.session_state.get('ai_studio_aspect_ratio', "1:1 (正方形)")
+        
+        # Create two columns for better layout
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            selected_ratio = st.selectbox(
+                "选择图片比例",
+                list(aspect_ratios.keys()),
+                index=list(aspect_ratios.keys()).index(current_ratio) if current_ratio in aspect_ratios else 0,
+                key="aspect_ratio_selector",
+                help="选择生成图片的宽高比例"
+            )
+        
+        with col2:
+            # Show visual preview of the aspect ratio
+            ratio_preview = self._get_aspect_ratio_preview(selected_ratio)
+            st.markdown(f"**预览:** {ratio_preview}")
+        
+        # Store selection in session state
+        st.session_state['ai_studio_aspect_ratio'] = selected_ratio
+        st.session_state['ai_studio_aspect_ratio_prompt'] = aspect_ratios[selected_ratio]
+        
+        # Show helpful tips
+        with st.expander("💡 比例选择建议", expanded=False):
+            st.markdown("""
+            **推荐用途：**
+            - **1:1 (正方形)**: 社交媒体头像、产品展示图
+            - **4:3 (横向)**: 传统照片、产品详情图
+            - **3:4 (竖向)**: 手机壁纸、竖版海报
+            - **16:9 (宽屏)**: 横幅广告、网站头图
+            - **9:16 (手机竖屏)**: 短视频封面、手机广告
+            - **21:9 (超宽屏)**: 电影风格、全景图片
+            """)
+    
+    def _get_aspect_ratio_preview(self, ratio_name: str) -> str:
+        """Get a visual preview representation of the aspect ratio"""
+        
+        previews = {
+            "1:1 (正方形)": "⬜",
+            "4:3 (横向)": "▭", 
+            "3:4 (竖向)": "▯",
+            "16:9 (宽屏)": "▬",
+            "9:16 (手机竖屏)": "▮",
+            "21:9 (超宽屏)": "▰"
+        }
+        
+        return previews.get(ratio_name, "⬜")
+    
+    def get_current_aspect_ratio_prompt(self) -> str:
+        """Get the current aspect ratio prompt for image generation"""
+        
+        return st.session_state.get('ai_studio_aspect_ratio_prompt', "1:1 square aspect ratio")
 
 
 # Global instance for easy access
