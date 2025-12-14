@@ -159,9 +159,10 @@ if uploaded_file:
                     else:
                         status.update(label="🎨 智能算法扩展背景中...", state="running")
                     
+                    # 统一调用，让generation_service内部处理逻辑
                     final_image = generation_service.fill_image(
-                        image=original_image,  # 直接使用原图，不用预处理的画布
-                        mask=mask_image,
+                        image=original_image,  # 始终传递原图
+                        mask=mask_image,       # 传递遮罩（函数内部会处理尺寸匹配）
                         prompt=prompt_text,
                         use_gemini=use_gemini_generation,
                         target_ratio=target_ratio,
