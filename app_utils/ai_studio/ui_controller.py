@@ -400,7 +400,7 @@ class UIController:
                 status.update(label="❌ Generation error", state="error")
                 
                 # Log error for debugging
-                st.write(f"Debug info: {str(e)}")
+                st.error(f"Text generation error: {str(e)}")
     
     def _display_image_generation_capabilities(self) -> None:
         """Display current image generation capabilities to user"""
