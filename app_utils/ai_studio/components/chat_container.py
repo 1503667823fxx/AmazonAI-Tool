@@ -95,12 +95,16 @@ class ChatContainer:
     def _render_user_message_content(self, message: UserMessage) -> None:
         """Render user message content including attachments"""
         
-        # Render reference images if present
+        # Render reference images if present with chat-friendly sizing
         if message.ref_images:
-            cols = st.columns(min(len(message.ref_images), 4))
+            # Limit the number of columns and image size for better chat experience
+            num_images = len(message.ref_images)
+            max_cols = min(num_images, 3)  # Maximum 3 images per row
+            cols = st.columns(max_cols)
+            
             for i, img in enumerate(message.ref_images):
-                with cols[i % len(cols)]:
-                    st.image(img, use_container_width=True)
+                with cols[i % max_cols]:
+                    st.image(img, width=200, caption=f"参考图 {i+1}")  # Fixed width for consistency
         
         # Render text content
         if message.content:
@@ -134,24 +138,31 @@ class ChatContainer:
             from app_utils.ai_studio.tools import create_preview_thumbnail, process_image_for_download
             import time
             
-            # Create preview thumbnail for display (following Smart Edit pattern)
-            preview_data = create_preview_thumbnail(image_data, max_width=800)
+            # Create chat-optimized thumbnail for display (smaller for better chat experience)
+            preview_data = create_preview_thumbnail(image_data, max_width=400)
             
-            # Display the image using simple st.image (same as Smart Edit)
-            st.image(
-                preview_data, 
-                caption="Generated Image (点击下载按钮获取高清原图)",
-                use_container_width=True
-            )
+            # Display the image with chat-friendly sizing
+            # Use columns to control image width and add some padding
+            col_left, col_image, col_right = st.columns([0.5, 3, 0.5])
             
-            # Simple action buttons (following Smart Edit pattern)
-            col1, col2, col3 = st.columns([1, 1, 2])
+            with col_image:
+                st.image(
+                    preview_data, 
+                    caption="Generated Image (点击放大按钮查看大图)",
+                    width=400  # Fixed width for consistent chat experience
+                )
             
-            # Download button (same as Smart Edit)
-            with col1:
+            # Compact action buttons layout
+            st.markdown("---")  # Add a separator line
+            
+            # Create a more compact button layout
+            btn_col1, btn_col2, btn_col3, info_col = st.columns([1, 1, 1, 2])
+            
+            # Download button
+            with btn_col1:
                 final_bytes, mime_type = process_image_for_download(image_data, format="JPEG", quality=95)
                 st.download_button(
-                    "📥 Download", 
+                    "📥 下载", 
                     data=final_bytes,
                     file_name=f"ai_generated_{message.id}_{int(time.time())}.jpg",
                     mime=mime_type,
@@ -161,8 +172,8 @@ class ChatContainer:
                 )
             
             # Use as reference button
-            with col2:
-                if st.button("🔗 Reference", key=f"ref_{message.id}", help="Use as reference for next generation", use_container_width=True):
+            with btn_col2:
+                if st.button("🔗 参考", key=f"ref_{message.id}", help="Use as reference for next generation", use_container_width=True):
                     # Add to session state as reference image
                     if 'reference_images' not in st.session_state:
                         st.session_state.reference_images = []
@@ -173,15 +184,20 @@ class ChatContainer:
                     ref_img = Image.open(io.BytesIO(image_data))
                     st.session_state.reference_images = [ref_img]  # Replace existing references
                     
-                    st.success("Set as reference image!", icon="🔗")
+                    st.success("已设为参考图!", icon="🔗")
             
-            # Show generation info if available
-            with col3:
+            # View full size button (moved here for better layout)
+            with btn_col3:
+                if st.button("🔍 放大", key=f"view_full_btn_{message.id}", help="View full size image", use_container_width=True):
+                    self._show_image_modal(image_data, f"Generated Image - {message.id}")
+            
+            # Show generation info in a more compact way
+            with info_col:
                 metadata = getattr(message, 'metadata', {})
                 if metadata.get('generation_time'):
-                    st.caption(f"⏱️ Generated in {metadata['generation_time']:.1f}s")
+                    st.caption(f"⏱️ {metadata['generation_time']:.1f}s")
                 if metadata.get('reference_indicator'):
-                    st.caption(f"📸 {metadata['reference_indicator']}")
+                    st.caption(f"📸 多图处理" if "多" in str(metadata['reference_indicator']) else "📸 单图处理")
         
         except Exception as e:
             st.error(f"❌ Error displaying image: {str(e)}")
@@ -190,9 +206,46 @@ class ChatContainer:
                 st.image(image_data, caption="Generated Image (Raw)", use_container_width=True)
             except Exception as raw_error:
                 st.error(f"❌ Even raw image display failed: {str(raw_error)}")
-    
 
-    
+    def _show_image_modal(self, image_data: bytes, title: str) -> None:
+        """Show image in a modal dialog for full-size viewing"""
+        @st.dialog(f"🔍 {title}")
+        def _image_modal():
+            # Display full-size image
+            st.image(image_data, caption=title, use_container_width=True)
+            
+            # Action buttons in modal
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # Download button
+                from app_utils.ai_studio.tools import process_image_for_download
+                import time
+                final_bytes, mime_type = process_image_for_download(image_data, format="JPEG", quality=95)
+                st.download_button(
+                    "📥 Download Full Resolution", 
+                    data=final_bytes,
+                    file_name=f"ai_generated_full_{int(time.time())}.jpg",
+                    mime=mime_type,
+                    use_container_width=True
+                )
+            
+            with col2:
+                if st.button("🔗 Set as Reference", use_container_width=True):
+                    from PIL import Image
+                    import io
+                    ref_img = Image.open(io.BytesIO(image_data))
+                    if 'reference_images' not in st.session_state:
+                        st.session_state.reference_images = []
+                    st.session_state.reference_images = [ref_img]
+                    st.success("Set as reference!")
+            
+            with col3:
+                if st.button("✅ Close", use_container_width=True):
+                    st.rerun()
+        
+        _image_modal()
+
     def _render_message_actions(self, message: BaseMessage, idx: int,
                               on_delete: Optional[Callable] = None,
                               on_regenerate: Optional[Callable] = None) -> None:
