@@ -208,23 +208,37 @@ def get_real_amazon_news():
             for feed_info in rss_feeds:
                 try:
                     feed = feedparser.parse(feed_info['url'])
-                    for entry in feed.entries[:2]:  # 每个源取2条
-                        # 过滤Amazon相关内容
-                        if any(keyword in entry.title.lower() for keyword in ['amazon', 'seller', 'fba', 'prime', 'aws']):
+                    if feed.entries:  # 如果有内容
+                        for entry in feed.entries[:2]:  # 每个源取2条
                             pub_date = datetime.now()
                             if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                                pub_date = datetime(*entry.published_parsed[:6])
+                                try:
+                                    pub_date = datetime(*entry.published_parsed[:6])
+                                except:
+                                    pub_date = datetime.now()
                             
-                            # 只显示30天内的新闻
-                            if (datetime.now() - pub_date).days <= 30:
+                            # 放宽时间限制到90天，降低过滤条件
+                            if (datetime.now() - pub_date).days <= 90:
+                                # 清理HTML标签
+                                desc = getattr(entry, 'summary', getattr(entry, 'description', ''))
+                                if desc:
+                                    # 简单清理HTML
+                                    import re
+                                    desc = re.sub('<[^<]+?>', '', desc)
+                                    desc = desc.strip()[:120] + '...' if len(desc) > 120 else desc
+                                else:
+                                    desc = '点击查看详情'
+                                
                                 news_items.append({
                                     'title': entry.title[:85] + '...' if len(entry.title) > 85 else entry.title,
-                                    'desc': getattr(entry, 'summary', '')[:120] + '...' if hasattr(entry, 'summary') and len(getattr(entry, 'summary', '')) > 120 else getattr(entry, 'summary', '点击查看详情'),
+                                    'desc': desc,
                                     'link': entry.link,
                                     'source': feed_info['source'],
                                     'date': pub_date.strftime('%Y-%m-%d')
                                 })
                 except Exception as e:
+                    # 调试信息：在开发时可以看到错误
+                    # st.write(f"RSS解析错误: {e}")  # 生产环境中注释掉
                     continue
         except ImportError:
             # 如果没有feedparser，在云端环境下静默处理
@@ -299,6 +313,14 @@ with st.expander("📰 Amazon实时资讯", expanded=True):
         import feedparser
         with st.spinner("📡 正在获取RSS资讯..."):
             news_list = get_real_amazon_news()
+            
+        # 调试信息：显示RSS获取状态
+        if news_list:
+            rss_count = sum(1 for news in news_list if news['source'] in ['官方', '官方博客'])
+            if rss_count > 0:
+                st.success(f"✅ 成功获取 {rss_count} 条RSS资讯，{len(news_list)-rss_count} 条官方链接")
+            else:
+                st.info("📡 RSS源暂无新内容，显示官方资源链接")
     except ImportError:
         with st.spinner("🔗 正在加载Amazon官方资源..."):
             news_list = get_real_amazon_news()
@@ -354,6 +376,26 @@ with st.expander("📰 Amazon实时资讯", expanded=True):
         if st.button("🔄 刷新资讯", use_container_width=True, key="refresh_real_news"):
             st.cache_data.clear()
             st.rerun()
+    
+    # 调试按钮：测试RSS连接
+    if st.button("🔧 测试RSS连接", key="test_rss"):
+        try:
+            import feedparser
+            st.write("📡 正在测试RSS源...")
+            
+            test_url = 'https://press.aboutamazon.com/rss/news-releases.xml'
+            feed = feedparser.parse(test_url)
+            
+            if feed.entries:
+                st.success(f"✅ RSS连接成功！获取到 {len(feed.entries)} 条资讯")
+                st.write("📰 最新3条资讯标题:")
+                for i, entry in enumerate(feed.entries[:3]):
+                    st.write(f"  {i+1}. {entry.title}")
+            else:
+                st.warning("⚠️ RSS连接成功但无内容")
+                
+        except Exception as e:
+            st.error(f"❌ RSS测试失败: {e}")
     
     with col_btn2:
         st.link_button(
