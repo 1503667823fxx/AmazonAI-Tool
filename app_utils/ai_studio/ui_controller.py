@@ -302,10 +302,10 @@ class UIController:
                 status.update(label=f"🎨 {message}", state="running")
             
             try:
-                # Step 1: Resolve reference image
+                # Step 1: Resolve reference images (support multiple images)
                 update_progress("Resolving reference images...", 0.1)
                 
-                target_ref_img, info_text = vision_svc.resolve_reference_image(
+                target_ref_images, info_text = vision_svc.resolve_reference_images(
                     api_messages[-1], api_messages[:-1]
                 )
                 
@@ -321,12 +321,27 @@ class UIController:
                 # Step 2: Generate image with enhanced progress tracking
                 update_progress("Starting image generation...", 0.2)
                 
-                result = vision_svc.generate_image_with_progress(
-                    prompt=user_message.content,
-                    model_name=model_name,
-                    ref_image=target_ref_img,
-                    progress_callback=update_progress
-                )
+                # Use multi-image generation if multiple images are available
+                if len(target_ref_images) > 1:
+                    result = vision_svc.generate_image_with_progress(
+                        prompt=user_message.content,
+                        model_name=model_name,
+                        ref_images=target_ref_images,  # Use multiple images
+                        progress_callback=update_progress
+                    )
+                elif len(target_ref_images) == 1:
+                    result = vision_svc.generate_image_with_progress(
+                        prompt=user_message.content,
+                        model_name=model_name,
+                        ref_image=target_ref_images[0],  # Use single image (backward compatibility)
+                        progress_callback=update_progress
+                    )
+                else:
+                    result = vision_svc.generate_image_with_progress(
+                        prompt=user_message.content,
+                        model_name=model_name,
+                        progress_callback=update_progress
+                    )
                 
                 if result.success and result.image_data:
                     # Step 3: Process successful result using ai_studio tools
