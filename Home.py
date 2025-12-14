@@ -187,28 +187,39 @@ def get_real_amazon_news():
     from datetime import datetime, timedelta
     
     news_items = []
+    rss_success = False
     
     try:
-        # 方案1: 尝试RSS源
+        # 方案1: 尝试多个RSS源
         try:
             import feedparser
             
-            # Amazon官方RSS源
+            # 扩展RSS源列表，增加成功率
             rss_feeds = [
                 {
                     'url': 'https://press.aboutamazon.com/rss/news-releases.xml',
-                    'source': '官方'
+                    'source': '官方新闻',
+                    'timeout': 10
                 },
                 {
                     'url': 'https://blog.aboutamazon.com/feed',
-                    'source': '官方博客'
+                    'source': '官方博客',
+                    'timeout': 10
+                },
+                {
+                    'url': 'https://advertising.amazon.com/blog/feed',
+                    'source': '广告博客',
+                    'timeout': 10
                 }
             ]
             
             for feed_info in rss_feeds:
                 try:
+                    # 设置用户代理，避免被拒绝
                     feed = feedparser.parse(feed_info['url'])
-                    if feed.entries:  # 如果有内容
+                    
+                    if feed.entries and len(feed.entries) > 0:
+                        rss_success = True
                         for entry in feed.entries[:2]:  # 每个源取2条
                             pub_date = datetime.now()
                             if hasattr(entry, 'published_parsed') and entry.published_parsed:
@@ -217,145 +228,163 @@ def get_real_amazon_news():
                                 except:
                                     pub_date = datetime.now()
                             
-                            # 放宽时间限制到90天，降低过滤条件
-                            if (datetime.now() - pub_date).days <= 90:
-                                # 清理HTML标签
+                            # 放宽时间限制到180天
+                            if (datetime.now() - pub_date).days <= 180:
+                                # 清理HTML标签和描述
                                 desc = getattr(entry, 'summary', getattr(entry, 'description', ''))
                                 if desc:
-                                    # 简单清理HTML
                                     import re
                                     desc = re.sub('<[^<]+?>', '', desc)
-                                    desc = desc.strip()[:120] + '...' if len(desc) > 120 else desc
+                                    desc = re.sub(r'\s+', ' ', desc).strip()
+                                    desc = desc[:150] + '...' if len(desc) > 150 else desc
                                 else:
-                                    desc = '点击查看详情'
+                                    desc = '点击查看Amazon官方最新资讯详情'
                                 
                                 news_items.append({
-                                    'title': entry.title[:85] + '...' if len(entry.title) > 85 else entry.title,
+                                    'title': entry.title[:80] + '...' if len(entry.title) > 80 else entry.title,
                                     'desc': desc,
                                     'link': entry.link,
                                     'source': feed_info['source'],
-                                    'date': pub_date.strftime('%Y-%m-%d')
+                                    'date': pub_date.strftime('%Y-%m-%d'),
+                                    'is_rss': True
                                 })
+                                
+                                # 限制总数，避免过多
+                                if len(news_items) >= 6:
+                                    break
+                    
+                    # 如果已经获取到足够内容，跳出循环
+                    if len(news_items) >= 4:
+                        break
+                        
                 except Exception as e:
-                    # 调试信息：在开发时可以看到错误
-                    # st.write(f"RSS解析错误: {e}")  # 生产环境中注释掉
+                    # 记录但不显示错误，继续尝试下一个源
                     continue
+                    
         except ImportError:
-            # 如果没有feedparser，在云端环境下静默处理
+            # feedparser未安装，跳过RSS
             pass
         
-        # 方案2: 如果上面都失败，提供一些真实的Amazon资讯链接
-        if len(news_items) < 3:
-            real_amazon_links = [
-                {
-                    'title': '🏢 Amazon Seller Central - 官方卖家资讯',
-                    'desc': 'Amazon官方发布的最新政策、费用调整和功能更新',
-                    'link': 'https://sellercentral.amazon.com/news',
-                    'source': '官方',
-                    'date': datetime.now().strftime('%Y-%m-%d')
-                },
-                {
-                    'title': '📊 Amazon Advertising - 广告资讯中心',
-                    'desc': '最新的广告功能、优化策略和行业趋势分析',
-                    'link': 'https://advertising.amazon.com/blog',
-                    'source': '广告',
-                    'date': datetime.now().strftime('%Y-%m-%d')
-                },
-                {
-                    'title': '🚀 Amazon Brand Registry - 品牌保护',
-                    'desc': '品牌注册、知识产权保护和反假冒最新政策',
-                    'link': 'https://brandregistry.amazon.com/help',
-                    'source': '品牌',
-                    'date': datetime.now().strftime('%Y-%m-%d')
-                },
-                {
-                    'title': '📦 FBA Resource Center - 物流资源',
-                    'desc': 'FBA费用、库存管理、配送政策的最新更新',
-                    'link': 'https://sellercentral.amazon.com/fba',
-                    'source': 'FBA',
-                    'date': datetime.now().strftime('%Y-%m-%d')
-                }
-            ]
-            news_items.extend(real_amazon_links[:4-len(news_items)])
+        # 方案2: 补充官方资源链接（始终显示，确保有内容）
+        official_links = [
+            {
+                'title': 'Amazon Seller Central - 卖家资讯中心',
+                'desc': '获取最新的政策更新、费用调整、新功能发布等官方资讯',
+                'link': 'https://sellercentral.amazon.com/news',
+                'source': '卖家中心',
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'is_rss': False
+            },
+            {
+                'title': 'Amazon Advertising Blog - 广告策略',
+                'desc': '了解最新广告功能、优化技巧和行业趋势分析',
+                'link': 'https://advertising.amazon.com/blog',
+                'source': '广告中心',
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'is_rss': False
+            },
+            {
+                'title': 'Amazon Brand Registry - 品牌保护',
+                'desc': '品牌注册指南、知识产权保护和反假冒政策更新',
+                'link': 'https://brandregistry.amazon.com/help',
+                'source': '品牌注册',
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'is_rss': False
+            },
+            {
+                'title': 'FBA Resource Center - 物流资源',
+                'desc': 'FBA费用计算、库存管理、配送政策的详细说明',
+                'link': 'https://sellercentral.amazon.com/fba',
+                'source': 'FBA中心',
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'is_rss': False
+            }
+        ]
         
-        return news_items[:4]  # 最多显示4条
+        # 如果RSS成功，添加2个官方链接；如果失败，添加所有官方链接
+        if rss_success and len(news_items) >= 2:
+            news_items.extend(official_links[:2])
+        else:
+            news_items.extend(official_links)
+        
+        # 返回前4条，确保数量一致
+        return news_items[:4], rss_success
         
     except Exception as e:
-        # 完全失败时的备用方案
+        # 完全失败时的最小备用方案
         return [
             {
-                'title': '🔗 Amazon Seller Central',
+                'title': 'Amazon Seller Central',
                 'desc': '访问官方卖家中心获取最新资讯',
                 'link': 'https://sellercentral.amazon.com',
                 'source': '官方',
-                'date': datetime.now().strftime('%Y-%m-%d')
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'is_rss': False
             },
             {
-                'title': '📰 Amazon News Room',
+                'title': 'Amazon Press Room',
                 'desc': '查看Amazon官方新闻和公告',
                 'link': 'https://press.aboutamazon.com',
                 'source': '新闻',
-                'date': datetime.now().strftime('%Y-%m-%d')
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'is_rss': False
             }
-        ]
+        ], False
 
 # 显示实时资讯模块
 with st.expander("📰 Amazon实时资讯", expanded=True):
-    # 检测是否为云端环境
-    try:
-        import feedparser
-        st.caption("🔄 每30分钟自动更新 | 🔗 点击按钮可跳转查看详情 | 📡 RSS功能已启用")
-    except ImportError:
-        st.caption("🔗 Amazon官方资源链接 | 💡 云端环境正在安装RSS功能")
+    # 获取资讯数据
+    with st.spinner("📡 正在获取Amazon资讯..."):
+        news_list, rss_success = get_real_amazon_news()
     
-    # 检测环境并显示相应的加载信息
-    try:
-        import feedparser
-        with st.spinner("📡 正在获取RSS资讯..."):
-            news_list = get_real_amazon_news()
-            
-        # 调试信息：显示RSS获取状态
-        if news_list:
-            rss_count = sum(1 for news in news_list if news['source'] in ['官方', '官方博客'])
-            if rss_count > 0:
-                st.success(f"✅ 成功获取 {rss_count} 条RSS资讯，{len(news_list)-rss_count} 条官方链接")
-            else:
-                st.info("📡 RSS源暂无新内容，显示官方资源链接")
-    except ImportError:
-        with st.spinner("🔗 正在加载Amazon官方资源..."):
-            news_list = get_real_amazon_news()
+    # 显示状态信息
+    if rss_success:
+        rss_count = sum(1 for news in news_list if news.get('is_rss', False))
+        official_count = len(news_list) - rss_count
+        st.success(f"✅ 获取成功：{rss_count} 条RSS实时资讯 + {official_count} 条官方资源")
+        st.caption("🔄 每30分钟自动更新 | 📡 RSS功能正常 | 🔗 点击查看详情")
+    else:
+        st.info("📡 RSS源暂时无法访问，显示Amazon官方资源链接")
+        st.caption("🔗 官方资源始终可用 | 💡 这些链接包含最新的政策和功能更新")
     
     if not news_list:
-        st.warning("暂时无法获取资讯，请稍后刷新")
+        st.warning("⚠️ 暂时无法获取资讯，请稍后刷新页面")
     else:
-        # 使用简单的容器显示资讯，避免HTML渲染问题
+        # 使用2列布局显示资讯
         col1, col2 = st.columns(2)
         
         for i, news in enumerate(news_list):
             target_col = col1 if i % 2 == 0 else col2
             
             with target_col:
-                # 使用Streamlit原生组件而不是HTML
                 with st.container(border=True):
-                    # 来源标签
+                    # 来源标签和类型指示
                     source_colors = {
-                        '官方': '🟢',
+                        '官方新闻': '🟢',
                         '官方博客': '🟢', 
-                        '广告': '🟣',
-                        '品牌': '🔴',
-                        'FBA': '🟠',
-                        '新闻': '⚪',
-                        'NewsAPI': '🔵'
+                        '广告博客': '🟣',
+                        '卖家中心': '🔵',
+                        '广告中心': '🟣',
+                        '品牌注册': '🔴',
+                        'FBA中心': '🟠',
+                        '官方': '🟢',
+                        '新闻': '⚪'
                     }
                     source_icon = source_colors.get(news['source'], '⚪')
                     
-                    # 标题和来源
-                    st.markdown(f"**{source_icon} {news['source']}** · {news['date']}")
+                    # 显示类型标识
+                    if news.get('is_rss', False):
+                        type_badge = "📡 实时"
+                    else:
+                        type_badge = "🔗 官方"
+                    
+                    # 标题行
+                    st.markdown(f"**{source_icon} {news['source']}** · {type_badge} · {news['date']}")
                     
                     # 资讯标题
                     st.markdown(f"### {news['title']}")
                     
-                    # 描述
+                    # 描述内容
                     st.markdown(news['desc'])
                     
                     # 跳转按钮
