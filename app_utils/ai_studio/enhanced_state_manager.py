@@ -12,7 +12,14 @@ from .models import (
     ConversationState, UISettings, BaseMessage, UserMessage, AIMessage,
     create_user_message, create_ai_message, convert_legacy_message
 )
-from services.ai_studio.vision_service import StudioVisionService
+# Import vision service with error handling
+try:
+    from services.ai_studio.vision_service import StudioVisionService
+    VISION_SERVICE_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Could not import StudioVisionService: {e}")
+    StudioVisionService = None
+    VISION_SERVICE_AVAILABLE = False
 from .error_handler import handle_ui_error, handle_api_error, ErrorType, with_error_handling
 
 
@@ -34,23 +41,51 @@ class EnhancedStateManager:
         
         # Initialize vision service if not present
         if "studio_vision_svc" not in st.session_state:
-            try:
-                api_key = st.secrets.get("GOOGLE_API_KEY")
-                if not api_key:
-                    st.warning("⚠️ Google API key not found. Image generation will not be available.")
-                st.session_state.studio_vision_svc = StudioVisionService(api_key)
-            except Exception as e:
-                st.error(f"❌ Failed to initialize vision service: {e}")
-                # Create a minimal dummy service to prevent crashes
-                class DummyVisionService:
-                    def resolve_reference_image(self, *args, **kwargs):
-                        return None, "❌ Vision service initialization failed"
-                    def generate_image_with_progress(self, *args, **kwargs):
-                        from services.ai_studio.vision_service import ImageGenerationResult
-                        result = ImageGenerationResult()
-                        result.error = "Vision service initialization failed"
-                        return result
-                st.session_state.studio_vision_svc = DummyVisionService()
+            if VISION_SERVICE_AVAILABLE and StudioVisionService:
+                try:
+                    api_key = st.secrets.get("GOOGLE_API_KEY")
+                    if not api_key:
+                        st.warning("⚠️ Google API key not found. Image generation will not be available.")
+                    st.session_state.studio_vision_svc = StudioVisionService(api_key)
+                    st.success("✅ Vision service initialized successfully")
+                except Exception as e:
+                    st.error(f"❌ Failed to initialize vision service: {e}")
+                    st.session_state.studio_vision_svc = self._create_dummy_vision_service()
+            else:
+                st.warning("⚠️ Vision service not available. Image generation features will be disabled.")
+                st.session_state.studio_vision_svc = self._create_dummy_vision_service()
+    
+    def _create_dummy_vision_service(self):
+        """Create a dummy vision service to prevent crashes"""
+        class DummyVisionService:
+            def resolve_reference_image(self, *args, **kwargs):
+                return None, "❌ Vision service not available"
+            
+            def generate_image_with_progress(self, *args, **kwargs):
+                # Create a simple result object without importing the real class
+                class DummyResult:
+                    def __init__(self):
+                        self.image_data = None
+                        self.error = "Vision service not available"
+                        self.success = False
+                        self.generation_time = None
+                        self.model_used = None
+                        self.prompt_used = None
+                        self.reference_indicator = None
+                return DummyResult()
+            
+            def get_generation_capabilities(self):
+                return {
+                    'supports_reference_images': False,
+                    'supports_iterative_editing': False,
+                    'supports_progress_tracking': False,
+                    'supports_high_quality_preview': False,
+                    'max_image_size_mb': 0,
+                    'supported_formats': [],
+                    'max_retries': 0
+                }
+        
+        return DummyVisionService()
         
         return st.session_state[self.state_key]
     
