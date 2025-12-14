@@ -121,69 +121,48 @@ class ChatContainer:
             st.markdown(content)
     
     def _render_image_result(self, message: AIMessage) -> None:
-        """Enhanced image generation result rendering with high-quality preview and controls"""
+        """Render image generation result with simple, reliable display (following Smart Edit pattern)"""
         
-        # Get image metadata if available
-        metadata = getattr(message, 'metadata', {})
-        image_metadata = metadata.get('image_metadata', {})
-        reference_indicator = metadata.get('reference_indicator')
-        generation_time = metadata.get('generation_time')
+        # Get image data
+        image_data = getattr(message, 'hd_data', None)
+        if not image_data:
+            st.error("❌ Image data not found")
+            return
         
-        # Display reference indicator if available
-        if reference_indicator:
-            st.info(reference_indicator)
-        
-        # Create main image display with enhanced preview
-        image_container = st.container()
-        
-        with image_container:
-            # Display the high-quality image
-            image_data = getattr(message, 'hd_data', None)
-            if image_data:
-                # Create responsive image display
-                col1, col2, col3 = st.columns([1, 3, 1])
-                
-                with col2:
-                    st.image(
-                        image_data, 
-                        caption=f"Generated Image • {image_metadata.get('size', 'Unknown size')} • {image_metadata.get('file_size_mb', 0):.1f} MB",
-                        use_container_width=True
-                    )
-        
-        # Enhanced action buttons
-        action_container = st.container()
-        
-        with action_container:
-            col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 2])
+        try:
+            # Import ai_studio tools for proper image handling (same as Smart Edit)
+            from app_utils.ai_studio.tools import create_preview_thumbnail, process_image_for_download
+            import time
             
-            # Zoom/Full-size view
+            # Create preview thumbnail for display (following Smart Edit pattern)
+            preview_data = create_preview_thumbnail(image_data, max_width=800)
+            
+            # Display the image using simple st.image (same as Smart Edit)
+            st.image(
+                preview_data, 
+                caption="Generated Image (点击下载按钮获取高清原图)",
+                use_container_width=True
+            )
+            
+            # Simple action buttons (following Smart Edit pattern)
+            col1, col2, col3 = st.columns([1, 1, 2])
+            
+            # Download button (same as Smart Edit)
             with col1:
-                if st.button("🔍 Zoom", key=f"zoom_{message.id}", help="View full size with zoom controls"):
-                    self._show_enhanced_image_modal(message, image_metadata)
-            
-            # Download original
-            with col2:
+                final_bytes, mime_type = process_image_for_download(image_data, format="JPEG", quality=95)
                 st.download_button(
                     "📥 Download", 
-                    data=image_data,
+                    data=final_bytes,
                     file_name=f"ai_generated_{message.id}_{int(time.time())}.jpg",
-                    mime="image/jpeg",
+                    mime=mime_type,
                     key=f"download_{message.id}",
-                    help="Download full-resolution image"
+                    help="Download high-resolution image",
+                    use_container_width=True
                 )
             
-            # Copy image (as base64 for sharing)
-            with col3:
-                if st.button("📋 Copy", key=f"copy_img_{message.id}", help="Copy image data"):
-                    import base64
-                    b64_data = base64.b64encode(image_data).decode()
-                    # Store in session state for JavaScript access
-                    st.session_state[f"copy_data_{message.id}"] = b64_data
-                    st.success("Image copied!", icon="📋")
-            
-            # Use as reference for next generation
-            with col4:
-                if st.button("🔗 Reference", key=f"ref_{message.id}", help="Use as reference for next generation"):
+            # Use as reference button
+            with col2:
+                if st.button("🔗 Reference", key=f"ref_{message.id}", help="Use as reference for next generation", use_container_width=True):
                     # Add to session state as reference image
                     if 'reference_images' not in st.session_state:
                         st.session_state.reference_images = []
@@ -195,108 +174,21 @@ class ChatContainer:
                     st.session_state.reference_images = [ref_img]  # Replace existing references
                     
                     st.success("Set as reference image!", icon="🔗")
+            
+            # Show generation info if available
+            with col3:
+                metadata = getattr(message, 'metadata', {})
+                if metadata.get('generation_time'):
+                    st.caption(f"⏱️ Generated in {metadata['generation_time']:.1f}s")
+                if metadata.get('reference_indicator'):
+                    st.caption(f"📸 {metadata['reference_indicator']}")
         
-        # Display generation metadata
-        if generation_time or image_metadata:
-            with st.expander("📊 Generation Details", expanded=False):
-                detail_col1, detail_col2 = st.columns(2)
-                
-                with detail_col1:
-                    if generation_time:
-                        st.metric("Generation Time", f"{generation_time:.2f}s")
-                    if image_metadata.get('format'):
-                        st.metric("Format", image_metadata['format'])
-                    if image_metadata.get('mode'):
-                        st.metric("Color Mode", image_metadata['mode'])
-                
-                with detail_col2:
-                    if image_metadata.get('size'):
-                        width, height = image_metadata['size']
-                        st.metric("Dimensions", f"{width} × {height}")
-                    if image_metadata.get('aspect_ratio'):
-                        st.metric("Aspect Ratio", f"{image_metadata['aspect_ratio']:.2f}:1")
-                    if image_metadata.get('file_size_mb'):
-                        st.metric("File Size", f"{image_metadata['file_size_mb']:.2f} MB")
-        
-        # Iterative editing suggestions
-        if reference_indicator and "iterative" in reference_indicator.lower():
-            st.info("💡 **Iterative Editing Mode**: This image was generated based on a previous result. You can continue refining by describing further changes.")
+        except Exception as e:
+            st.error(f"❌ Error displaying image: {str(e)}")
+            # Fallback: show raw image data
+            st.image(image_data, caption="Generated Image (Raw)", use_container_width=True)
     
-    def _show_enhanced_image_modal(self, message: AIMessage, metadata: dict) -> None:
-        """Show enhanced image modal with zoom controls and detailed information"""
-        
-        @st.dialog(f"🔍 Generated Image - Full View")
-        def _enhanced_dialog():
-            # Main image display
-            image_data = getattr(message, 'hd_data', None)
-            if image_data:
-                st.image(
-                    image_data, 
-                    caption=f"Full Resolution • {metadata.get('size', 'Unknown')} • {metadata.get('file_size_mb', 0):.1f} MB",
-                    use_container_width=True
-                )
-            
-            # Action buttons in modal
-            modal_col1, modal_col2, modal_col3 = st.columns(3)
-            
-            with modal_col1:
-                st.download_button(
-                    "📥 Download Full Resolution", 
-                    data=image_data,
-                    file_name=f"ai_generated_full_{message.id}_{int(time.time())}.jpg",
-                    mime="image/jpeg",
-                    key=f"modal_download_{message.id}",
-                    use_container_width=True
-                )
-            
-            with modal_col2:
-                if st.button("🔗 Use as Reference", key=f"modal_ref_{message.id}", use_container_width=True):
-                    from PIL import Image
-                    import io
-                    ref_img = Image.open(io.BytesIO(image_data))
-                    if 'reference_images' not in st.session_state:
-                        st.session_state.reference_images = []
-                    st.session_state.reference_images = [ref_img]
-                    st.success("Set as reference!")
-            
-            with modal_col3:
-                if st.button("📋 Copy Image Data", key=f"modal_copy_{message.id}", use_container_width=True):
-                    import base64
-                    b64_data = base64.b64encode(image_data).decode()
-                    st.session_state[f"modal_copy_data_{message.id}"] = b64_data
-                    st.success("Image data copied!")
-            
-            # Detailed metadata
-            if metadata:
-                st.subheader("📊 Image Details")
-                
-                detail_cols = st.columns(3)
-                
-                with detail_cols[0]:
-                    st.write("**Technical Info:**")
-                    st.write(f"Format: {metadata.get('format', 'Unknown')}")
-                    st.write(f"Color Mode: {metadata.get('mode', 'Unknown')}")
-                    st.write(f"File Size: {metadata.get('file_size_mb', 0):.2f} MB")
-                
-                with detail_cols[1]:
-                    st.write("**Dimensions:**")
-                    if metadata.get('size'):
-                        width, height = metadata['size']
-                        st.write(f"Width: {width} px")
-                        st.write(f"Height: {height} px")
-                        st.write(f"Aspect Ratio: {metadata.get('aspect_ratio', 1):.2f}:1")
-                
-                with detail_cols[2]:
-                    st.write("**Generation Info:**")
-                    msg_metadata = getattr(message, 'metadata', {})
-                    if msg_metadata.get('generation_time'):
-                        st.write(f"Generation Time: {msg_metadata['generation_time']:.2f}s")
-                    if msg_metadata.get('reference_used'):
-                        st.write("Reference Image: ✅ Used")
-                    else:
-                        st.write("Reference Image: ❌ None")
-        
-        _enhanced_dialog()
+
     
     def _render_message_actions(self, message: BaseMessage, idx: int,
                               on_delete: Optional[Callable] = None,
@@ -844,31 +736,10 @@ class ChatContainer:
                        unsafe_allow_html=True)
     
     def _render_responsive_image_result(self, message: AIMessage) -> None:
-        """Render image generation result with responsive controls"""
+        """Render image generation result with responsive controls (simplified)"""
         
-        # Display the image responsively
-        st.image(message.content if hasattr(message, 'content') and message.content else message.hd_data, 
-                use_container_width=True)
-        
-        # Responsive action buttons
-        col1, col2, col3 = st.columns([1, 1, 2])
-        
-        with col1:
-            if st.button("🔍", key=f"zoom_{message.id}", help="View full size",
-                        use_container_width=True):
-                self._show_image_modal(message.hd_data, f"Generated Image {message.id}")
-        
-        with col2:
-            # Download button
-            st.download_button(
-                "📥", 
-                data=message.hd_data,
-                file_name=f"generated_{message.id}.jpg",
-                mime="image/jpeg",
-                key=f"download_{message.id}",
-                help="Download image",
-                use_container_width=True
-            )
+        # Use the same simple pattern as the main _render_image_result method
+        self._render_image_result(message)
     
     def _render_responsive_message_actions(self, message: BaseMessage, idx: int,
                                          on_delete: Optional[Callable] = None,
