@@ -227,8 +227,8 @@ def get_real_amazon_news():
                 except Exception as e:
                     continue
         except ImportError:
-            # 如果没有feedparser，提示用户安装
-            st.info("💡 安装 feedparser 可获取更多实时资讯：`pip install feedparser`")
+            # 如果没有feedparser，在云端环境下静默处理
+            pass
         
         # 方案2: 如果上面都失败，提供一些真实的Amazon资讯链接
         if len(news_items) < 3:
@@ -287,10 +287,21 @@ def get_real_amazon_news():
 
 # 显示实时资讯模块
 with st.expander("📰 Amazon实时资讯", expanded=True):
-    st.caption("🔄 每30分钟自动更新 | 🔗 点击按钮可跳转查看详情")
+    # 检测是否为云端环境
+    try:
+        import feedparser
+        st.caption("🔄 每30分钟自动更新 | 🔗 点击按钮可跳转查看详情 | 📡 RSS功能已启用")
+    except ImportError:
+        st.caption("🔗 Amazon官方资源链接 | 💡 云端环境正在安装RSS功能")
     
-    with st.spinner("📡 正在获取最新资讯..."):
-        news_list = get_real_amazon_news()
+    # 检测环境并显示相应的加载信息
+    try:
+        import feedparser
+        with st.spinner("📡 正在获取RSS资讯..."):
+            news_list = get_real_amazon_news()
+    except ImportError:
+        with st.spinner("🔗 正在加载Amazon官方资源..."):
+            news_list = get_real_amazon_news()
     
     if not news_list:
         st.warning("暂时无法获取资讯，请稍后刷新")
