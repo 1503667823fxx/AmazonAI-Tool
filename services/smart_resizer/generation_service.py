@@ -18,6 +18,14 @@ def _intelligent_background_extension(image: Image.Image, mask: Image.Image, ana
     img_array = np.array(image)
     mask_array = np.array(mask)
     
+    # 确保数组维度匹配
+    if len(img_array.shape) == 3 and len(mask_array.shape) == 2:
+        # 图像是RGB，遮罩是灰度，需要确保尺寸匹配
+        if img_array.shape[:2] != mask_array.shape:
+            # 调整遮罩尺寸以匹配图像
+            mask_resized = Image.fromarray(mask_array).resize((img_array.shape[1], img_array.shape[0]))
+            mask_array = np.array(mask_resized)
+    
     # 创建结果图像
     result = img_array.copy()
     
@@ -26,8 +34,11 @@ def _intelligent_background_extension(image: Image.Image, mask: Image.Image, ana
     
     # 基于分析结果选择填充策略
     if "纯白" in analysis or "白色背景" in analysis:
-        # 纯白背景扩展
-        result[fill_mask] = [255, 255, 255]
+        # 纯白背景扩展 - 确保维度正确
+        if len(result.shape) == 3:
+            result[fill_mask] = [255, 255, 255]
+        else:
+            result[fill_mask] = 255
     elif "渐变" in analysis or "柔和" in analysis:
         # 创建渐变背景
         result = _create_gradient_fill(result, fill_mask, img_array)
@@ -144,15 +155,37 @@ def fill_image(image: Image.Image, mask: Image.Image, prompt: str, use_gemini: b
                 st.warning("Gemini画幅重构失败，使用智能算法扩展...")
         
         # 兜底：使用智能算法进行扩展
-        result_image = _intelligent_background_extension(image, mask, prompt)
-        result_image = _post_process_image(result_image, image, mask)
-        return result_image
+        if mask is None:
+            # 如果没有遮罩，创建一个简单的扩展
+            return _create_simple_extension(image, target_ratio, prompt)
+        else:
+            result_image = _intelligent_background_extension(image, mask, prompt)
+            result_image = _post_process_image(result_image, image, mask)
+            return result_image
         
     except Exception as e:
         st.error(f"图像扩展失败: {str(e)}")
         print(f"详细错误信息: {e}")
-        # 返回简单的白色背景扩展作为兜底
-        return _simple_white_extension(image, mask)
+        # 返回原图作为最终兜底
+        return image
+
+def _create_simple_extension(image: Image.Image, target_ratio: tuple, prompt: str) -> Image.Image:
+    """
+    当没有遮罩时，创建简单的扩展
+    """
+    try:
+        from app_utils.smart_resizer.image_tools import prepare_canvas
+        
+        # 创建画布和遮罩
+        extended_image, mask = prepare_canvas(image, target_ratio)
+        
+        # 使用智能算法填充
+        result = _intelligent_background_extension(extended_image, mask, prompt)
+        
+        return result
+    except Exception as e:
+        print(f"简单扩展失败: {e}")
+        return image
 
 def _gemini_aspect_ratio_change(image: Image.Image, target_ratio: tuple, background_info: str) -> Image.Image:
     """
@@ -221,17 +254,37 @@ def _simple_gemini_test(image: Image.Image, target_ratio: tuple) -> Image.Image:
         # 最简单的提示词
         prompt = f"Change this image to {ratio_w}:{ratio_h} aspect ratio."
         
-        response = model.generate_content([prompt, image])
+        # 简单的生成配置
+        gen_config = genai.types.GenerationConfig(
+            temperature=0.1,
+            candidate_count=1
+        )
+        
+        response = model.generate_content([prompt, image], generation_config=gen_config)
         
         if response.parts:
             for part in response.parts:
                 if hasattr(part, "inline_data") and part.inline_data:
                     img_data = part.inline_data.data
-                    return Image.open(io.BytesIO(img_data))
+                    generated_image = Image.open(io.BytesIO(img_data))
+                    
+                    # 简单验证尺寸
+                    gen_w, gen_h = generated_image.size
+                    gen_ratio = gen_w / gen_h
+                    target_ratio_val = ratio_w / ratio_h
+                    
+                    st.info(f"🎯 Gemini生成结果: {gen_w}×{gen_h}, 比例: {gen_ratio:.2f} (目标: {target_ratio_val:.2f})")
+                    
+                    return generated_image
+        
+        # 检查文本响应
+        if response.text:
+            st.warning(f"Gemini返回文本: {response.text}")
         
         return None
         
     except Exception as e:
+        st.error(f"Gemini测试失败: {e}")
         print(f"简单测试失败: {e}")
         return None
 
@@ -241,13 +294,21 @@ def _post_process_image(result: Image.Image, original: Image.Image, mask: Image.
     result_array = np.array(result)
     mask_array = np.array(mask)
     
+    # 确保数组维度匹配
+    if len(result_array.shape) == 3 and len(mask_array.shape) == 2:
+        if result_array.shape[:2] != mask_array.shape:
+            mask_resized = Image.fromarray(mask_array).resize((result_array.shape[1], result_array.shape[0]))
+            mask_array = np.array(mask_resized)
+    
     # 只对填充区域应用轻微模糊
     blurred = result.filter(ImageFilter.GaussianBlur(radius=0.5))
     blurred_array = np.array(blurred)
     
     # 混合原图和模糊结果
     fill_mask = mask_array > 128
-    result_array[fill_mask] = blurred_array[fill_mask]
+    
+    if len(result_array.shape) == 3 and len(blurred_array.shape) == 3:
+        result_array[fill_mask] = blurred_array[fill_mask]
     
     return Image.fromarray(result_array)
 
@@ -257,8 +318,18 @@ def _simple_white_extension(image: Image.Image, mask: Image.Image) -> Image.Imag
     mask_array = np.array(mask)
     result_array = np.array(result)
     
+    # 确保数组维度匹配
+    if len(result_array.shape) == 3 and len(mask_array.shape) == 2:
+        if result_array.shape[:2] != mask_array.shape:
+            mask_resized = Image.fromarray(mask_array).resize((result_array.shape[1], result_array.shape[0]))
+            mask_array = np.array(mask_resized)
+    
     # 将需要填充的区域设为白色
     fill_mask = mask_array > 128
-    result_array[fill_mask] = [255, 255, 255]
+    
+    if len(result_array.shape) == 3:
+        result_array[fill_mask] = [255, 255, 255]
+    else:
+        result_array[fill_mask] = 255
     
     return Image.fromarray(result_array)
