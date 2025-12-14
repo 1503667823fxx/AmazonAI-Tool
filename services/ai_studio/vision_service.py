@@ -267,7 +267,7 @@ class StudioVisionService:
             return False
 
     def generate_image_with_progress(self, prompt: str, model_name: str, ref_image=None, 
-                                   ref_images=None, progress_callback=None) -> ImageGenerationResult:
+                                   ref_images=None, aspect_ratio_prompt=None, progress_callback=None) -> ImageGenerationResult:
         """
         Enhanced image generation with progress indicators and better error handling
         
@@ -301,7 +301,13 @@ class StudioVisionService:
                 progress_callback("Initializing model...", 0.1)
             
             model = genai.GenerativeModel(model_name)
-            inputs = [prompt]
+            
+            # Enhance prompt with aspect ratio if provided
+            enhanced_prompt = prompt
+            if aspect_ratio_prompt:
+                enhanced_prompt = f"{prompt}, {aspect_ratio_prompt}"
+            
+            inputs = [enhanced_prompt]
             
             # Process reference images if provided (support both single and multiple images)
             reference_images_to_use = []
