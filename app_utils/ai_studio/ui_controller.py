@@ -51,13 +51,13 @@ class UIController:
         # Render main chat area
         self._render_chat_area(state)
         
-        # Handle inference if triggered
-        if st.session_state.get("trigger_inference", False):
-            self._handle_inference()
-        
-        # Render input area (if not streaming)
+        # Render input area first (always show unless explicitly streaming)
         if not state.is_streaming:
             self._render_input_area()
+        
+        # Handle inference if triggered (after input area is rendered)
+        if st.session_state.get("trigger_inference", False):
+            self._handle_inference()
     
     def _render_sidebar(self) -> None:
         """Render the sidebar with model selection and controls"""
@@ -206,21 +206,25 @@ class UIController:
             st.rerun()
             return
         
-        # Set streaming state
-        state_manager.set_streaming_state(True)
-        
-        # Get current model and check if it's image mode
-        current_model = state.current_model
-        is_image_mode = "image-preview" in current_model
-        
-        # Handle inference based on mode
-        if is_image_mode:
-            self._handle_image_generation(last_message, current_model)
-        else:
-            self._handle_text_generation(last_message, current_model)
-        
-        # Clear streaming state
-        state_manager.set_streaming_state(False)
+        try:
+            # Set streaming state
+            state_manager.set_streaming_state(True)
+            
+            # Get current model and check if it's image mode
+            current_model = state.current_model
+            is_image_mode = "image-preview" in current_model
+            
+            # Handle inference based on mode
+            if is_image_mode:
+                self._handle_image_generation(last_message, current_model)
+            else:
+                self._handle_text_generation(last_message, current_model)
+                
+        except Exception as e:
+            st.error(f"Inference Error: {e}")
+        finally:
+            # Always clear streaming state, even if an error occurs
+            state_manager.set_streaming_state(False)
     
     def _handle_image_generation(self, user_message, model_name: str) -> None:
         """Enhanced image generation with better progress indicators and error handling"""
