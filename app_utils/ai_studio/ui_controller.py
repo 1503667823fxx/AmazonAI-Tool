@@ -368,12 +368,12 @@ class UIController:
                             if result.reference_indicator:
                                 st.info(result.reference_indicator)
                         
-                        # Add AI message with image result
+                        # Add AI message with image result (without storing large image data)
                         state_manager.add_ai_message(
-                            content=f"Generated image from prompt: {user_message.content[:100]}{'...' if len(user_message.content) > 100 else ''}",
+                            content=f"✅ Successfully generated image from prompt: {user_message.content[:100]}{'...' if len(user_message.content) > 100 else ''}",
                             model_used=model_name,
-                            message_type="image_result",
-                            hd_data=result.image_data
+                            message_type="image_result"
+                            # Note: Not storing hd_data to avoid memory issues
                         )
                         
                         # Final progress update
