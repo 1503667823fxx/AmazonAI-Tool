@@ -60,9 +60,26 @@ if uploaded_file:
     
     with col1:
         st.subheader("原始素材")
-        # 调用工具计算预览效果（计算 padding 后的尺寸）
-        preview_image, _ = image_tools.prepare_canvas(original_image, target_ratio)
+        
+        # 显示原图信息
+        orig_w, orig_h = original_image.size
+        orig_ratio = orig_w / orig_h
+        target_w_ratio, target_h_ratio = target_ratio
+        target_ratio_val = target_w_ratio / target_h_ratio
+        
+        st.info(f"原图尺寸: {orig_w}×{orig_h} (比例: {orig_ratio:.2f})")
+        st.info(f"目标比例: {target_w_ratio}:{target_h_ratio} ({target_ratio_val:.2f})")
+        
+        # 调用工具计算预览效果
+        preview_image, mask_image = image_tools.prepare_canvas(original_image, target_ratio)
+        new_w, new_h = preview_image.size
+        
+        st.info(f"扩展后尺寸: {new_w}×{new_h}")
         st.image(preview_image, caption=f"目标构图预览 (灰色区域为AI扩充区)", use_column_width=True)
+        
+        # 显示遮罩预览（调试用）
+        with st.expander("查看处理遮罩 (调试)"):
+            st.image(mask_image, caption="白色=AI填充区域，黑色=保留原图", use_column_width=True)
 
     if generate_btn:
         with col2:
