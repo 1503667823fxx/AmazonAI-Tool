@@ -125,22 +125,25 @@ def _simple_edge_extension(img_array: np.ndarray, fill_mask: np.ndarray) -> np.n
     
     return result
 
-def fill_image(image: Image.Image, mask: Image.Image, prompt: str, use_gemini: bool = True) -> Image.Image:
+def fill_image(image: Image.Image, mask: Image.Image, prompt: str, use_gemini: bool = True, target_ratio: tuple = None, test_mode: bool = False) -> Image.Image:
     """
-    使用Gemini图像生成模型进行图像扩充
+    使用Gemini进行画幅重构
     """
     try:
-        if use_gemini:
-            # 尝试使用Gemini进行图像生成
-            result_image = _gemini_image_generation(image, mask, prompt)
+        if use_gemini and target_ratio:
+            if test_mode:
+                # 超简单测试模式
+                result_image = _simple_gemini_test(image, target_ratio)
+            else:
+                # 正常Gemini画幅重构
+                result_image = _gemini_aspect_ratio_change(image, target_ratio, prompt)
             
             if result_image:
                 return result_image
             else:
-                # 如果Gemini生成失败，使用智能算法兜底
-                st.warning("Gemini图像生成不可用，使用智能算法扩展...")
+                st.warning("Gemini画幅重构失败，使用智能算法扩展...")
         
-        # 使用智能算法进行扩展
+        # 兜底：使用智能算法进行扩展
         result_image = _intelligent_background_extension(image, mask, prompt)
         result_image = _post_process_image(result_image, image, mask)
         return result_image
@@ -151,36 +154,31 @@ def fill_image(image: Image.Image, mask: Image.Image, prompt: str, use_gemini: b
         # 返回简单的白色背景扩展作为兜底
         return _simple_white_extension(image, mask)
 
-def _gemini_image_generation(image: Image.Image, mask: Image.Image, prompt: str) -> Image.Image:
+def _gemini_aspect_ratio_change(image: Image.Image, target_ratio: tuple, background_info: str) -> Image.Image:
     """
-    使用Gemini进行图像生成
+    使用Gemini进行画幅重构 - 简单直接的方法
     """
     try:
         # 使用配置文件中指定的图像生成模型
         model_name = get_model_name("image_generation")
         model = genai.GenerativeModel(model_name)
         
-        # 构建详细的图像生成提示词
-        generation_prompt = f"""
-        请基于这张图片进行智能画幅扩展 (Outpainting)。
-
-        任务要求：
-        1. 保持中心产品完全不变 - 位置、大小、颜色、细节都必须完全一致
-        2. 只扩展灰色区域的背景，生成与原图风格完美融合的内容
-        3. 背景特征：{prompt}
-        4. 确保扩展区域与原图的光照、色调、透视完全一致
-        5. 不要添加任何新物体、文字或水印
-        6. 输出完整的高质量图像
-
-        重要：这是画幅扩展任务，不是重新创作。请严格保持原图内容不变，只扩展背景。
-        """
+        # 计算目标比例
+        ratio_w, ratio_h = target_ratio
+        ratio_desc = f"{ratio_w}:{ratio_h}"
         
-        # 配置生成参数
-        gen_config = genai.types.GenerationConfig(**get_generation_config())
+        # 最简单直接的提示词
+        simple_prompt = f"请将这张图片改为 {ratio_desc} 的画幅比例，保持产品不变，扩展背景。"
+        
+        # 配置生成参数 - 更简单的配置
+        gen_config = genai.types.GenerationConfig(
+            temperature=0.1,  # 很低的随机性
+            candidate_count=1
+        )
         
         # 发送生成请求
         response = model.generate_content(
-            [generation_prompt, image],
+            [simple_prompt, image],
             generation_config=gen_config
         )
         
@@ -191,12 +189,15 @@ def _gemini_image_generation(image: Image.Image, mask: Image.Image, prompt: str)
                     img_data = part.inline_data.data
                     generated_image = Image.open(io.BytesIO(img_data))
                     
-                    # 验证生成的图像尺寸是否正确
-                    if generated_image.size == image.size:
+                    # 检查生成的图像比例是否接近目标
+                    gen_w, gen_h = generated_image.size
+                    gen_ratio = gen_w / gen_h
+                    target_ratio_val = ratio_w / ratio_h
+                    
+                    if abs(gen_ratio - target_ratio_val) < 0.1:  # 允许10%的误差
                         return generated_image
                     else:
-                        print(f"生成图像尺寸不匹配: 期望{image.size}, 实际{generated_image.size}")
-                        return None
+                        print(f"生成图像比例不匹配: 目标{target_ratio_val:.2f}, 实际{gen_ratio:.2f}")
         
         # 如果没有图像数据，检查文本响应
         if response.text:
@@ -205,7 +206,33 @@ def _gemini_image_generation(image: Image.Image, mask: Image.Image, prompt: str)
         return None
         
     except Exception as e:
-        print(f"Gemini图像生成失败: {e}")
+        print(f"Gemini画幅重构失败: {e}")
+        return None
+
+def _simple_gemini_test(image: Image.Image, target_ratio: tuple) -> Image.Image:
+    """
+    超简单的Gemini画幅重构测试
+    """
+    try:
+        model = genai.GenerativeModel('models/gemini-3-pro-image-preview')
+        
+        ratio_w, ratio_h = target_ratio
+        
+        # 最简单的提示词
+        prompt = f"Change this image to {ratio_w}:{ratio_h} aspect ratio."
+        
+        response = model.generate_content([prompt, image])
+        
+        if response.parts:
+            for part in response.parts:
+                if hasattr(part, "inline_data") and part.inline_data:
+                    img_data = part.inline_data.data
+                    return Image.open(io.BytesIO(img_data))
+        
+        return None
+        
+    except Exception as e:
+        print(f"简单测试失败: {e}")
         return None
 
 def _post_process_image(result: Image.Image, original: Image.Image, mask: Image.Image) -> Image.Image:
