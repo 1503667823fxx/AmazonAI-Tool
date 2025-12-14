@@ -12,7 +12,7 @@ class ImageGenerationResult:
     def __init__(self, image_data: Optional[bytes] = None, error: Optional[str] = None):
         self.image_data = image_data
         self.error = error
-        self.success = image_data is not None
+        self.success = False  # Will be set explicitly when generation succeeds
         self.generation_time = None
         self.model_used = None
         self.prompt_used = None
@@ -283,6 +283,8 @@ class StudioVisionService:
                                 # Validate generated image
                                 if self._validate_image_data(image_data):
                                     result.image_data = image_data
+                                    result.success = True  # Explicitly set success
+                                    result.error = None   # Clear any previous error
                                     result.generation_time = time.time() - start_time
                                     
                                     if progress_callback:
@@ -291,6 +293,7 @@ class StudioVisionService:
                                     return result
                                 else:
                                     result.error = "Generated image validation failed"
+                                    result.success = False
                                     return result
                     
                     # No image data in response
