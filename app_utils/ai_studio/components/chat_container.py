@@ -109,19 +109,11 @@ class ChatContainer:
     def _render_ai_message_content(self, message: AIMessage) -> None:
         """Render AI message content with special handling for different types"""
         
-        # Debug information to help diagnose image display issues
-        st.write(f"🔍 Debug - Message type: {getattr(message, 'message_type', 'None')}")
-        st.write(f"🔍 Debug - Has hd_data: {hasattr(message, 'hd_data') and message.hd_data is not None}")
-        if hasattr(message, 'hd_data') and message.hd_data:
-            st.write(f"🔍 Debug - Image data size: {len(message.hd_data)} bytes")
-        
         if message.message_type == "image_result" and message.hd_data:
             # Render image result with preview and download options
-            st.write("🔍 Debug - Rendering image result")
             self._render_image_result(message)
         else:
             # Render text content with streaming indicator if needed
-            st.write("🔍 Debug - Rendering text content")
             content = message.content
             if state_manager.get_state().is_streaming and message == state_manager.get_state().messages[-1]:
                 content += " ▌"  # Add cursor for streaming
@@ -131,30 +123,19 @@ class ChatContainer:
     def _render_image_result(self, message: AIMessage) -> None:
         """Render image generation result with simple, reliable display (following Smart Edit pattern)"""
         
-        st.write("🔍 Debug - _render_image_result called")
-        
         # Get image data
         image_data = getattr(message, 'hd_data', None)
-        st.write(f"🔍 Debug - Image data retrieved: {image_data is not None}")
-        if image_data:
-            st.write(f"🔍 Debug - Image data size: {len(image_data)} bytes")
-        
         if not image_data:
             st.error("❌ Image data not found")
             return
         
         try:
-            st.write("🔍 Debug - Attempting to display image")
-            
             # Import ai_studio tools for proper image handling (same as Smart Edit)
             from app_utils.ai_studio.tools import create_preview_thumbnail, process_image_for_download
             import time
             
-            st.write("🔍 Debug - Tools imported successfully")
-            
             # Create preview thumbnail for display (following Smart Edit pattern)
             preview_data = create_preview_thumbnail(image_data, max_width=800)
-            st.write(f"🔍 Debug - Preview thumbnail created: {len(preview_data)} bytes")
             
             # Display the image using simple st.image (same as Smart Edit)
             st.image(
@@ -162,7 +143,6 @@ class ChatContainer:
                 caption="Generated Image (点击下载按钮获取高清原图)",
                 use_container_width=True
             )
-            st.write("🔍 Debug - Image displayed successfully")
             
             # Simple action buttons (following Smart Edit pattern)
             col1, col2, col3 = st.columns([1, 1, 2])
@@ -205,14 +185,11 @@ class ChatContainer:
         
         except Exception as e:
             st.error(f"❌ Error displaying image: {str(e)}")
-            st.write(f"🔍 Debug - Exception details: {type(e).__name__}: {str(e)}")
             # Fallback: show raw image data
             try:
                 st.image(image_data, caption="Generated Image (Raw)", use_container_width=True)
-                st.write("🔍 Debug - Raw image displayed successfully")
             except Exception as raw_error:
                 st.error(f"❌ Even raw image display failed: {str(raw_error)}")
-                st.write(f"🔍 Debug - Raw image error: {type(raw_error).__name__}: {str(raw_error)}")
     
 
     
