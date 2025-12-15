@@ -67,7 +67,7 @@ def fill_image(image: Image.Image, mask: Image.Image, prompt: str, use_gemini: b
             composition_analysis = analyze_image_composition(image)
             
             # 根据分析结果调整提示词
-            model = genai.GenerativeModel('models/gemini-3-pro-preview')
+            model = genai.GenerativeModel('models/gemini-3-pro-image-preview')
             
             # 根据用户选择构建智能提示词
             if target_ratio_val > orig_ratio:
