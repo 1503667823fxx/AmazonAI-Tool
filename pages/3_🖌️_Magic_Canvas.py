@@ -22,6 +22,7 @@ try:
     from services.magic_canvas.canvas_utils import create_drawing_canvas
 except ImportError as e:
     st.error(f"❌ 核心模块丢失: {e}")
+    st.info("请确保已安装所有依赖: pip install -r requirements.txt")
     st.stop()
 
 st.set_page_config(page_title="Magic Canvas", page_icon="🖌️", layout="wide")
@@ -98,76 +99,121 @@ with col_canvas:
         st.subheader("🎨 编辑画布")
         
         # 显示操作提示
-        st.info("💡 可以在画布上涂抹（当前版本将重绘中心区域）")
+        st.info("💡 在图片上涂抹想要修改的区域，红色区域将被AI重绘")
         
         # 使用改进的canvas组件
-        create_drawing_canvas(
+        canvas_result = create_drawing_canvas(
             st.session_state.uploaded_image, 
-            brush_size=brush_size
+            brush_size=brush_size,
+            canvas_key="magic_canvas"
         )
         
-        # 简化的状态管理
-        st.info("💡 在上方画布中涂抹要修改的区域，然后输入重绘指令")
+        # 初始化mask状态
+        if "current_mask" not in st.session_state:
+            st.session_state.current_mask = None
+        
+        # 检查是否有绘制内容
+        has_drawing = False
+        mask_image = None
+        
+        if canvas_result:
+            # 处理canvas数据
+            if hasattr(canvas_result, 'image_data') and canvas_result.image_data is not None:
+                # 获取canvas数据
+                canvas_array = np.array(canvas_result.image_data)
+                
+                # 检查是否有绘制内容（非透明像素）
+                if len(canvas_array.shape) == 3 and canvas_array.shape[2] >= 4:
+                    alpha_channel = canvas_array[:, :, 3]
+                    
+                    # 创建二值mask
+                    mask_array = (alpha_channel > 0).astype(np.uint8) * 255
+                    
+                    # 计算涂抹面积
+                    white_pixels = np.sum(mask_array > 0)
+                    
+                    if white_pixels > 100:  # 最小面积检查
+                        mask_image = Image.fromarray(mask_array, mode='L')
+                        
+                        # 确保尺寸匹配
+                        if mask_image.size != st.session_state.uploaded_image.size:
+                            mask_image = mask_image.resize(st.session_state.uploaded_image.size, Image.Resampling.NEAREST)
+                        
+                        has_drawing = True
+                        st.session_state.current_mask = mask_image
+                    else:
+                        st.warning("⚠️ 涂抹区域太小，请涂抹更大的区域")
+        
+        # 显示当前状态
+        if has_drawing and mask_image:
+            st.success("✅ 已检测到涂抹区域")
+            with st.expander("🔍 查看涂抹区域", expanded=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.image(st.session_state.uploaded_image, caption="原图", use_column_width=True)
+                with col2:
+                    st.image(mask_image, caption="涂抹区域 (白色部分将被重绘)", use_column_width=True)
+        else:
+            st.info("💡 请在上方画布中涂抹要修改的区域，然后输入重绘指令")
         
         # 处理重绘请求
         if generate_btn:
-            with st.status("🎨 正在进行创意重绘...", expanded=True) as status:
-                try:
-                    # 1. 创建一个简单的中心区域mask作为示例
-                    st.write("🔍 准备重绘区域...")
-                    
-                    # 创建一个中心区域的mask（用户应该在这个区域涂抹）
-                    mask_image = Image.new('L', st.session_state.uploaded_image.size, 0)
-                    draw = ImageDraw.Draw(mask_image)
-                    
-                    # 创建一个中心圆形区域作为默认mask
-                    w, h = st.session_state.uploaded_image.size
-                    center_x, center_y = w // 2, h // 2
-                    radius = min(w, h) // 4
-                    draw.ellipse([
-                        center_x - radius, center_y - radius,
-                        center_x + radius, center_y + radius
-                    ], fill=255)
-                    
-                    # 显示生成的mask
-                    with st.expander("🔍 查看重绘区域", expanded=False):
-                        st.image(mask_image, caption="重绘区域 (白色部分)", width=300)
-                        st.info("💡 当前使用中心区域作为重绘范围，未来版本将支持自定义涂抹")
-                    
-                    # 2. 调用Gemini重绘服务
-                    st.write("🎨 Gemini正在发挥创意...")
-                    result_image = st.session_state.inpaint_service.inpaint(
-                        original_image=st.session_state.uploaded_image,
-                        mask_image=mask_image,
-                        prompt=prompt
-                    )
-                    
-                    if result_image:
-                        status.update(label="✅ 创意重绘完成！", state="complete")
+            if not has_drawing and st.session_state.current_mask is None:
+                st.error("❌ 请先在画布上涂抹要修改的区域")
+            else:
+                # 使用当前mask或者用户刚绘制的mask
+                final_mask = mask_image if mask_image else st.session_state.current_mask
+                
+                with st.status("🎨 正在进行创意重绘...", expanded=True) as status:
+                    try:
+                        st.write("🔍 分析涂抹区域...")
                         
-                        # 显示结果对比
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.image(st.session_state.uploaded_image, caption="原图", use_column_width=True)
-                        with col2:
-                            st.image(result_image, caption="Gemini创意结果", use_column_width=True)
-                        
-                        # 提供下载按钮
-                        buf = io.BytesIO()
-                        result_image.save(buf, format='PNG')
-                        st.download_button(
-                            label="📥 下载创意结果",
-                            data=buf.getvalue(),
-                            file_name="gemini_magic_result.png",
-                            mime="image/png",
-                            use_container_width=True
-                        )
-                    else:
-                        st.error("❌ 重绘失败，请检查API配置")
-                        
-                except Exception as e:
-                    st.error(f"❌ 处理过程中出现错误: {str(e)}")
-                    st.info("💡 提示：请确保已正确配置Google API密钥")
+                        if final_mask:
+                            # 显示将要重绘的区域
+                            with st.expander("🔍 重绘区域预览", expanded=True):
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.image(st.session_state.uploaded_image, caption="原图", use_column_width=True)
+                                with col2:
+                                    st.image(final_mask, caption="重绘区域 (白色部分)", use_column_width=True)
+                            
+                            # 2. 调用Gemini重绘服务
+                            st.write("🎨 Gemini正在发挥创意...")
+                            result_image = st.session_state.inpaint_service.inpaint(
+                                original_image=st.session_state.uploaded_image,
+                                mask_image=final_mask,
+                                prompt=prompt
+                            )
+                            
+                            if result_image:
+                                status.update(label="✅ 创意重绘完成！", state="complete")
+                                
+                                # 显示结果对比
+                                st.subheader("🎨 重绘结果")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.image(st.session_state.uploaded_image, caption="原图", use_column_width=True)
+                                with col2:
+                                    st.image(result_image, caption="Gemini创意结果", use_column_width=True)
+                                
+                                # 提供下载按钮
+                                buf = io.BytesIO()
+                                result_image.save(buf, format='PNG')
+                                st.download_button(
+                                    label="📥 下载创意结果",
+                                    data=buf.getvalue(),
+                                    file_name="gemini_magic_result.png",
+                                    mime="image/png",
+                                    use_container_width=True
+                                )
+                            else:
+                                st.error("❌ 重绘失败，请检查API配置")
+                        else:
+                            st.error("❌ 无法获取涂抹区域，请重新涂抹")
+                            
+                    except Exception as e:
+                        st.error(f"❌ 处理过程中出现错误: {str(e)}")
+                        st.info("💡 提示：请确保已正确配置Google API密钥")
     else:
         # 空状态显示
         st.subheader("📁 请上传图片开始编辑")
