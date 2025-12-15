@@ -66,7 +66,7 @@ with st.sidebar:
         help="选择如何扩展背景区域"
     )
     
-    st.info("🎨 使用 Gemini 1.5 Pro Vision 进行智能重构")
+    st.info("🎨 使用 gemini-3-pro-preview 进行智能重构")
     
     # 4. 触发按钮
     generate_btn = st.button("🚀 开始智能重构", type="primary", use_container_width=True)
