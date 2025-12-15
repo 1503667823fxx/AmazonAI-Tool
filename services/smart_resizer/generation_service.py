@@ -12,7 +12,7 @@ def analyze_image_composition(image: Image.Image) -> dict:
     使用Gemini分析图片构图和主体位置
     """
     try:
-        model = genai.GenerativeModel('models/gemini-1.5-pro')
+        model = genai.GenerativeModel('models/gemini-3-pro-preview')
         
         analysis_prompt = """Analyze this product image composition and provide detailed information:
 
@@ -67,7 +67,7 @@ def fill_image(image: Image.Image, mask: Image.Image, prompt: str, use_gemini: b
             composition_analysis = analyze_image_composition(image)
             
             # 根据分析结果调整提示词
-            model = genai.GenerativeModel('models/gemini-1.5-pro-vision-latest')
+            model = genai.GenerativeModel('models/gemini-3-pro-image-preview')
             
             # 根据用户选择构建智能提示词
             if target_ratio_val > orig_ratio:
