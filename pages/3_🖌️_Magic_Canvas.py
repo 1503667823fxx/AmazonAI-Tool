@@ -41,6 +41,8 @@ if "mask_data" not in st.session_state:
     st.session_state.mask_data = None
 if "canvas_key" not in st.session_state:
     st.session_state.canvas_key = 0
+if "confirmed_mask_data" not in st.session_state:
+    st.session_state.confirmed_mask_data = ""
 
 col_tools, col_canvas = st.columns([1, 2])
 
@@ -55,6 +57,7 @@ with col_tools:
             image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
         st.session_state.uploaded_image = image
         st.session_state.mask_data = None
+        st.session_state.confirmed_mask_data = ""
         st.session_state.canvas_key += 1
     
     if st.session_state.uploaded_image:
@@ -81,7 +84,7 @@ with col_canvas:
         
         w, h = st.session_state.uploaded_image.size
         
-        # HTML Canvas组件 - 涂抹后手动复制粘贴数据
+        # HTML Canvas组件
         canvas_html = f"""
         <div style="border: 2px solid #ddd; border-radius: 8px; padding: 10px; background: #f9f9f9;">
             <div style="margin-bottom: 10px; text-align: center;">
@@ -248,23 +251,56 @@ with col_canvas:
         st.divider()
         
         # 操作说明
-        st.info("📝 **操作步骤：** ① 在图片上涂抹红色区域 → ② 点击「保存涂抹数据」→ ③ 复制上方文本框中的数据 → ④ 粘贴到下方输入框")
+        st.info("📝 **操作步骤：** ① 在图片上涂抹红色区域 → ② 点击「保存涂抹数据」→ ③ 复制上方文本框中的数据 → ④ 粘贴到下方输入框 → ⑤ 点击「确认数据」")
         
-        # 接收mask数据
-        mask_data_input = st.text_area(
-            "📋 粘贴涂抹数据",
+        # 数据输入区域 - 分离输入和确认步骤
+        st.write("📋 **第一步：粘贴数据**")
+        temp_input = st.text_area(
+            "将复制的涂抹数据粘贴到这里",
             height=80,
-            placeholder="将上方保存的涂抹数据粘贴到这里...\ndata:image/png;base64,...",
-            key=f"mask_input_{st.session_state.canvas_key}"
+            placeholder="data:image/png;base64,...",
+            key=f"temp_input_{st.session_state.canvas_key}"
         )
+        
+        # 确认按钮
+        col_confirm, col_clear, col_status = st.columns([1, 1, 2])
+        
+        with col_confirm:
+            confirm_btn = st.button("✅ 确认数据", type="primary", disabled=not temp_input.strip())
+        
+        with col_clear:
+            clear_btn = st.button("🗑️ 清除")
+        
+        with col_status:
+            if st.session_state.confirmed_mask_data:
+                st.success("✅ 数据已确认")
+            elif temp_input.strip():
+                if temp_input.startswith('data:image/png;base64,'):
+                    st.info("👆 点击确认数据")
+                else:
+                    st.error("❌ 数据格式错误")
+        
+        # 处理按钮点击
+        if confirm_btn and temp_input.strip():
+            if temp_input.startswith('data:image/png;base64,'):
+                st.session_state.confirmed_mask_data = temp_input
+                st.success("✅ 数据已确认保存！")
+                st.rerun()
+            else:
+                st.error("❌ 数据格式不正确，请确保以 data:image/png;base64, 开头")
+        
+        if clear_btn:
+            st.session_state.confirmed_mask_data = ""
+            st.session_state.mask_data = None
+            st.rerun()
         
         # 处理mask数据
         has_drawing = False
         mask_image = None
         
-        if mask_data_input and mask_data_input.startswith('data:image/png;base64,'):
+        if st.session_state.confirmed_mask_data:
             try:
-                base64_data = mask_data_input.split(',')[1]
+                base64_data = st.session_state.confirmed_mask_data.split(',')[1]
                 mask_bytes = base64.b64decode(base64_data)
                 mask_image = Image.open(io.BytesIO(mask_bytes)).convert('L')
                 
@@ -281,11 +317,7 @@ with col_canvas:
                 else:
                     st.warning("⚠️ 涂抹区域太小，请涂抹更大的区域")
             except Exception as e:
-                st.error(f"❌ 数据格式错误: {e}")
-        elif st.session_state.mask_data is not None:
-            # 使用之前保存的mask
-            mask_image = st.session_state.mask_data
-            has_drawing = True
+                st.error(f"❌ 数据解析错误: {e}")
         
         # 显示涂抹区域预览
         if has_drawing and mask_image:
@@ -299,7 +331,7 @@ with col_canvas:
         # 处理重绘
         if generate_btn:
             if not has_drawing:
-                st.error("❌ 请先涂抹并粘贴涂抹数据")
+                st.error("❌ 请先涂抹并确认涂抹数据")
             else:
                 final_mask = mask_image if mask_image else st.session_state.mask_data
                 
