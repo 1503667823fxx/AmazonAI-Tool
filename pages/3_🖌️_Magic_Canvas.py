@@ -251,121 +251,58 @@ with col_canvas:
         st.divider()
         
         # 操作说明
-        st.info("📝 **操作步骤：** ① 在图片上涂抹红色区域 → ② 点击「保存涂抹数据」→ ③ 复制上方文本框中的数据 → ④ 粘贴到下方输入框 → ⑤ 点击「确认数据」")
+        st.info("📝 **操作步骤：** ① 在图片上涂抹红色区域 → ② 点击「保存涂抹数据」→ ③ 复制上方文本框中的数据 → ④ 手动处理数据")
         
-        # 显示当前数据状态
+        # 最简单的方法：让用户手动输入数据长度来确认
+        st.write("📋 **确认涂抹数据**")
+        
         if st.session_state.confirmed_mask_data:
             data_preview = st.session_state.confirmed_mask_data[:50] + "..." if len(st.session_state.confirmed_mask_data) > 50 else st.session_state.confirmed_mask_data
             st.success(f"✅ 已确认数据: {data_preview}")
-            if st.button("🗑️ 清除已确认的数据"):
+            if st.button("🗑️ 清除数据"):
                 st.session_state.confirmed_mask_data = ""
                 st.session_state.mask_data = None
                 st.rerun()
         else:
-            st.write("📋 **粘贴涂抹数据**")
+            st.write("请按以下步骤操作：")
+            st.write("1. 复制上方保存的涂抹数据")
+            st.write("2. 在下方输入框中输入数据的前50个字符")
+            st.write("3. 点击「我已复制完整数据」按钮")
             
-            # 使用纯HTML输入框避免Streamlit的自动重新运行
-            paste_input_html = f"""
-            <div style="margin: 10px 0; padding: 15px; border: 2px solid #ddd; border-radius: 8px; background: #f8f9fa;">
-                <div style="margin-bottom: 10px;">
-                    <strong>📋 粘贴区域</strong>
-                    <span style="font-size: 12px; color: #666; margin-left: 10px;">粘贴完成后点击确认按钮</span>
-                </div>
-                
-                <textarea id="maskDataInput" 
-                    placeholder="将复制的涂抹数据粘贴到这里...&#10;data:image/png;base64,..."
-                    style="width: 100%; height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; font-family: monospace; resize: vertical;"
-                    oninput="validateMaskData()"></textarea>
-                
-                <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
-                    <button onclick="confirmMaskData()" id="confirmBtn"
-                        style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;" 
-                        disabled>
-                        ✅ 确认数据
-                    </button>
-                    <button onclick="clearMaskData()"
-                        style="padding: 10px 20px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        🗑️ 清空
-                    </button>
-                    <span id="validationStatus" style="font-weight: bold;"></span>
-                </div>
-            </div>
+            # 让用户输入数据的前50个字符作为验证
+            data_preview = st.text_input(
+                "输入复制数据的前50个字符（用于验证）",
+                placeholder="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+                key=f"data_preview_{st.session_state.canvas_key}"
+            )
             
-            <script>
-                function validateMaskData() {{
-                    const input = document.getElementById('maskDataInput');
-                    const confirmBtn = document.getElementById('confirmBtn');
-                    const status = document.getElementById('validationStatus');
-                    const data = input.value.trim();
+            if data_preview and len(data_preview) >= 30:
+                if data_preview.startswith('data:image/png;base64,'):
+                    st.success("✅ 数据格式正确")
                     
-                    if (data.length === 0) {{
-                        confirmBtn.disabled = true;
-                        status.textContent = '';
-                        return;
-                    }}
+                    # 让用户确认已复制完整数据
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        full_data = st.text_area(
+                            "粘贴完整的涂抹数据",
+                            height=100,
+                            placeholder="粘贴完整的base64数据...",
+                            key=f"full_data_{st.session_state.canvas_key}"
+                        )
                     
-                    if (data.startsWith('data:image/png;base64,')) {{
-                        confirmBtn.disabled = false;
-                        status.textContent = '✅ 数据格式正确';
-                        status.style.color = '#4CAF50';
-                    }} else {{
-                        confirmBtn.disabled = true;
-                        status.textContent = '❌ 数据格式错误';
-                        status.style.color = '#f44336';
-                    }}
-                }}
-                
-                function confirmMaskData() {{
-                    const input = document.getElementById('maskDataInput');
-                    const data = input.value.trim();
-                    
-                    if (data.startsWith('data:image/png;base64,')) {{
-                        // 将数据保存到localStorage并刷新页面
-                        localStorage.setItem('magic_canvas_confirmed_data', data);
-                        window.location.reload();
-                    }} else {{
-                        alert('❌ 数据格式不正确！请确保粘贴的是完整的base64图像数据');
-                    }}
-                }}
-                
-                function clearMaskData() {{
-                    document.getElementById('maskDataInput').value = '';
-                    validateMaskData();
-                }}
-            </script>
-            """
-            
-            components.html(paste_input_html, height=200)
-            
-            # 检查localStorage中是否有确认的数据
-            check_data_html = """
-            <script>
-                // 页面加载时检查localStorage
-                const confirmedData = localStorage.getItem('magic_canvas_confirmed_data');
-                if (confirmedData) {
-                    // 通过URL参数传递数据
-                    const url = new URL(window.location);
-                    url.searchParams.set('confirmed_mask', encodeURIComponent(confirmedData));
-                    localStorage.removeItem('magic_canvas_confirmed_data');
-                    window.location.href = url.toString();
-                }
-            </script>
-            """
-            components.html(check_data_html, height=0)
-            
-            # 检查URL参数
-            import urllib.parse
-            query_params = st.query_params
-            if 'confirmed_mask' in query_params:
-                try:
-                    confirmed_data = urllib.parse.unquote(query_params['confirmed_mask'])
-                    if confirmed_data.startswith('data:image/png;base64,'):
-                        st.session_state.confirmed_mask_data = confirmed_data
-                        # 清除URL参数并刷新
-                        st.query_params.clear()
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"数据解析错误: {e}")
+                    with col2:
+                        st.write("")  # 空行对齐
+                        if st.button("✅ 确认数据", type="primary"):
+                            if full_data and full_data.startswith('data:image/png;base64,') and len(full_data) > 100:
+                                st.session_state.confirmed_mask_data = full_data
+                                st.success("✅ 数据已保存！")
+                                st.rerun()
+                            else:
+                                st.error("❌ 请粘贴完整的数据")
+                else:
+                    st.error("❌ 数据格式不正确，应该以 'data:image/png;base64,' 开头")
+            elif data_preview:
+                st.warning("⚠️ 请输入至少30个字符")
         
         # 处理mask数据
         has_drawing = False
