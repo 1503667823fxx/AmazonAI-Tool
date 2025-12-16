@@ -269,53 +269,45 @@ with col_canvas:
                 st.rerun()
         else:
             # 显示操作提示
-            st.warning("⚠️ **重要提示：** 由于技术限制，粘贴长数据时可能会触发页面刷新导致数据丢失")
+            st.warning("⚠️ **重要提示：** 粘贴数据后请点击确认按钮")
             
-            with st.expander("💡 **推荐的操作方法**", expanded=True):
-                st.write("""
-                **方法1：快速粘贴法**
-                1. 复制上方保存的涂抹数据
-                2. 快速粘贴到下方输入框（一次性粘贴完整数据）
-                3. 立即点击「确认数据」按钮
-                
-                **方法2：如果数据丢失**
-                1. 重新涂抹并保存数据
-                2. 尝试分批粘贴（先粘贴一半，确认后再粘贴剩余部分）
-                
-                **方法3：使用外部工具**
-                1. 将数据保存到记事本
-                2. 从记事本复制粘贴到输入框
-                """)
+            st.write("**粘贴涂抹数据：**")
             
-            # 使用 st.form 确保数据在提交时不会丢失
-            with st.form(key="mask_data_form", clear_on_submit=False):
-                st.write("**粘贴涂抹数据：**")
-                
-                mask_data_input = st.text_area(
-                    "将复制的涂抹数据粘贴到这里",
-                    height=120,
-                    placeholder="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-                    help="粘贴完成后点击下方确认按钮",
-                    key="mask_input_form_widget"
-                )
-                
-                submitted = st.form_submit_button("✅ 确认数据", type="primary", use_container_width=True)
-            
-            # 在 form 外部处理提交结果
-            if submitted:
-                st.caption(f"🔍 调试: form 已提交, mask_data_input 长度={len(mask_data_input) if mask_data_input else 0}")
-                if mask_data_input and mask_data_input.strip():
-                    data = mask_data_input.strip()
-                    st.caption(f"🔍 调试: data 开头={data[:50] if len(data) > 50 else data}")
+            # 定义回调函数 - 在按钮点击时立即保存数据
+            def confirm_mask_data():
+                input_data = st.session_state.get("mask_text_input", "")
+                if input_data and input_data.strip():
+                    data = input_data.strip()
                     if data.startswith('data:image/png;base64,'):
                         st.session_state.confirmed_mask_data = data
-                        st.caption(f"🔍 调试: 已设置 confirmed_mask_data, 长度={len(st.session_state.confirmed_mask_data)}")
-                        st.success("✅ 数据已保存！请点击「开始重绘」按钮")
-                        # 不使用 st.rerun()，让页面自然刷新
+                        st.session_state.mask_confirm_success = True
                     else:
-                        st.error("❌ 数据格式错误，应该以 'data:image/png;base64,' 开头")
+                        st.session_state.mask_confirm_error = "格式错误"
                 else:
-                    st.error("❌ 请先粘贴涂抹数据")
+                    st.session_state.mask_confirm_error = "数据为空"
+            
+            # 初始化状态
+            if "mask_confirm_success" not in st.session_state:
+                st.session_state.mask_confirm_success = False
+            if "mask_confirm_error" not in st.session_state:
+                st.session_state.mask_confirm_error = ""
+            
+            # 文本输入框
+            mask_data_input = st.text_area(
+                "将复制的涂抹数据粘贴到这里",
+                height=120,
+                placeholder="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+                help="粘贴完成后点击下方确认按钮",
+                key="mask_text_input"
+            )
+            
+            # 确认按钮 - 使用 on_click 回调
+            st.button("✅ 确认数据", type="primary", use_container_width=True, on_click=confirm_mask_data)
+            
+            # 显示状态
+            if st.session_state.mask_confirm_error:
+                st.error(f"❌ {st.session_state.mask_confirm_error}")
+                st.session_state.mask_confirm_error = ""
         
         # 处理mask数据
         has_drawing = False
