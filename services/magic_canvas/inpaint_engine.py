@@ -164,11 +164,9 @@ Generate the complete edited image.
                                     
                                     return result_image
                                 except Exception as img_error:
-                                    st.warning(f"图像解析错误: {img_error}")
                                     continue
             
             # 如果没有图像返回，尝试使用 Imagen API
-            st.info("💡 尝试使用 Imagen API...")
             return self.inpaint_with_imagen(original_image, mask_image, prompt)
             
         except Exception as e:
@@ -227,14 +225,11 @@ Generate the complete edited image.
                 
                 return result_image
             
-            st.warning("⚠️ Imagen未返回图像，使用传统方法")
             return self.traditional_inpaint(original_image, mask_image, prompt)
             
         except ImportError:
-            st.info("💡 Imagen SDK未安装，使用传统方法")
             return self.traditional_inpaint(original_image, mask_image, prompt)
         except Exception as e:
-            st.warning(f"⚠️ Imagen调用失败: {e}")
             return self.traditional_inpaint(original_image, mask_image, prompt)
 
     def inpaint(self, original_image, mask_image, prompt):
