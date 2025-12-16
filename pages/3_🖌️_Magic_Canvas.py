@@ -41,8 +41,8 @@ if "inpaint_service" not in st.session_state:
 
 
 # --- 5. 页面布局 ---
-st.title("🖌️ Magic Canvas - Gemini创意重绘")
-st.caption("上传图片，输入简洁的创意描述，让Gemini为你重新创作图片的中心区域。")
+st.title("🖌️ Magic Canvas - AI智能重绘")
+st.caption("上传图片，涂抹想要修改的区域，输入创意描述，AI帮你精准重绘。")
 
 # 初始化状态
 if "uploaded_image" not in st.session_state:
@@ -101,11 +101,10 @@ with col_canvas:
         # 显示操作提示
         st.info("💡 在图片上涂抹想要修改的区域，红色区域将被AI重绘")
         
-        # 使用改进的canvas组件
+        # 使用涂抹画布组件
         canvas_result = create_drawing_canvas(
             st.session_state.uploaded_image, 
-            brush_size=brush_size,
-            canvas_key="magic_canvas"
+            brush_size=brush_size
         )
         
         # 初始化mask状态
@@ -117,7 +116,7 @@ with col_canvas:
         mask_image = None
         
         if canvas_result:
-            # 处理canvas数据
+            # 处理涂抹canvas数据
             if hasattr(canvas_result, 'image_data') and canvas_result.image_data is not None:
                 # 获取canvas数据
                 canvas_array = np.array(canvas_result.image_data)
