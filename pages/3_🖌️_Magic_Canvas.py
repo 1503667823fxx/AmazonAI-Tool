@@ -313,16 +313,19 @@ with col_canvas:
             if mask_data_input:
                 st.session_state.pending_mask_input = mask_data_input
             
+            # 获取实际数据（优先使用当前输入，否则使用保存的数据）
+            actual_data = mask_data_input.strip() if mask_data_input else st.session_state.pending_mask_input.strip()
+            
             # 显示数据状态
-            if mask_data_input:
-                data_length = len(mask_data_input.strip())
-                if mask_data_input.startswith('data:image/png;base64,'):
+            if actual_data:
+                data_length = len(actual_data)
+                if actual_data.startswith('data:image/png;base64,'):
                     if data_length > 1000:
                         st.success(f"✅ 数据格式正确 ({data_length} 字符)")
                         valid_data = True
                     else:
                         st.warning(f"⚠️ 数据可能不完整 ({data_length} 字符)")
-                        valid_data = False
+                        valid_data = True  # 仍然允许确认，让用户自己判断
                 else:
                     st.error("❌ 数据格式错误，应该以 'data:image/png;base64,' 开头")
                     valid_data = False
@@ -334,8 +337,9 @@ with col_canvas:
             
             with col_confirm:
                 if st.button("✅ 确认数据", type="primary", disabled=not valid_data):
-                    if mask_data_input and mask_data_input.startswith('data:image/png;base64,'):
-                        st.session_state.confirmed_mask_data = mask_data_input.strip()
+                    # 使用 actual_data 而不是 mask_data_input
+                    if actual_data and actual_data.startswith('data:image/png;base64,'):
+                        st.session_state.confirmed_mask_data = actual_data
                         st.session_state.pending_mask_input = ""  # 清空临时输入
                         st.success("✅ 数据已保存！")
                         st.rerun()
@@ -343,7 +347,7 @@ with col_canvas:
                         st.error("❌ 数据格式不正确")
             
             with col_tips:
-                if mask_data_input:
+                if actual_data:
                     st.info("👆 数据已输入，点击确认按钮保存")
                 else:
                     st.info("💡 请先粘贴涂抹数据")
