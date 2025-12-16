@@ -9,30 +9,19 @@ import numpy as np
 def create_drawing_canvas(image, brush_size=20):
     """
     创建一个HTML Canvas绘图组件
-    能够真正捕获用户的涂抹数据
     """
-    # 直接使用HTML Canvas，避免依赖问题
-    st.info("💡 使用HTML Canvas画布，支持圆形指针和精确涂抹")
+    st.info("💡 在画布上涂抹想要修改的区域，涂抹完成后点击'确认涂抹完成'按钮")
     return create_simple_canvas(image, brush_size)
 
 def create_simple_canvas(image, brush_size=20):
     """
-    HTML Canvas绘图组件，支持圆形指针和涂抹检测
+    简化的HTML Canvas绘图组件
     """
     # 将图像转换为base64
     buffered = io.BytesIO()
     image.save(buffered, format="PNG")
     img_base64 = base64.b64encode(buffered.getvalue()).decode()
     img_data_url = f"data:image/png;base64,{img_base64}"
-    
-    # 创建一个唯一的组件ID
-    component_id = f"canvas_{hash(str(image.size))}"
-    
-    # 初始化session state来存储涂抹数据
-    if "canvas_has_drawing" not in st.session_state:
-        st.session_state.canvas_has_drawing = False
-    if "canvas_mask_data" not in st.session_state:
-        st.session_state.canvas_mask_data = None
     
     canvas_html = f"""
     <!DOCTYPE html>
@@ -221,9 +210,7 @@ def create_simple_canvas(image, brush_size=20):
                         currentStroke = [];
                     }}
                     if (hasDrawn) {{
-                        status.textContent = '已涂抹区域';
-                        // 自动保存mask
-                        setTimeout(autoSaveMask, 100);
+                        status.textContent = '已涂抹区域 - 请点击"确认涂抹完成"';
                     }}
                 }}
             }}
@@ -311,39 +298,13 @@ def create_simple_canvas(image, brush_size=20):
                 }}, '*');
             }}
             
-            // 自动保存mask当有绘制时
-            function autoSaveMask() {{
-                if (hasDrawn) {{
-                    createAndSaveMask();
-                    // 通知Streamlit有新的绘制内容
-                    updateStreamlitState();
-                }}
-            }}
-            
-            function updateStreamlitState() {{
-                // 通过URL参数传递状态
-                const url = new URL(window.location);
-                url.searchParams.set('canvas_drawing', hasDrawn ? '1' : '0');
-                url.searchParams.set('canvas_timestamp', Date.now());
-                window.history.replaceState({{}}, '', url);
-                
-                // 触发页面更新
-                window.parent.postMessage({{
-                    type: 'canvas_update',
-                    hasDrawing: hasDrawn,
-                    timestamp: Date.now()
-                }}, '*');
-            }}
-            
-            // 全局函数供外部调用
+            // 简化的函数
             window.hasDrawnContent = function() {{
                 return hasDrawn;
             }};
             
-            window.getMaskData = function() {{
-                if (!hasDrawn) return null;
-                createAndSaveMask();
-                return window.currentMask;
+            window.clearDrawing = function() {{
+                clearCanvas();
             }};
         </script>
     </body>
@@ -351,15 +312,9 @@ def create_simple_canvas(image, brush_size=20):
     """
     
     # 渲染组件
-    result = components.html(canvas_html, height=image.height + 120)
+    components.html(canvas_html, height=image.height + 120)
     
-    # 创建一个模拟的canvas_result对象
-    class SimpleCanvasResult:
-        def __init__(self):
-            self.image_data = None
-            self.has_drawing = st.session_state.canvas_has_drawing
-            self.mask_data = st.session_state.canvas_mask_data
-    
-    return SimpleCanvasResult()
+    # 返回None，让主页面使用按钮控制
+    return None
 
 
