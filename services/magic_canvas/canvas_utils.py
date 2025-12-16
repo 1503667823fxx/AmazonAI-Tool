@@ -8,71 +8,16 @@ import numpy as np
 
 def create_drawing_canvas(image, brush_size=20):
     """
-    创建一个基于streamlit-drawable-canvas的绘图组件
+    创建一个HTML Canvas绘图组件
     能够真正捕获用户的涂抹数据
     """
-    try:
-        from streamlit_drawable_canvas import st_canvas
-        
-        # 添加自定义CSS来实现圆形指针
-        st.markdown(f"""
-        <style>
-        .stCanvas > div > div > canvas {{
-            cursor: none !important;
-        }}
-        .stCanvas > div > div {{
-            position: relative;
-        }}
-        .stCanvas > div > div::after {{
-            content: '';
-            position: absolute;
-            width: {brush_size}px;
-            height: {brush_size}px;
-            border: 2px solid #ff0000;
-            border-radius: 50%;
-            background: rgba(255, 0, 0, 0.1);
-            pointer-events: none;
-            z-index: 1000;
-            display: none;
-        }}
-        .stCanvas > div > div:hover::after {{
-            display: block;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
-        
-        # 创建画布 - 优化涂抹体验
-        canvas_result = st_canvas(
-            fill_color="rgba(255, 0, 0, 0.4)",  # 半透明红色填充
-            stroke_width=brush_size,
-            stroke_color="rgba(255, 0, 0, 0.9)",  # 红色描边
-            background_image=image,
-            update_streamlit=True,
-            height=image.height,
-            width=image.width,
-            drawing_mode="freedraw",
-            point_display_radius=0,  # 禁用默认指针，使用自定义CSS
-            key="magic_canvas_drawing",  # 固定的key
-        )
-        
-        return canvas_result
-        
-    except ImportError as e:
-        st.warning(f"⚠️ streamlit-drawable-canvas 不可用: {e}")
-        st.info("💡 使用简化版画布")
-        
-        # 降级到简单的HTML Canvas
-        return create_simple_canvas(image, brush_size)
-    except Exception as e:
-        st.error(f"❌ 画布创建失败: {e}")
-        st.info("💡 使用简化版画布")
-        
-        # 降级到简单的HTML Canvas
-        return create_simple_canvas(image, brush_size)
+    # 直接使用HTML Canvas，避免依赖问题
+    st.info("💡 使用HTML Canvas画布，支持圆形指针和精确涂抹")
+    return create_simple_canvas(image, brush_size)
 
 def create_simple_canvas(image, brush_size=20):
     """
-    简化版HTML Canvas，用于降级处理
+    HTML Canvas绘图组件，支持圆形指针和涂抹检测
     """
     # 将图像转换为base64
     buffered = io.BytesIO()
@@ -82,6 +27,12 @@ def create_simple_canvas(image, brush_size=20):
     
     # 创建一个唯一的组件ID
     component_id = f"canvas_{hash(str(image.size))}"
+    
+    # 初始化session state来存储涂抹数据
+    if "canvas_has_drawing" not in st.session_state:
+        st.session_state.canvas_has_drawing = False
+    if "canvas_mask_data" not in st.session_state:
+        st.session_state.canvas_mask_data = None
     
     canvas_html = f"""
     <!DOCTYPE html>
@@ -364,7 +315,24 @@ def create_simple_canvas(image, brush_size=20):
             function autoSaveMask() {{
                 if (hasDrawn) {{
                     createAndSaveMask();
+                    // 通知Streamlit有新的绘制内容
+                    updateStreamlitState();
                 }}
+            }}
+            
+            function updateStreamlitState() {{
+                // 通过URL参数传递状态
+                const url = new URL(window.location);
+                url.searchParams.set('canvas_drawing', hasDrawn ? '1' : '0');
+                url.searchParams.set('canvas_timestamp', Date.now());
+                window.history.replaceState({{}}, '', url);
+                
+                // 触发页面更新
+                window.parent.postMessage({{
+                    type: 'canvas_update',
+                    hasDrawing: hasDrawn,
+                    timestamp: Date.now()
+                }}, '*');
             }}
             
             // 全局函数供外部调用
@@ -374,8 +342,8 @@ def create_simple_canvas(image, brush_size=20):
             
             window.getMaskData = function() {{
                 if (!hasDrawn) return null;
-                saveMask();
-                return true;
+                createAndSaveMask();
+                return window.currentMask;
             }};
         </script>
     </body>
@@ -385,6 +353,13 @@ def create_simple_canvas(image, brush_size=20):
     # 渲染组件
     result = components.html(canvas_html, height=image.height + 120)
     
-    return result
+    # 创建一个模拟的canvas_result对象
+    class SimpleCanvasResult:
+        def __init__(self):
+            self.image_data = None
+            self.has_drawing = st.session_state.canvas_has_drawing
+            self.mask_data = st.session_state.canvas_mask_data
+    
+    return SimpleCanvasResult()
 
 
