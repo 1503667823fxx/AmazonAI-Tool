@@ -284,73 +284,39 @@ with col_canvas:
                 2. 从记事本复制粘贴到输入框
                 """)
             
-            # 简单的输入框
-            st.write("**粘贴涂抹数据：**")
+            # 使用 st.form 确保数据在提交时不会丢失
+            with st.form(key="mask_data_form", clear_on_submit=False):
+                st.write("**粘贴涂抹数据：**")
+                
+                mask_data_input = st.text_area(
+                    "将复制的涂抹数据粘贴到这里",
+                    height=120,
+                    placeholder="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+                    help="粘贴完成后点击下方确认按钮",
+                    key="mask_input_form_widget"
+                )
+                
+                submitted = st.form_submit_button("✅ 确认数据", type="primary", use_container_width=True)
+                
+                if submitted:
+                    if mask_data_input and mask_data_input.strip():
+                        data = mask_data_input.strip()
+                        if data.startswith('data:image/png;base64,'):
+                            st.session_state.confirmed_mask_data = data
+                            st.success("✅ 数据已保存！")
+                            st.rerun()
+                        else:
+                            st.error("❌ 数据格式错误，应该以 'data:image/png;base64,' 开头")
+                    else:
+                        st.error("❌ 请先粘贴涂抹数据")
             
-            # 初始化持久化的输入数据
-            if "pending_mask_input" not in st.session_state:
-                st.session_state.pending_mask_input = ""
-            
-            # 使用 on_change 回调来立即保存数据，防止 rerun 时丢失
-            def save_mask_input():
-                """回调函数：在输入变化时立即保存到 session_state"""
-                input_value = st.session_state.get("mask_input_widget", "")
-                if input_value:
-                    st.session_state.pending_mask_input = input_value
-            
-            # 使用固定的 key（不随 canvas_key 变化），并添加 on_change 回调
-            mask_data_input = st.text_area(
-                "将复制的涂抹数据粘贴到这里",
-                value=st.session_state.pending_mask_input,  # 从 session_state 恢复数据
-                height=120,
-                placeholder="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-                help="粘贴完成后立即点击下方确认按钮",
-                key="mask_input_widget",  # 使用固定的 key
-                on_change=save_mask_input  # 输入变化时立即保存
-            )
-            
-            # 同步当前输入到 pending_mask_input
+            # 显示数据状态提示（在 form 外部）
             if mask_data_input:
-                st.session_state.pending_mask_input = mask_data_input
-            
-            # 获取实际数据（优先使用当前输入，否则使用保存的数据）
-            actual_data = mask_data_input.strip() if mask_data_input else st.session_state.pending_mask_input.strip()
-            
-            # 显示数据状态
-            if actual_data:
-                data_length = len(actual_data)
-                if actual_data.startswith('data:image/png;base64,'):
-                    if data_length > 1000:
-                        st.success(f"✅ 数据格式正确 ({data_length} 字符)")
-                        valid_data = True
-                    else:
-                        st.warning(f"⚠️ 数据可能不完整 ({data_length} 字符)")
-                        valid_data = True  # 仍然允许确认，让用户自己判断
+                data_length = len(mask_data_input.strip())
+                if mask_data_input.startswith('data:image/png;base64,'):
+                    st.success(f"✅ 数据格式正确 ({data_length} 字符)，请点击上方确认按钮")
                 else:
-                    st.error("❌ 数据格式错误，应该以 'data:image/png;base64,' 开头")
-                    valid_data = False
-            else:
-                valid_data = False
-            
-            # 确认按钮
-            col_confirm, col_tips = st.columns([1, 2])
-            
-            with col_confirm:
-                if st.button("✅ 确认数据", type="primary", disabled=not valid_data):
-                    # 使用 actual_data 而不是 mask_data_input
-                    if actual_data and actual_data.startswith('data:image/png;base64,'):
-                        st.session_state.confirmed_mask_data = actual_data
-                        st.session_state.pending_mask_input = ""  # 清空临时输入
-                        st.success("✅ 数据已保存！")
-                        st.rerun()
-                    else:
-                        st.error("❌ 数据格式不正确")
-            
-            with col_tips:
-                if actual_data:
-                    st.info("👆 数据已输入，点击确认按钮保存")
-                else:
-                    st.info("💡 请先粘贴涂抹数据")
+                    st.warning("⚠️ 数据格式可能不正确")
         
         # 处理mask数据
         has_drawing = False
