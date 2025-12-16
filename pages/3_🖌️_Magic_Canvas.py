@@ -277,31 +277,42 @@ with col_canvas:
             components.html(get_mask_html, height=50)
         
         with col_status:
-            if st.button("🗑️ 清除数据", help="清除已粘贴的涂抹数据"):
-                st.session_state.mask_input_data = ""
-                st.session_state.mask_data = None
-                st.rerun()
             st.info("💡 点击「获取涂抹数据」后，数据会自动复制到剪贴板")
         
-        # 接收mask数据 - 使用session_state避免刷新丢失
+        # 接收mask数据 - 使用form防止自动刷新
         if "mask_input_data" not in st.session_state:
             st.session_state.mask_input_data = ""
         
-        mask_data_input = st.text_area(
-            "📋 粘贴涂抹数据 (Ctrl+V)",
-            value=st.session_state.mask_input_data,
-            height=80,
-            placeholder="data:image/png;base64,...",
-            key=f"mask_input_{st.session_state.canvas_key}",
-            on_change=lambda: setattr(st.session_state, 'mask_input_data', st.session_state[f"mask_input_{st.session_state.canvas_key}"])
-        )
+        with st.form("mask_form", clear_on_submit=False):
+            mask_data_input = st.text_area(
+                "📋 粘贴涂抹数据 (Ctrl+V)",
+                value=st.session_state.mask_input_data,
+                height=80,
+                placeholder="data:image/png;base64,...",
+                key=f"mask_input_{st.session_state.canvas_key}"
+            )
+            
+            col_submit, col_clear = st.columns([1, 1])
+            with col_submit:
+                submit_mask = st.form_submit_button("✅ 确认数据", use_container_width=True)
+            with col_clear:
+                clear_mask = st.form_submit_button("🗑️ 清除", use_container_width=True)
+            
+            if submit_mask and mask_data_input:
+                st.session_state.mask_input_data = mask_data_input
+                st.success("✅ 涂抹数据已保存")
+            
+            if clear_mask:
+                st.session_state.mask_input_data = ""
+                st.session_state.mask_data = None
+                st.success("🗑️ 数据已清除")
 
         # 处理mask数据
         has_drawing = False
         mask_image = None
         
-        # 使用session_state中的数据，避免刷新丢失
-        current_mask_data = st.session_state.mask_input_data or mask_data_input
+        # 使用session_state中的数据
+        current_mask_data = st.session_state.mask_input_data
         
         if current_mask_data and current_mask_data.startswith('data:image/png;base64,'):
             try:
