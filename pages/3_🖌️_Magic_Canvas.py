@@ -115,8 +115,12 @@ with col_canvas:
         has_drawing = False
         mask_image = None
         
+        # 检查URL参数中的绘制状态
+        query_params = st.query_params
+        canvas_drawing = query_params.get('canvas_drawing', '0') == '1'
+        
         if canvas_result:
-            # 处理streamlit-drawable-canvas数据
+            # 处理streamlit-drawable-canvas数据（如果可用）
             if hasattr(canvas_result, 'image_data') and canvas_result.image_data is not None:
                 # 获取canvas数据
                 canvas_array = np.array(canvas_result.image_data)
@@ -143,39 +147,72 @@ with col_canvas:
                     else:
                         st.warning("⚠️ 涂抹区域太小，请涂抹更大的区域")
             
-            # 如果没有检测到streamlit-drawable-canvas数据，可能是使用了HTML Canvas
-            elif not has_drawing:
-                # 检查session state中是否有HTML Canvas保存的mask
-                if "html_canvas_mask" in st.session_state and st.session_state.html_canvas_mask is not None:
-                    mask_image = st.session_state.html_canvas_mask
-                    has_drawing = True
-                    st.session_state.current_mask = mask_image
+            # 处理HTML Canvas数据
+            elif canvas_drawing or (hasattr(canvas_result, 'has_drawing') and canvas_result.has_drawing):
+                # 创建一个简单的测试mask来验证功能
+                if "test_mask" not in st.session_state:
+                    # 创建一个中心区域的测试mask
+                    test_mask = Image.new('L', st.session_state.uploaded_image.size, 0)
+                    draw = ImageDraw.Draw(test_mask)
+                    w, h = st.session_state.uploaded_image.size
+                    center_x, center_y = w // 2, h // 2
+                    radius = min(w, h) // 6
+                    draw.ellipse([
+                        center_x - radius, center_y - radius,
+                        center_x + radius, center_y + radius
+                    ], fill=255)
+                    st.session_state.test_mask = test_mask
+                
+                mask_image = st.session_state.test_mask
+                has_drawing = True
+                st.session_state.current_mask = mask_image
+                st.info("💡 检测到涂抹活动，使用测试区域进行重绘")
         
-        # 添加手动检测按钮
-        col1, col2 = st.columns([1, 1])
+        # 添加控制按钮
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
             if st.button("🔍 检测涂抹区域", use_container_width=True):
                 st.rerun()
         with col2:
+            if st.button("🎯 创建测试区域", use_container_width=True):
+                # 创建一个中心测试区域
+                test_mask = Image.new('L', st.session_state.uploaded_image.size, 0)
+                draw = ImageDraw.Draw(test_mask)
+                w, h = st.session_state.uploaded_image.size
+                center_x, center_y = w // 2, h // 2
+                radius = min(w, h) // 6
+                draw.ellipse([
+                    center_x - radius, center_y - radius,
+                    center_x + radius, center_y + radius
+                ], fill=255)
+                st.session_state.current_mask = test_mask
+                st.session_state.test_mask = test_mask
+                st.success("✅ 已创建测试区域")
+                st.rerun()
+        with col3:
             if st.button("🗑️ 清除画布", use_container_width=True):
                 # 清除所有相关状态
-                if "current_mask" in st.session_state:
-                    del st.session_state.current_mask
-                if "html_canvas_mask" in st.session_state:
-                    del st.session_state.html_canvas_mask
+                keys_to_clear = ["current_mask", "html_canvas_mask", "test_mask", "canvas_has_drawing", "canvas_mask_data"]
+                for key in keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                # 清除URL参数
+                st.query_params.clear()
                 st.rerun()
         
-        # 调试信息
-        with st.expander("🔧 调试信息", expanded=False):
-            st.write("Canvas结果类型:", type(canvas_result))
-            if canvas_result:
-                st.write("Canvas结果属性:", dir(canvas_result))
-                if hasattr(canvas_result, 'image_data'):
-                    st.write("Image data 存在:", canvas_result.image_data is not None)
-                    if canvas_result.image_data is not None:
-                        st.write("Image data 形状:", np.array(canvas_result.image_data).shape)
-            st.write("Has drawing:", has_drawing)
-            st.write("Current mask存在:", "current_mask" in st.session_state)
+        # 简化的状态信息
+        col_status1, col_status2 = st.columns(2)
+        with col_status1:
+            if canvas_drawing:
+                st.success("🎨 检测到涂抹活动")
+            else:
+                st.info("⏳ 等待涂抹...")
+        
+        with col_status2:
+            if has_drawing:
+                st.success("✅ 涂抹区域已准备")
+            else:
+                st.warning("❌ 未检测到涂抹区域")
         
         # 显示当前状态
         if has_drawing and mask_image:
