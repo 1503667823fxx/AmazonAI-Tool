@@ -262,6 +262,7 @@ with col_canvas:
             if st.button("🗑️ 清除数据"):
                 st.session_state.confirmed_mask_data = ""
                 st.session_state.mask_data = None
+                st.session_state.pending_mask_input = ""  # 同时清空临时输入
                 st.rerun()
         else:
             # 显示操作提示
@@ -286,14 +287,31 @@ with col_canvas:
             # 简单的输入框
             st.write("**粘贴涂抹数据：**")
             
-            # 使用一个大的文本区域
+            # 初始化持久化的输入数据
+            if "pending_mask_input" not in st.session_state:
+                st.session_state.pending_mask_input = ""
+            
+            # 使用 on_change 回调来立即保存数据，防止 rerun 时丢失
+            def save_mask_input():
+                """回调函数：在输入变化时立即保存到 session_state"""
+                input_value = st.session_state.get("mask_input_widget", "")
+                if input_value:
+                    st.session_state.pending_mask_input = input_value
+            
+            # 使用固定的 key（不随 canvas_key 变化），并添加 on_change 回调
             mask_data_input = st.text_area(
                 "将复制的涂抹数据粘贴到这里",
+                value=st.session_state.pending_mask_input,  # 从 session_state 恢复数据
                 height=120,
                 placeholder="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
                 help="粘贴完成后立即点击下方确认按钮",
-                key=f"mask_data_input_{st.session_state.canvas_key}"
+                key="mask_input_widget",  # 使用固定的 key
+                on_change=save_mask_input  # 输入变化时立即保存
             )
+            
+            # 同步当前输入到 pending_mask_input
+            if mask_data_input:
+                st.session_state.pending_mask_input = mask_data_input
             
             # 显示数据状态
             if mask_data_input:
@@ -318,6 +336,7 @@ with col_canvas:
                 if st.button("✅ 确认数据", type="primary", disabled=not valid_data):
                     if mask_data_input and mask_data_input.startswith('data:image/png;base64,'):
                         st.session_state.confirmed_mask_data = mask_data_input.strip()
+                        st.session_state.pending_mask_input = ""  # 清空临时输入
                         st.success("✅ 数据已保存！")
                         st.rerun()
                     else:
