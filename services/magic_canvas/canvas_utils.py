@@ -4,8 +4,9 @@ from PIL import Image, ImageDraw
 import base64
 import io
 import json
+import numpy as np
 
-def create_drawing_canvas(image, brush_size=20, canvas_key="drawing_canvas"):
+def create_drawing_canvas(image, brush_size=20):
     """
     创建一个基于streamlit-drawable-canvas的绘图组件
     能够真正捕获用户的涂抹数据
@@ -13,25 +14,31 @@ def create_drawing_canvas(image, brush_size=20, canvas_key="drawing_canvas"):
     try:
         from streamlit_drawable_canvas import st_canvas
         
-        # 创建画布
+        # 创建画布 - 优化涂抹体验
         canvas_result = st_canvas(
-            fill_color="rgba(255, 0, 0, 0.3)",  # 半透明红色填充
+            fill_color="rgba(255, 0, 0, 0.4)",  # 半透明红色填充
             stroke_width=brush_size,
-            stroke_color="rgba(255, 0, 0, 0.8)",  # 红色描边
+            stroke_color="rgba(255, 0, 0, 0.9)",  # 红色描边
             background_image=image,
             update_streamlit=True,
             height=image.height,
             width=image.width,
             drawing_mode="freedraw",
-            point_display_radius=0,
-            key=canvas_key,
+            point_display_radius=brush_size//2,  # 显示圆形指针
+            key="magic_canvas_drawing",  # 固定的key
         )
         
         return canvas_result
         
-    except ImportError:
-        st.error("❌ 缺少 streamlit-drawable-canvas 依赖")
-        st.info("请运行: pip install streamlit-drawable-canvas")
+    except ImportError as e:
+        st.warning(f"⚠️ streamlit-drawable-canvas 不可用: {e}")
+        st.info("💡 使用简化版画布，功能可能受限")
+        
+        # 降级到简单的HTML Canvas
+        return create_simple_canvas(image, brush_size)
+    except Exception as e:
+        st.error(f"❌ 画布创建失败: {e}")
+        st.info("💡 使用简化版画布")
         
         # 降级到简单的HTML Canvas
         return create_simple_canvas(image, brush_size)
@@ -77,8 +84,17 @@ def create_simple_canvas(image, brush_size=20):
             #drawingCanvas {{ 
                 position: relative;
                 display: block; 
-                cursor: crosshair;
+                cursor: none;  /* 隐藏默认指针，使用自定义圆形指针 */
                 background: transparent;
+            }}
+            .brush-cursor {{
+                position: absolute;
+                border: 2px solid #ff0000;
+                border-radius: 50%;
+                pointer-events: none;
+                background: rgba(255, 0, 0, 0.1);
+                z-index: 1000;
+                display: none;
             }}
             .controls {{
                 text-align: center;
@@ -115,6 +131,7 @@ def create_simple_canvas(image, brush_size=20):
             <div style="position: relative;">
                 <div class="background-layer"></div>
                 <canvas id="drawingCanvas" width="{image.width}" height="{image.height}"></canvas>
+                <div id="brushCursor" class="brush-cursor" style="width: {brush_size}px; height: {brush_size}px;"></div>
             </div>
             <div class="info">在图片上涂抹想要修改的区域，然后点击"保存涂抹"</div>
         </div>
@@ -123,6 +140,7 @@ def create_simple_canvas(image, brush_size=20):
             const canvas = document.getElementById('drawingCanvas');
             const ctx = canvas.getContext('2d');
             const status = document.getElementById('status');
+            const brushCursor = document.getElementById('brushCursor');
             
             let isDrawing = false;
             let hasDrawn = false;
@@ -137,9 +155,10 @@ def create_simple_canvas(image, brush_size=20):
             
             // 事件监听
             canvas.addEventListener('mousedown', startDraw);
-            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mousemove', handleMouseMove);
             canvas.addEventListener('mouseup', stopDraw);
-            canvas.addEventListener('mouseleave', stopDraw);
+            canvas.addEventListener('mouseleave', hideCursor);
+            canvas.addEventListener('mouseenter', showCursor);
             
             // 触摸支持
             canvas.addEventListener('touchstart', handleTouch, {{passive: false}});
@@ -172,13 +191,36 @@ def create_simple_canvas(image, brush_size=20):
                 status.textContent = '绘制中...';
             }}
             
-            function draw(e) {{
-                if (!isDrawing) return;
+            function handleMouseMove(e) {{
                 const pos = getPos(e);
-                ctx.lineTo(pos.x, pos.y);
-                ctx.stroke();
-                currentStroke.push({{x: pos.x, y: pos.y}});
-                hasDrawn = true;
+                updateCursor(pos.x, pos.y);
+                
+                if (isDrawing) {{
+                    ctx.lineTo(pos.x, pos.y);
+                    ctx.stroke();
+                    currentStroke.push({{x: pos.x, y: pos.y}});
+                    hasDrawn = true;
+                }}
+            }}
+            
+            function updateCursor(x, y) {{
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = rect.width / canvas.width;
+                const scaleY = rect.height / canvas.height;
+                
+                brushCursor.style.left = (x * scaleX - {brush_size}/2) + 'px';
+                brushCursor.style.top = (y * scaleY - {brush_size}/2) + 'px';
+            }}
+            
+            function showCursor() {{
+                brushCursor.style.display = 'block';
+            }}
+            
+            function hideCursor() {{
+                brushCursor.style.display = 'none';
+                if (isDrawing) {{
+                    stopDraw();
+                }}
             }}
             
             function stopDraw() {{
@@ -292,71 +334,4 @@ def create_simple_canvas(image, brush_size=20):
     
     return result
 
-def strokes_to_mask(strokes, image_size, brush_size):
-    """
-    将笔画数据转换为PIL mask图像
-    """
-    mask = Image.new('L', image_size, 0)  # 黑色背景
-    draw = ImageDraw.Draw(mask)
-    
-    for stroke in strokes:
-        if len(stroke) > 1:
-            # 绘制连续线条
-            points = [(point['x'], point['y']) for point in stroke]
-            for i in range(len(points) - 1):
-                draw.line([points[i], points[i + 1]], fill=255, width=brush_size)
-        elif len(stroke) == 1:
-            # 单点
-            x, y = stroke[0]['x'], stroke[0]['y']
-            r = brush_size // 2
-            draw.ellipse([x-r, y-r, x+r, y+r], fill=255)
-    
-    return mask
 
-def canvas_data_to_mask(canvas_data, image_size):
-    """
-    将streamlit-drawable-canvas的数据转换为mask
-    """
-    if canvas_data is None or canvas_data.image_data is None:
-        return None
-    
-    # 获取canvas数据
-    canvas_array = np.array(canvas_data.image_data)
-    
-    # 检查是否有绘制内容（非透明像素）
-    if len(canvas_array.shape) == 3 and canvas_array.shape[2] >= 4:
-        alpha_channel = canvas_array[:, :, 3]
-        
-        # 创建二值mask
-        mask_array = (alpha_channel > 0).astype(np.uint8) * 255
-        
-        # 转换为PIL图像
-        mask_image = Image.fromarray(mask_array, mode='L')
-        
-        # 确保尺寸匹配
-        if mask_image.size != image_size:
-            mask_image = mask_image.resize(image_size, Image.Resampling.NEAREST)
-        
-        return mask_image
-    
-    return None
-
-def validate_mask(mask_image, min_area=100):
-    """
-    验证mask是否有效
-    """
-    if mask_image is None:
-        return False, "没有检测到涂抹区域"
-    
-    # 计算mask面积
-    mask_array = np.array(mask_image)
-    white_pixels = np.sum(mask_array > 128)
-    
-    if white_pixels < min_area:
-        return False, f"涂抹区域太小（{white_pixels}像素），请涂抹更大的区域"
-    
-    total_pixels = mask_array.size
-    if white_pixels > total_pixels * 0.8:
-        return False, "涂抹区域过大，请涂抹较小的局部区域"
-    
-    return True, f"涂抹区域有效（{white_pixels}像素）"
