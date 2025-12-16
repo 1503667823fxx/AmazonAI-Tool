@@ -253,8 +253,8 @@ with col_canvas:
         # 操作说明
         st.info("📝 **操作步骤：** ① 在图片上涂抹红色区域 → ② 点击「保存涂抹数据」→ ③ 复制上方文本框中的数据 → ④ 使用下方工具确认数据")
         
-        # 完全避开Streamlit输入组件的方法
-        st.write("📋 **涂抹数据确认工具**")
+        # 简化的数据确认方法
+        st.write("📋 **涂抹数据确认**")
         
         if st.session_state.confirmed_mask_data:
             data_preview = st.session_state.confirmed_mask_data[:50] + "..." if len(st.session_state.confirmed_mask_data) > 50 else st.session_state.confirmed_mask_data
@@ -264,168 +264,105 @@ with col_canvas:
                 st.session_state.mask_data = None
                 st.rerun()
         else:
-            # 使用纯HTML工具，完全避开Streamlit的输入组件
-            data_tool_html = f"""
-            <div style="border: 2px solid #4CAF50; border-radius: 8px; padding: 20px; background: #f8fff8; margin: 10px 0;">
-                <h4 style="color: #2E7D32; margin-top: 0;">🛠️ 涂抹数据处理工具</h4>
-                
-                <div style="margin-bottom: 15px;">
-                    <strong>步骤1：</strong> 复制上方保存的涂抹数据
+            # 检查sessionStorage中是否有数据
+            check_storage_html = """
+            <script>
+                const savedData = sessionStorage.getItem('magic_canvas_confirmed');
+                if (savedData) {
+                    // 通过URL参数传递数据
+                    const url = new URL(window.location);
+                    url.searchParams.set('mask_data', encodeURIComponent(savedData));
+                    sessionStorage.removeItem('magic_canvas_confirmed');
+                    window.location.href = url.toString();
+                }
+            </script>
+            """
+            components.html(check_storage_html, height=0)
+            
+            # 检查URL参数中的数据
+            if 'mask_data' in st.query_params:
+                try:
+                    import urllib.parse
+                    mask_data = urllib.parse.unquote(st.query_params['mask_data'])
+                    if mask_data.startswith('data:image/png;base64,'):
+                        st.session_state.confirmed_mask_data = mask_data
+                        st.query_params.clear()
+                        st.success("✅ 数据已确认！")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"数据处理错误: {e}")
+            
+            # 简化的HTML输入工具
+            simple_tool_html = """
+            <div style="border: 2px solid #2196F3; border-radius: 8px; padding: 15px; background: #f3f8ff; margin: 10px 0;">
+                <div style="margin-bottom: 10px;">
+                    <strong style="color: #1976D2;">📋 粘贴涂抹数据</strong>
                 </div>
                 
-                <div style="margin-bottom: 15px;">
-                    <strong>步骤2：</strong> 粘贴到下方文本框
-                    <br>
-                    <textarea id="maskDataArea" 
-                        placeholder="粘贴涂抹数据到这里...&#10;data:image/png;base64,..."
-                        style="width: 100%; height: 120px; padding: 10px; border: 2px solid #ddd; border-radius: 4px; font-size: 11px; font-family: monospace; margin-top: 5px;"
-                        oninput="checkData()"></textarea>
-                </div>
+                <textarea id="maskInput" 
+                    placeholder="将复制的涂抹数据粘贴到这里...&#10;data:image/png;base64,..."
+                    style="width: 100%; height: 100px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; font-family: monospace; resize: vertical;"
+                    oninput="validateInput()"></textarea>
                 
-                <div style="margin-bottom: 15px;">
-                    <strong>步骤3：</strong> 确认数据
-                    <br>
-                    <div style="margin-top: 8px;">
-                        <button onclick="processData()" id="processBtn" 
-                            style="padding: 12px 24px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-right: 10px;" 
-                            disabled>
-                            ✅ 处理数据
-                        </button>
-                        <button onclick="clearAll()" 
-                            style="padding: 12px 24px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            🗑️ 清空
-                        </button>
-                        <span id="dataStatus" style="margin-left: 15px; font-weight: bold;"></span>
-                    </div>
-                </div>
-                
-                <div id="dataInfo" style="background: #e3f2fd; padding: 10px; border-radius: 4px; font-size: 12px; display: none;">
-                    <strong>数据信息：</strong><br>
-                    长度: <span id="dataLength">0</span> 字符<br>
-                    格式: <span id="dataFormat">未检测</span>
+                <div style="margin-top: 10px;">
+                    <button onclick="confirmData()" id="confirmBtn" 
+                        style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-right: 10px;" 
+                        disabled>
+                        ✅ 确认数据
+                    </button>
+                    <button onclick="clearInput()" 
+                        style="padding: 10px 20px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        🗑️ 清空
+                    </button>
+                    <span id="inputStatus" style="margin-left: 10px; font-weight: bold;"></span>
                 </div>
             </div>
             
             <script>
-                function checkData() {{
-                    const textarea = document.getElementById('maskDataArea');
-                    const processBtn = document.getElementById('processBtn');
-                    const status = document.getElementById('dataStatus');
-                    const info = document.getElementById('dataInfo');
-                    const lengthSpan = document.getElementById('dataLength');
-                    const formatSpan = document.getElementById('dataFormat');
+                function validateInput() {
+                    const input = document.getElementById('maskInput');
+                    const confirmBtn = document.getElementById('confirmBtn');
+                    const status = document.getElementById('inputStatus');
+                    const data = input.value.trim();
                     
-                    const data = textarea.value.trim();
-                    lengthSpan.textContent = data.length;
-                    
-                    if (data.length === 0) {{
-                        processBtn.disabled = true;
+                    if (data.length === 0) {
+                        confirmBtn.disabled = true;
                         status.textContent = '';
-                        info.style.display = 'none';
                         return;
-                    }}
-                    
-                    info.style.display = 'block';
-                    
-                    if (data.startsWith('data:image/png;base64,') && data.length > 100) {{
-                        processBtn.disabled = false;
-                        status.textContent = '✅ 数据有效';
-                        status.style.color = '#4CAF50';
-                        formatSpan.textContent = '✅ PNG Base64';
-                        formatSpan.style.color = '#4CAF50';
-                    }} else {{
-                        processBtn.disabled = true;
-                        if (!data.startsWith('data:image/png;base64,')) {{
-                            status.textContent = '❌ 格式错误';
-                            formatSpan.textContent = '❌ 不是PNG Base64';
-                        }} else {{
-                            status.textContent = '❌ 数据太短';
-                            formatSpan.textContent = '⚠️ 数据不完整';
-                        }}
-                        status.style.color = '#f44336';
-                        formatSpan.style.color = '#f44336';
-                    }}
-                }}
-                
-                function processData() {{
-                    const data = document.getElementById('maskDataArea').value.trim();
-                    if (data.startsWith('data:image/png;base64,') && data.length > 100) {{
-                        // 创建一个隐藏的表单提交数据
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.style.display = 'none';
-                        
-                        const input = document.createElement('input');
-                        input.type = 'hidden';
-                        input.name = 'mask_data';
-                        input.value = data;
-                        
-                        form.appendChild(input);
-                        document.body.appendChild(form);
-                        
-                        // 保存到sessionStorage作为备份
-                        sessionStorage.setItem('magic_canvas_backup', data);
-                        
-                        // 刷新页面触发处理
-                        window.location.reload();
-                    }}
-                }}
-                
-                function clearAll() {{
-                    document.getElementById('maskDataArea').value = '';
-                    checkData();
-                    sessionStorage.removeItem('magic_canvas_backup');
-                }}
-                
-                // 页面加载时检查备份数据
-                window.addEventListener('load', function() {{
-                    const backup = sessionStorage.getItem('magic_canvas_backup');
-                    if (backup) {{
-                        // 通过URL hash传递数据
-                        if (!window.location.hash) {{
-                            window.location.hash = 'data=' + encodeURIComponent(backup);
-                            sessionStorage.removeItem('magic_canvas_backup');
-                        }}
-                    }}
-                }});
-            </script>
-            """
-            
-            components.html(data_tool_html, height=350)
-            
-            # 检查URL hash中的数据
-            check_hash_html = """
-            <script>
-                if (window.location.hash.startsWith('#data=')) {
-                    const data = decodeURIComponent(window.location.hash.substring(6));
-                    if (data.startsWith('data:image/png;base64,')) {
-                        // 通过postMessage发送给父窗口
-                        if (window.parent !== window) {
-                            window.parent.postMessage({
-                                type: 'mask_data_ready',
-                                data: data
-                            }, '*');
-                        }
-                        // 清除hash
-                        history.replaceState(null, null, ' ');
                     }
+                    
+                    if (data.startsWith('data:image/png;base64,') && data.length > 100) {
+                        confirmBtn.disabled = false;
+                        status.textContent = '✅ 格式正确 (' + data.length + ' 字符)';
+                        status.style.color = '#4CAF50';
+                    } else {
+                        confirmBtn.disabled = true;
+                        if (!data.startsWith('data:image/png;base64,')) {
+                            status.textContent = '❌ 格式错误';
+                        } else {
+                            status.textContent = '❌ 数据不完整';
+                        }
+                        status.style.color = '#f44336';
+                    }
+                }
+                
+                function confirmData() {
+                    const data = document.getElementById('maskInput').value.trim();
+                    if (data.startsWith('data:image/png;base64,') && data.length > 100) {
+                        // 保存到sessionStorage并刷新
+                        sessionStorage.setItem('magic_canvas_confirmed', data);
+                        window.location.reload();
+                    }
+                }
+                
+                function clearInput() {
+                    document.getElementById('maskInput').value = '';
+                    validateInput();
                 }
             </script>
             """
-            components.html(check_hash_html, height=0)
             
-            # 检查是否有通过hash传递的数据
-            if 'data' in st.query_params:
-                try:
-                    import urllib.parse
-                    hash_data = urllib.parse.unquote(st.query_params['data'])
-                    if hash_data.startswith('data:image/png;base64,'):
-                        st.session_state.confirmed_mask_data = hash_data
-                        st.query_params.clear()
-                        st.success("✅ 数据已自动处理！")
-                        st.rerun()
-                except:
-                    pass
+            components.html(simple_tool_html, height=200)
         
         # 处理mask数据
         has_drawing = False
