@@ -111,27 +111,100 @@ with col_canvas:
         if "current_mask" not in st.session_state:
             st.session_state.current_mask = None
         
-        # 简化的涂抹检测逻辑
+        # 涂抹检测逻辑
         has_drawing = False
         mask_image = None
         
+        # 检查URL参数中的mask数据
+        query_params = st.query_params
+        if query_params.get('canvas_has_mask') == '1' and 'canvas_mask_data' in query_params:
+            try:
+                # 从URL参数获取mask数据
+                mask_data_encoded = query_params.get('canvas_mask_data')
+                if mask_data_encoded:
+                    import urllib.parse
+                    mask_data_url = urllib.parse.unquote(mask_data_encoded)
+                    
+                    # 解析base64数据
+                    if mask_data_url.startswith('data:image/png;base64,'):
+                        base64_data = mask_data_url.split(',')[1]
+                        mask_bytes = base64.b64decode(base64_data)
+                        mask_image = Image.open(io.BytesIO(mask_bytes)).convert('L')
+                        
+                        # 确保尺寸匹配
+                        if mask_image.size != st.session_state.uploaded_image.size:
+                            mask_image = mask_image.resize(st.session_state.uploaded_image.size, Image.Resampling.NEAREST)
+                        
+                        # 验证mask有效性
+                        mask_array = np.array(mask_image)
+                        white_pixels = np.sum(mask_array > 128)
+                        
+                        if white_pixels > 100:  # 最小面积检查
+                            st.session_state.current_mask = mask_image
+                            has_drawing = True
+                            
+                            # 清除URL参数避免重复处理
+                            st.query_params.clear()
+                            st.success("✅ 已成功获取涂抹区域！")
+                        else:
+                            st.warning("⚠️ 涂抹区域太小，请涂抹更大的区域")
+                            
+            except Exception as e:
+                st.error(f"❌ 处理涂抹数据时出错: {str(e)}")
+        
         # 检查是否有当前保存的mask
-        if "current_mask" in st.session_state and st.session_state.current_mask is not None:
+        elif "current_mask" in st.session_state and st.session_state.current_mask is not None:
             mask_image = st.session_state.current_mask
             has_drawing = True
+        
+        # 添加JavaScript来检查localStorage
+        st.markdown("""
+        <script>
+        function checkCanvasMask() {
+            const maskData = localStorage.getItem('magic_canvas_mask');
+            const hasDrawing = localStorage.getItem('magic_canvas_has_drawing');
+            
+            if (maskData && hasDrawing === 'true') {
+                // 通过URL参数传递数据
+                const url = new URL(window.location);
+                url.searchParams.set('canvas_mask_ready', '1');
+                url.searchParams.set('canvas_timestamp', Date.now());
+                window.history.replaceState({}, '', url);
+                
+                // 触发页面刷新
+                window.location.reload();
+            }
+        }
+        
+        // 监听canvas事件
+        window.addEventListener('canvas_mask_saved', checkCanvasMask);
+        </script>
+        """, unsafe_allow_html=True)
         
         # 添加控制按钮
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
-            if st.button("🖌️ 确认涂抹完成", use_container_width=True):
-                # 尝试从HTML Canvas获取真实的涂抹数据
-                # 由于技术限制，暂时使用用户指定的区域
-                st.info("💡 由于技术限制，请使用区域选择器来指定重绘区域")
+            if st.button("🖌️ 获取涂抹区域", use_container_width=True):
+                # 添加JavaScript来获取localStorage中的mask数据
+                st.markdown("""
+                <script>
+                const maskData = localStorage.getItem('magic_canvas_mask');
+                const hasDrawing = localStorage.getItem('magic_canvas_has_drawing');
                 
-                # 显示区域选择器
-                if "show_region_selector" not in st.session_state:
-                    st.session_state.show_region_selector = True
-                st.rerun()
+                if (maskData && hasDrawing === 'true') {
+                    // 设置URL参数来传递数据
+                    const url = new URL(window.location);
+                    url.searchParams.set('canvas_mask_data', encodeURIComponent(maskData));
+                    url.searchParams.set('canvas_has_mask', '1');
+                    window.history.replaceState({}, '', url);
+                    
+                    // 刷新页面来处理数据
+                    window.location.reload();
+                } else {
+                    alert('请先在画布上涂抹，然后点击"保存涂抹"按钮');
+                }
+                </script>
+                """, unsafe_allow_html=True)
         with col2:
             if st.button("🎯 创建测试区域", use_container_width=True):
                 # 创建一个中心测试区域
@@ -150,77 +223,31 @@ with col_canvas:
         with col3:
             if st.button("🗑️ 清除画布", use_container_width=True):
                 # 清除所有相关状态
-                keys_to_clear = ["current_mask", "simulated_mask", "test_mask", "show_region_selector"]
+                keys_to_clear = ["current_mask", "test_mask"]
                 for key in keys_to_clear:
                     if key in st.session_state:
                         del st.session_state[key]
+                
+                # 清除URL参数
+                st.query_params.clear()
+                
+                # 添加JavaScript清除localStorage
+                st.markdown("""
+                <script>
+                localStorage.removeItem('magic_canvas_mask');
+                localStorage.removeItem('magic_canvas_has_drawing');
+                localStorage.removeItem('magic_canvas_timestamp');
+                </script>
+                """, unsafe_allow_html=True)
+                
                 st.success("✅ 已清除画布")
                 st.rerun()
         
-        # 区域选择器
-        if "show_region_selector" in st.session_state and st.session_state.show_region_selector:
-            st.subheader("🎯 手动选择重绘区域")
-            
-            col_sel1, col_sel2 = st.columns(2)
-            with col_sel1:
-                st.write("**区域中心位置**")
-                w, h = st.session_state.uploaded_image.size
-                center_x = st.slider("中心点 X", 0, w, w//2, key="center_x")
-                center_y = st.slider("中心点 Y", 0, h, h//2, key="center_y")
-            
-            with col_sel2:
-                st.write("**区域大小和形状**")
-                region_size = st.slider("区域大小", 20, min(w, h)//2, min(w, h)//4, key="region_size")
-                shape_type = st.radio("区域形状", ["圆形", "矩形"], horizontal=True, key="shape_type")
-            
-            # 实时预览
-            preview_mask = Image.new('L', st.session_state.uploaded_image.size, 0)
-            draw = ImageDraw.Draw(preview_mask)
-            
-            if shape_type == "圆形":
-                draw.ellipse([
-                    center_x - region_size, center_y - region_size,
-                    center_x + region_size, center_y + region_size
-                ], fill=255)
-            else:  # 矩形
-                draw.rectangle([
-                    center_x - region_size, center_y - region_size,
-                    center_x + region_size, center_y + region_size
-                ], fill=255)
-            
-            # 显示预览
-            col_prev1, col_prev2 = st.columns(2)
-            with col_prev1:
-                st.image(st.session_state.uploaded_image, caption="原图", use_column_width=True)
-            with col_prev2:
-                # 创建预览图像
-                preview_img = st.session_state.uploaded_image.copy().convert('RGBA')
-                overlay = Image.new('RGBA', st.session_state.uploaded_image.size, (255, 0, 0, 100))
-                mask_array = np.array(preview_mask)
-                overlay_array = np.array(overlay)
-                overlay_array[mask_array <= 128] = [0, 0, 0, 0]
-                overlay = Image.fromarray(overlay_array, 'RGBA')
-                preview_result = Image.alpha_composite(preview_img, overlay).convert('RGB')
-                st.image(preview_result, caption="重绘区域预览 (红色部分)", use_column_width=True)
-            
-            # 确认按钮
-            col_conf1, col_conf2 = st.columns(2)
-            with col_conf1:
-                if st.button("✅ 确认此区域", use_container_width=True):
-                    st.session_state.current_mask = preview_mask
-                    st.session_state.show_region_selector = False
-                    st.success("✅ 已确认重绘区域")
-                    st.rerun()
-            with col_conf2:
-                if st.button("❌ 取消选择", use_container_width=True):
-                    st.session_state.show_region_selector = False
-                    st.rerun()
-        
         # 状态显示
-        elif has_drawing:
+        if has_drawing:
             st.success("✅ 涂抹区域已准备，可以开始重绘")
         else:
-            st.info("💡 请在画布上涂抹后，点击'确认涂抹完成'按钮，或使用'创建测试区域'快速测试")
+            st.info("💡 请在画布上涂抹，点击'保存涂抹'，然后点击'获取涂抹区域'按钮")
         
         # 显示当前状态
         if has_drawing and mask_image:
