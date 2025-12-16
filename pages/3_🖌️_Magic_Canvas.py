@@ -268,50 +268,32 @@ with col_canvas:
                 st.session_state.pending_mask_input = ""  # 同时清空临时输入
                 st.rerun()
         else:
-            # 显示操作提示
-            st.warning("⚠️ **重要提示：** 粘贴数据后请点击确认按钮")
-            
             st.write("**粘贴涂抹数据：**")
             
-            # 初始化待确认数据的临时存储
-            if "pending_mask_data" not in st.session_state:
-                st.session_state.pending_mask_data = ""
-            if "confirm_clicked" not in st.session_state:
-                st.session_state.confirm_clicked = False
-            
-            # 文本输入框
+            # 文本输入框 - 直接使用，不依赖复杂的状态管理
             mask_data_input = st.text_area(
                 "将复制的涂抹数据粘贴到这里",
-                value=st.session_state.pending_mask_data,
                 height=120,
                 placeholder="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
-                help="粘贴完成后点击下方确认按钮",
-                key="mask_text_input"
+                help="粘贴完成后点击下方确认按钮"
             )
             
-            # 保存当前输入到临时存储
+            # 显示当前输入状态
             if mask_data_input:
-                st.session_state.pending_mask_data = mask_data_input
+                st.caption(f"📊 已输入 {len(mask_data_input)} 字符")
             
-            # 确认按钮
+            # 确认按钮 - 在同一次执行中直接处理
             if st.button("✅ 确认数据", type="primary", use_container_width=True):
-                st.session_state.confirm_clicked = True
-            
-            # 处理确认逻辑（在按钮点击后的下一次 rerun 中执行）
-            if st.session_state.confirm_clicked:
-                data_to_confirm = st.session_state.pending_mask_data.strip() if st.session_state.pending_mask_data else ""
-                if data_to_confirm:
-                    if data_to_confirm.startswith('data:image/png;base64,'):
-                        st.session_state.confirmed_mask_data = data_to_confirm
-                        st.session_state.pending_mask_data = ""  # 清空临时数据
-                        st.session_state.confirm_clicked = False
-                        st.rerun()  # 刷新页面显示确认后的状态
+                if mask_data_input and mask_data_input.strip():
+                    data = mask_data_input.strip()
+                    if data.startswith('data:image/png;base64,'):
+                        st.session_state.confirmed_mask_data = data
+                        st.success("✅ 数据已确认！")
+                        # 不调用 st.rerun()，让页面继续执行
                     else:
                         st.error("❌ 数据格式错误，应该以 'data:image/png;base64,' 开头")
-                        st.session_state.confirm_clicked = False
                 else:
                     st.error("❌ 请先粘贴涂抹数据")
-                    st.session_state.confirm_clicked = False
         
         # 处理mask数据
         has_drawing = False
