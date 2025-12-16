@@ -120,7 +120,7 @@ class InpaintService:
                 return None
             
             # 使用最新的Gemini模型
-            model = genai.GenerativeModel('models/gemini-3-pro-preview')
+            model = genai.GenerativeModel('models/gemini-3-pro-image-preview')
             
             # 创建更清晰的指令图像
             instruction_image = self.create_instruction_image(original_image, mask_image)
