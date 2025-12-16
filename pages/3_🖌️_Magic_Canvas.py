@@ -253,7 +253,7 @@ with col_canvas:
         # 操作说明
         st.info("📝 **操作步骤：** ① 在图片上涂抹红色区域 → ② 点击「保存涂抹数据」→ ③ 复制上方文本框中的数据 → ④ 使用下方工具确认数据")
         
-        # 简化的数据确认方法
+        # 最简单可靠的方法：分段输入避免数据丢失
         st.write("📋 **涂抹数据确认**")
         
         if st.session_state.confirmed_mask_data:
@@ -264,105 +264,89 @@ with col_canvas:
                 st.session_state.mask_data = None
                 st.rerun()
         else:
-            # 检查sessionStorage中是否有数据
-            check_storage_html = """
-            <script>
-                const savedData = sessionStorage.getItem('magic_canvas_confirmed');
-                if (savedData) {
-                    // 通过URL参数传递数据
-                    const url = new URL(window.location);
-                    url.searchParams.set('mask_data', encodeURIComponent(savedData));
-                    sessionStorage.removeItem('magic_canvas_confirmed');
-                    window.location.href = url.toString();
-                }
-            </script>
-            """
-            components.html(check_storage_html, height=0)
+            st.info("💡 **为避免数据丢失，请分段输入数据**")
             
-            # 检查URL参数中的数据
-            if 'mask_data' in st.query_params:
-                try:
-                    import urllib.parse
-                    mask_data = urllib.parse.unquote(st.query_params['mask_data'])
-                    if mask_data.startswith('data:image/png;base64,'):
-                        st.session_state.confirmed_mask_data = mask_data
-                        st.query_params.clear()
+            # 初始化分段数据
+            if "data_segments" not in st.session_state:
+                st.session_state.data_segments = ["", "", "", ""]
+            
+            st.write("**步骤：** 将复制的数据分成4段，分别粘贴到下方4个输入框")
+            
+            # 显示数据长度提示
+            full_data_example = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+            st.caption(f"完整数据格式示例: {full_data_example}")
+            
+            # 4个分段输入框
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                segment1 = st.text_area(
+                    "第1段 (包含开头)",
+                    value=st.session_state.data_segments[0],
+                    height=80,
+                    placeholder="data:image/png;base64,iVBORw0KGgo...",
+                    key="seg1"
+                )
+                
+                segment3 = st.text_area(
+                    "第3段",
+                    value=st.session_state.data_segments[2],
+                    height=80,
+                    placeholder="继续粘贴数据...",
+                    key="seg3"
+                )
+            
+            with col2:
+                segment2 = st.text_area(
+                    "第2段",
+                    value=st.session_state.data_segments[1],
+                    height=80,
+                    placeholder="继续粘贴数据...",
+                    key="seg2"
+                )
+                
+                segment4 = st.text_area(
+                    "第4段 (结尾)",
+                    value=st.session_state.data_segments[3],
+                    height=80,
+                    placeholder="...数据结尾",
+                    key="seg4"
+                )
+            
+            # 更新session state
+            st.session_state.data_segments = [segment1, segment2, segment3, segment4]
+            
+            # 合并数据并验证
+            combined_data = "".join([seg.strip() for seg in st.session_state.data_segments])
+            
+            # 显示合并状态
+            col_status, col_confirm = st.columns([2, 1])
+            
+            with col_status:
+                if combined_data:
+                    st.write(f"**合并数据长度:** {len(combined_data)} 字符")
+                    if combined_data.startswith('data:image/png;base64,') and len(combined_data) > 1000:
+                        st.success("✅ 数据格式正确，可以确认")
+                    elif combined_data.startswith('data:image/png;base64,'):
+                        st.warning("⚠️ 数据可能不完整")
+                    else:
+                        st.error("❌ 数据格式错误")
+                else:
+                    st.info("请在上方输入框中粘贴数据")
+            
+            with col_confirm:
+                st.write("")  # 空行对齐
+                if st.button("✅ 确认合并数据", type="primary"):
+                    if combined_data.startswith('data:image/png;base64,') and len(combined_data) > 1000:
+                        st.session_state.confirmed_mask_data = combined_data
                         st.success("✅ 数据已确认！")
                         st.rerun()
-                except Exception as e:
-                    st.error(f"数据处理错误: {e}")
-            
-            # 简化的HTML输入工具
-            simple_tool_html = """
-            <div style="border: 2px solid #2196F3; border-radius: 8px; padding: 15px; background: #f3f8ff; margin: 10px 0;">
-                <div style="margin-bottom: 10px;">
-                    <strong style="color: #1976D2;">📋 粘贴涂抹数据</strong>
-                </div>
+                    else:
+                        st.error("❌ 数据格式不正确或不完整")
                 
-                <textarea id="maskInput" 
-                    placeholder="将复制的涂抹数据粘贴到这里...&#10;data:image/png;base64,..."
-                    style="width: 100%; height: 100px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; font-family: monospace; resize: vertical;"
-                    oninput="validateInput()"></textarea>
-                
-                <div style="margin-top: 10px;">
-                    <button onclick="confirmData()" id="confirmBtn" 
-                        style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-right: 10px;" 
-                        disabled>
-                        ✅ 确认数据
-                    </button>
-                    <button onclick="clearInput()" 
-                        style="padding: 10px 20px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        🗑️ 清空
-                    </button>
-                    <span id="inputStatus" style="margin-left: 10px; font-weight: bold;"></span>
-                </div>
-            </div>
-            
-            <script>
-                function validateInput() {
-                    const input = document.getElementById('maskInput');
-                    const confirmBtn = document.getElementById('confirmBtn');
-                    const status = document.getElementById('inputStatus');
-                    const data = input.value.trim();
-                    
-                    if (data.length === 0) {
-                        confirmBtn.disabled = true;
-                        status.textContent = '';
-                        return;
-                    }
-                    
-                    if (data.startsWith('data:image/png;base64,') && data.length > 100) {
-                        confirmBtn.disabled = false;
-                        status.textContent = '✅ 格式正确 (' + data.length + ' 字符)';
-                        status.style.color = '#4CAF50';
-                    } else {
-                        confirmBtn.disabled = true;
-                        if (!data.startsWith('data:image/png;base64,')) {
-                            status.textContent = '❌ 格式错误';
-                        } else {
-                            status.textContent = '❌ 数据不完整';
-                        }
-                        status.style.color = '#f44336';
-                    }
-                }
-                
-                function confirmData() {
-                    const data = document.getElementById('maskInput').value.trim();
-                    if (data.startsWith('data:image/png;base64,') && data.length > 100) {
-                        // 保存到sessionStorage并刷新
-                        sessionStorage.setItem('magic_canvas_confirmed', data);
-                        window.location.reload();
-                    }
-                }
-                
-                function clearInput() {
-                    document.getElementById('maskInput').value = '';
-                    validateInput();
-                }
-            </script>
-            """
-            
-            components.html(simple_tool_html, height=200)
+                if st.button("🗑️ 清空所有"):
+                    st.session_state.data_segments = ["", "", "", ""]
+                    st.rerun()
         
         # 处理mask数据
         has_drawing = False
