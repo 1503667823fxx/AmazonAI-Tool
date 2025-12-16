@@ -55,6 +55,7 @@ with col_tools:
             image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
         st.session_state.uploaded_image = image
         st.session_state.mask_data = None
+        st.session_state.mask_input_data = ""  # 清除之前的mask数据
         st.session_state.canvas_key += 1
     
     if st.session_state.uploaded_image:
@@ -276,22 +277,35 @@ with col_canvas:
             components.html(get_mask_html, height=50)
         
         with col_status:
+            if st.button("🗑️ 清除数据", help="清除已粘贴的涂抹数据"):
+                st.session_state.mask_input_data = ""
+                st.session_state.mask_data = None
+                st.rerun()
             st.info("💡 点击「获取涂抹数据」后，数据会自动复制到剪贴板")
         
-        # 接收mask数据
-        mask_data_input = st.text_input(
+        # 接收mask数据 - 使用session_state避免刷新丢失
+        if "mask_input_data" not in st.session_state:
+            st.session_state.mask_input_data = ""
+        
+        mask_data_input = st.text_area(
             "📋 粘贴涂抹数据 (Ctrl+V)",
+            value=st.session_state.mask_input_data,
+            height=80,
             placeholder="data:image/png;base64,...",
-            key=f"mask_input_{st.session_state.canvas_key}"
+            key=f"mask_input_{st.session_state.canvas_key}",
+            on_change=lambda: setattr(st.session_state, 'mask_input_data', st.session_state[f"mask_input_{st.session_state.canvas_key}"])
         )
 
         # 处理mask数据
         has_drawing = False
         mask_image = None
         
-        if mask_data_input and mask_data_input.startswith('data:image/png;base64,'):
+        # 使用session_state中的数据，避免刷新丢失
+        current_mask_data = st.session_state.mask_input_data or mask_data_input
+        
+        if current_mask_data and current_mask_data.startswith('data:image/png;base64,'):
             try:
-                base64_data = mask_data_input.split(',')[1]
+                base64_data = current_mask_data.split(',')[1]
                 mask_bytes = base64.b64decode(base64_data)
                 mask_image = Image.open(io.BytesIO(mask_bytes)).convert('L')
                 
