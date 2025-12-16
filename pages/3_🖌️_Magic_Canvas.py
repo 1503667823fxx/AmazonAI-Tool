@@ -124,25 +124,13 @@ with col_canvas:
         col1, col2, col3 = st.columns([1, 1, 1])
         with col1:
             if st.button("🖌️ 确认涂抹完成", use_container_width=True):
-                # 模拟检测到涂抹，创建一个基于画布的mask
-                if "simulated_mask" not in st.session_state:
-                    # 创建一个随机位置的涂抹区域
-                    mask = Image.new('L', st.session_state.uploaded_image.size, 0)
-                    draw = ImageDraw.Draw(mask)
-                    w, h = st.session_state.uploaded_image.size
-                    
-                    # 创建几个随机的涂抹区域
-                    import random
-                    for _ in range(3):
-                        x = random.randint(w//4, 3*w//4)
-                        y = random.randint(h//4, 3*h//4)
-                        radius = random.randint(20, 50)
-                        draw.ellipse([x-radius, y-radius, x+radius, y+radius], fill=255)
-                    
-                    st.session_state.simulated_mask = mask
+                # 尝试从HTML Canvas获取真实的涂抹数据
+                # 由于技术限制，暂时使用用户指定的区域
+                st.info("💡 由于技术限制，请使用区域选择器来指定重绘区域")
                 
-                st.session_state.current_mask = st.session_state.simulated_mask
-                st.success("✅ 已确认涂抹区域")
+                # 显示区域选择器
+                if "show_region_selector" not in st.session_state:
+                    st.session_state.show_region_selector = True
                 st.rerun()
         with col2:
             if st.button("🎯 创建测试区域", use_container_width=True):
@@ -162,15 +150,74 @@ with col_canvas:
         with col3:
             if st.button("🗑️ 清除画布", use_container_width=True):
                 # 清除所有相关状态
-                keys_to_clear = ["current_mask", "simulated_mask", "test_mask"]
+                keys_to_clear = ["current_mask", "simulated_mask", "test_mask", "show_region_selector"]
                 for key in keys_to_clear:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.success("✅ 已清除画布")
                 st.rerun()
         
+        # 区域选择器
+        if "show_region_selector" in st.session_state and st.session_state.show_region_selector:
+            st.subheader("🎯 手动选择重绘区域")
+            
+            col_sel1, col_sel2 = st.columns(2)
+            with col_sel1:
+                st.write("**区域中心位置**")
+                w, h = st.session_state.uploaded_image.size
+                center_x = st.slider("中心点 X", 0, w, w//2, key="center_x")
+                center_y = st.slider("中心点 Y", 0, h, h//2, key="center_y")
+            
+            with col_sel2:
+                st.write("**区域大小和形状**")
+                region_size = st.slider("区域大小", 20, min(w, h)//2, min(w, h)//4, key="region_size")
+                shape_type = st.radio("区域形状", ["圆形", "矩形"], horizontal=True, key="shape_type")
+            
+            # 实时预览
+            preview_mask = Image.new('L', st.session_state.uploaded_image.size, 0)
+            draw = ImageDraw.Draw(preview_mask)
+            
+            if shape_type == "圆形":
+                draw.ellipse([
+                    center_x - region_size, center_y - region_size,
+                    center_x + region_size, center_y + region_size
+                ], fill=255)
+            else:  # 矩形
+                draw.rectangle([
+                    center_x - region_size, center_y - region_size,
+                    center_x + region_size, center_y + region_size
+                ], fill=255)
+            
+            # 显示预览
+            col_prev1, col_prev2 = st.columns(2)
+            with col_prev1:
+                st.image(st.session_state.uploaded_image, caption="原图", use_column_width=True)
+            with col_prev2:
+                # 创建预览图像
+                preview_img = st.session_state.uploaded_image.copy().convert('RGBA')
+                overlay = Image.new('RGBA', st.session_state.uploaded_image.size, (255, 0, 0, 100))
+                mask_array = np.array(preview_mask)
+                overlay_array = np.array(overlay)
+                overlay_array[mask_array <= 128] = [0, 0, 0, 0]
+                overlay = Image.fromarray(overlay_array, 'RGBA')
+                preview_result = Image.alpha_composite(preview_img, overlay).convert('RGB')
+                st.image(preview_result, caption="重绘区域预览 (红色部分)", use_column_width=True)
+            
+            # 确认按钮
+            col_conf1, col_conf2 = st.columns(2)
+            with col_conf1:
+                if st.button("✅ 确认此区域", use_container_width=True):
+                    st.session_state.current_mask = preview_mask
+                    st.session_state.show_region_selector = False
+                    st.success("✅ 已确认重绘区域")
+                    st.rerun()
+            with col_conf2:
+                if st.button("❌ 取消选择", use_container_width=True):
+                    st.session_state.show_region_selector = False
+                    st.rerun()
+        
         # 状态显示
-        if has_drawing:
+        elif has_drawing:
             st.success("✅ 涂抹区域已准备，可以开始重绘")
         else:
             st.info("💡 请在画布上涂抹后，点击'确认涂抹完成'按钮，或使用'创建测试区域'快速测试")
