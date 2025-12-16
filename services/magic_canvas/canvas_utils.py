@@ -8,9 +8,9 @@ import numpy as np
 
 def create_drawing_canvas(image, brush_size=20):
     """
-    创建一个HTML Canvas绘图组件
+    创建一个HTML Canvas绘图组件（仅用于展示和涂抹体验）
     """
-    st.info("💡 在画布上涂抹想要修改的区域，涂抹完成后点击'确认涂抹完成'按钮")
+    st.info("💡 在画布上涂抹体验绘制感觉，然后使用下方按钮选择实际的重绘区域")
     return create_simple_canvas(image, brush_size)
 
 def create_simple_canvas(image, brush_size=20):
@@ -105,7 +105,7 @@ def create_simple_canvas(image, brush_size=20):
                 <canvas id="drawingCanvas" width="{image.width}" height="{image.height}"></canvas>
                 <div id="brushCursor" class="brush-cursor" style="width: {brush_size}px; height: {brush_size}px;"></div>
             </div>
-            <div class="info">在图片上涂抹想要修改的区域，然后点击"保存涂抹"</div>
+            <div class="info">在图片上涂抹体验绘制感觉（实际区域通过下方按钮选择）</div>
         </div>
 
         <script>
@@ -210,7 +210,7 @@ def create_simple_canvas(image, brush_size=20):
                         currentStroke = [];
                     }}
                     if (hasDrawn) {{
-                        status.textContent = '已涂抹区域 - 请点击"确认涂抹完成"';
+                        status.textContent = '已涂抹 - 请使用下方按钮选择实际区域';
                     }}
                 }}
             }}
