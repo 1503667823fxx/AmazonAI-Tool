@@ -2,6 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFilter
 import io
+import base64
 import numpy as np
 
 class InpaintService:
@@ -119,8 +120,8 @@ class InpaintService:
                 st.error("❌ 未配置Google API密钥")
                 return None
             
-            # 使用最新的Gemini模型
-            model = genai.GenerativeModel('models/gemini-3-pro-image-preview')
+            # 使用正确的models/gemini-2.5-flash-image模型（支持图像生成）
+            model = genai.GenerativeModel('models/gemini-2.5-flash-image')
             
             # 创建更清晰的指令图像
             instruction_image = self.create_instruction_image(original_image, mask_image)
@@ -145,73 +146,108 @@ class InpaintService:
 请直接生成修改后的完整图片。
 """
             
-            # 调用Gemini API
-            response = model.generate_content([
-                optimized_prompt,
-                instruction_image
-            ])
+            # 调用Gemini API，启用图像生成
+            response = model.generate_content(
+                [optimized_prompt, instruction_image],
+                generation_config=genai.GenerationConfig(
+                    response_mime_type="image/png"
+                )
+            )
             
-            # 检查响应
-            if response and hasattr(response, 'parts'):
-                for part in response.parts:
-                    if hasattr(part, 'inline_data') and part.inline_data:
-                        try:
-                            # 处理返回的图像数据
-                            import base64
-                            image_data = base64.b64decode(part.inline_data.data)
-                            image_bytes = io.BytesIO(image_data)
-                            result_image = Image.open(image_bytes)
-                            
-                            # 确保尺寸匹配
-                            if result_image.size != original_image.size:
-                                result_image = result_image.resize(original_image.size, Image.Resampling.LANCZOS)
-                            
-                            return result_image
-                        except Exception as img_error:
-                            st.warning(f"图像解析错误: {img_error}")
-                            continue
+            # 检查响应并提取图像
+            if response and response.candidates:
+                for candidate in response.candidates:
+                    if hasattr(candidate, 'content') and candidate.content:
+                        for part in candidate.content.parts:
+                            # 检查是否有inline_data（图像数据）
+                            if hasattr(part, 'inline_data') and part.inline_data:
+                                try:
+                                    # inline_data.data 已经是bytes或base64字符串
+                                    image_data = part.inline_data.data
+                                    if isinstance(image_data, str):
+                                        image_data = base64.b64decode(image_data)
+                                    
+                                    image_bytes = io.BytesIO(image_data)
+                                    result_image = Image.open(image_bytes).convert('RGB')
+                                    
+                                    # 确保尺寸匹配
+                                    if result_image.size != original_image.size:
+                                        result_image = result_image.resize(original_image.size, Image.Resampling.LANCZOS)
+                                    
+                                    return result_image
+                                except Exception as img_error:
+                                    st.warning(f"图像解析错误: {img_error}")
+                                    continue
             
-            # 如果Gemini不支持图像生成，使用传统的inpainting方法
-            st.info("💡 Gemini当前不支持图像生成，使用传统修复方法...")
-            return self.traditional_inpaint(original_image, mask_image, prompt)
+            # 如果没有图像返回，尝试使用Imagen模型
+            st.info("💡 尝试使用Imagen模型...")
+            return self.inpaint_with_imagen(original_image, mask_image, prompt)
             
         except Exception as e:
             st.error(f"❌ Gemini API调用失败: {str(e)}")
             return self.traditional_inpaint(original_image, mask_image, prompt)
-
-    def fallback_imagen_generation(self, original_image, prompt):
+    
+    def inpaint_with_imagen(self, original_image, mask_image, prompt):
         """
-        使用Imagen作为fallback方案
+        使用Imagen 3模型进行图像编辑
         """
         try:
-            # 使用Imagen模型进行图像生成
-            model = genai.GenerativeModel('models/gemini-3-pro-image-preview')
+            from google import genai as genai_new
+            from google.genai import types
             
-            # 创建图像生成提示
-            generation_prompt = f"""
-基于参考图片的风格和构图，生成一张新图片。
-
-要求：
-- 保持原图的整体构图和风格
-- 在指定区域添加：{prompt}
-- 画面自然协调，无违和感
-
-参考图片：
-"""
+            client = genai_new.Client(api_key=self.api_key)
             
-            response = model.generate_content([
-                generation_prompt,
-                original_image
-            ])
+            # 将原图转为bytes
+            img_buffer = io.BytesIO()
+            original_image.save(img_buffer, format='PNG')
+            img_bytes = img_buffer.getvalue()
             
-            # 这里需要根据实际的Imagen API响应格式进行调整
-            # 目前作为示例返回原图
-            st.info("💡 正在使用创意模式重新生成...")
-            return original_image
+            # 将mask转为bytes
+            mask_buffer = io.BytesIO()
+            mask_image.save(mask_buffer, format='PNG')
+            mask_bytes = mask_buffer.getvalue()
             
+            # 使用models/gemini-3-pro-image-preview进行编辑
+            response = client.models.edit_image(
+                model='models/gemini-3-pro-image-preview',
+                prompt=prompt,
+                image=types.RawReferenceImage(
+                    reference_id=1,
+                    reference_image=types.Image(image_bytes=img_bytes)
+                ),
+                mask=types.MaskReferenceImage(
+                    reference_id=2,
+                    config=types.MaskReferenceConfig(
+                        mask_mode='MASK_MODE_USER_PROVIDED',
+                        mask_dilation=0.03
+                    ),
+                    mask_image=types.Image(image_bytes=mask_bytes)
+                ),
+                config=types.EditImageConfig(
+                    edit_mode='EDIT_MODE_INPAINT_INSERTION',
+                    number_of_images=1
+                )
+            )
+            
+            # 提取生成的图像
+            if response and response.generated_images:
+                result_bytes = response.generated_images[0].image.image_bytes
+                result_image = Image.open(io.BytesIO(result_bytes)).convert('RGB')
+                
+                if result_image.size != original_image.size:
+                    result_image = result_image.resize(original_image.size, Image.Resampling.LANCZOS)
+                
+                return result_image
+            
+            st.warning("⚠️ Imagen未返回图像，使用传统方法")
+            return self.traditional_inpaint(original_image, mask_image, prompt)
+            
+        except ImportError:
+            st.info("💡 Imagen SDK未安装，使用传统方法")
+            return self.traditional_inpaint(original_image, mask_image, prompt)
         except Exception as e:
-            st.error(f"❌ Imagen生成失败: {str(e)}")
-            return None
+            st.warning(f"⚠️ Imagen调用失败: {e}")
+            return self.traditional_inpaint(original_image, mask_image, prompt)
 
     def inpaint(self, original_image, mask_image, prompt):
         """
