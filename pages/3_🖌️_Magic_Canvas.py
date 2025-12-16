@@ -116,7 +116,7 @@ with col_canvas:
         mask_image = None
         
         if canvas_result:
-            # 处理涂抹canvas数据
+            # 处理streamlit-drawable-canvas数据
             if hasattr(canvas_result, 'image_data') and canvas_result.image_data is not None:
                 # 获取canvas数据
                 canvas_array = np.array(canvas_result.image_data)
@@ -142,6 +142,40 @@ with col_canvas:
                         st.session_state.current_mask = mask_image
                     else:
                         st.warning("⚠️ 涂抹区域太小，请涂抹更大的区域")
+            
+            # 如果没有检测到streamlit-drawable-canvas数据，可能是使用了HTML Canvas
+            elif not has_drawing:
+                # 检查session state中是否有HTML Canvas保存的mask
+                if "html_canvas_mask" in st.session_state and st.session_state.html_canvas_mask is not None:
+                    mask_image = st.session_state.html_canvas_mask
+                    has_drawing = True
+                    st.session_state.current_mask = mask_image
+        
+        # 添加手动检测按钮
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("🔍 检测涂抹区域", use_container_width=True):
+                st.rerun()
+        with col2:
+            if st.button("🗑️ 清除画布", use_container_width=True):
+                # 清除所有相关状态
+                if "current_mask" in st.session_state:
+                    del st.session_state.current_mask
+                if "html_canvas_mask" in st.session_state:
+                    del st.session_state.html_canvas_mask
+                st.rerun()
+        
+        # 调试信息
+        with st.expander("🔧 调试信息", expanded=False):
+            st.write("Canvas结果类型:", type(canvas_result))
+            if canvas_result:
+                st.write("Canvas结果属性:", dir(canvas_result))
+                if hasattr(canvas_result, 'image_data'):
+                    st.write("Image data 存在:", canvas_result.image_data is not None)
+                    if canvas_result.image_data is not None:
+                        st.write("Image data 形状:", np.array(canvas_result.image_data).shape)
+            st.write("Has drawing:", has_drawing)
+            st.write("Current mask存在:", "current_mask" in st.session_state)
         
         # 显示当前状态
         if has_drawing and mask_image:
@@ -153,7 +187,7 @@ with col_canvas:
                 with col2:
                     st.image(mask_image, caption="涂抹区域 (白色部分将被重绘)", use_column_width=True)
         else:
-            st.info("💡 请在上方画布中涂抹要修改的区域，然后输入重绘指令")
+            st.info("💡 请在上方画布中涂抹要修改的区域，涂抹后点击'检测涂抹区域'按钮")
         
         # 处理重绘请求
         if generate_btn:
