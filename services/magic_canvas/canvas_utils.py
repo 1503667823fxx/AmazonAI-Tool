@@ -14,6 +14,33 @@ def create_drawing_canvas(image, brush_size=20):
     try:
         from streamlit_drawable_canvas import st_canvas
         
+        # 添加自定义CSS来实现圆形指针
+        st.markdown(f"""
+        <style>
+        .stCanvas > div > div > canvas {{
+            cursor: none !important;
+        }}
+        .stCanvas > div > div {{
+            position: relative;
+        }}
+        .stCanvas > div > div::after {{
+            content: '';
+            position: absolute;
+            width: {brush_size}px;
+            height: {brush_size}px;
+            border: 2px solid #ff0000;
+            border-radius: 50%;
+            background: rgba(255, 0, 0, 0.1);
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        }}
+        .stCanvas > div > div:hover::after {{
+            display: block;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+        
         # 创建画布 - 优化涂抹体验
         canvas_result = st_canvas(
             fill_color="rgba(255, 0, 0, 0.4)",  # 半透明红色填充
@@ -24,7 +51,7 @@ def create_drawing_canvas(image, brush_size=20):
             height=image.height,
             width=image.width,
             drawing_mode="freedraw",
-            point_display_radius=brush_size//2,  # 显示圆形指针
+            point_display_radius=0,  # 禁用默认指针，使用自定义CSS
             key="magic_canvas_drawing",  # 固定的key
         )
         
@@ -32,7 +59,7 @@ def create_drawing_canvas(image, brush_size=20):
         
     except ImportError as e:
         st.warning(f"⚠️ streamlit-drawable-canvas 不可用: {e}")
-        st.info("💡 使用简化版画布，功能可能受限")
+        st.info("💡 使用简化版画布")
         
         # 降级到简单的HTML Canvas
         return create_simple_canvas(image, brush_size)
@@ -87,6 +114,10 @@ def create_simple_canvas(image, brush_size=20):
                 cursor: none;  /* 隐藏默认指针，使用自定义圆形指针 */
                 background: transparent;
             }}
+            .canvas-wrapper {{
+                position: relative;
+                display: inline-block;
+            }}
             .brush-cursor {{
                 position: absolute;
                 border: 2px solid #ff0000;
@@ -95,6 +126,7 @@ def create_simple_canvas(image, brush_size=20):
                 background: rgba(255, 0, 0, 0.1);
                 z-index: 1000;
                 display: none;
+                transform: translate(-50%, -50%);
             }}
             .controls {{
                 text-align: center;
@@ -128,7 +160,7 @@ def create_simple_canvas(image, brush_size=20):
                 <span>画笔: {brush_size}px | </span>
                 <span id="status">准备绘制</span>
             </div>
-            <div style="position: relative;">
+            <div class="canvas-wrapper">
                 <div class="background-layer"></div>
                 <canvas id="drawingCanvas" width="{image.width}" height="{image.height}"></canvas>
                 <div id="brushCursor" class="brush-cursor" style="width: {brush_size}px; height: {brush_size}px;"></div>
@@ -205,11 +237,18 @@ def create_simple_canvas(image, brush_size=20):
             
             function updateCursor(x, y) {{
                 const rect = canvas.getBoundingClientRect();
+                const wrapper = canvas.parentElement;
+                const wrapperRect = wrapper.getBoundingClientRect();
+                
+                // 计算鼠标在canvas上的相对位置
                 const scaleX = rect.width / canvas.width;
                 const scaleY = rect.height / canvas.height;
                 
-                brushCursor.style.left = (x * scaleX - {brush_size}/2) + 'px';
-                brushCursor.style.top = (y * scaleY - {brush_size}/2) + 'px';
+                const cursorX = x * scaleX;
+                const cursorY = y * scaleY;
+                
+                brushCursor.style.left = cursorX + 'px';
+                brushCursor.style.top = cursorY + 'px';
             }}
             
             function showCursor() {{
@@ -231,7 +270,9 @@ def create_simple_canvas(image, brush_size=20):
                         currentStroke = [];
                     }}
                     if (hasDrawn) {{
-                        status.textContent = '已涂抹区域 - 请点击"保存涂抹"';
+                        status.textContent = '已涂抹区域';
+                        // 自动保存mask
+                        setTimeout(autoSaveMask, 100);
                     }}
                 }}
             }}
@@ -265,6 +306,11 @@ def create_simple_canvas(image, brush_size=20):
                     return;
                 }}
                 
+                createAndSaveMask();
+                status.textContent = '✅ 涂抹区域已保存';
+            }}
+            
+            function createAndSaveMask() {{
                 // 创建mask canvas
                 const maskCanvas = document.createElement('canvas');
                 maskCanvas.width = canvas.width;
@@ -280,6 +326,7 @@ def create_simple_canvas(image, brush_size=20):
                 maskCtx.lineWidth = {brush_size};
                 maskCtx.lineCap = 'round';
                 maskCtx.lineJoin = 'round';
+                maskCtx.fillStyle = 'white';
                 
                 // 绘制所有笔画
                 strokes.forEach(stroke => {{
@@ -298,8 +345,9 @@ def create_simple_canvas(image, brush_size=20):
                     }}
                 }});
                 
-                // 获取mask数据
+                // 获取mask数据并保存到全局变量
                 const maskDataUrl = maskCanvas.toDataURL('image/png');
+                window.currentMask = maskDataUrl;
                 
                 // 发送数据到Streamlit
                 window.parent.postMessage({{
@@ -310,8 +358,13 @@ def create_simple_canvas(image, brush_size=20):
                         hasContent: hasDrawn
                     }}
                 }}, '*');
-                
-                status.textContent = '✅ 涂抹区域已保存';
+            }}
+            
+            // 自动保存mask当有绘制时
+            function autoSaveMask() {{
+                if (hasDrawn) {{
+                    createAndSaveMask();
+                }}
             }}
             
             // 全局函数供外部调用
