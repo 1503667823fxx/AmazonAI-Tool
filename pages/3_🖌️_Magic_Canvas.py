@@ -264,8 +264,7 @@ with col_canvas:
         # 实用的解决方案：接受Streamlit的限制，优化用户体验
         st.write("📋 **涂抹数据输入**")
         
-        # 调试信息
-        st.caption(f"🔍 调试: confirmed_mask_data 长度 = {len(st.session_state.confirmed_mask_data)}")
+
         
         if st.session_state.confirmed_mask_data:
             data_preview = st.session_state.confirmed_mask_data[:50] + "..." if len(st.session_state.confirmed_mask_data) > 50 else st.session_state.confirmed_mask_data
@@ -278,7 +277,6 @@ with col_canvas:
         else:
             st.write("**粘贴涂抹数据：**")
             
-            # 文本输入框 - 直接使用，不依赖复杂的状态管理
             mask_data_input = st.text_area(
                 "将复制的涂抹数据粘贴到这里",
                 height=120,
@@ -286,18 +284,12 @@ with col_canvas:
                 help="粘贴完成后点击下方确认按钮"
             )
             
-            # 显示当前输入状态
-            if mask_data_input:
-                st.caption(f"📊 已输入 {len(mask_data_input)} 字符")
-            
-            # 确认按钮 - 在同一次执行中直接处理
             if st.button("✅ 确认数据", type="primary", use_container_width=True):
                 if mask_data_input and mask_data_input.strip():
                     data = mask_data_input.strip()
                     if data.startswith('data:image/png;base64,'):
                         st.session_state.confirmed_mask_data = data
                         st.success("✅ 数据已确认！")
-                        # 不调用 st.rerun()，让页面继续执行
                     else:
                         st.error("❌ 数据格式错误，应该以 'data:image/png;base64,' 开头")
                 else:
@@ -307,23 +299,17 @@ with col_canvas:
         has_drawing = False
         mask_image = None
         
-        st.caption(f"🔍 调试: 开始处理 mask 数据...")
-        
         if st.session_state.confirmed_mask_data:
-            st.caption(f"🔍 调试: confirmed_mask_data 存在，长度={len(st.session_state.confirmed_mask_data)}")
             try:
                 base64_data = st.session_state.confirmed_mask_data.split(',')[1]
-                st.caption(f"🔍 调试: base64 数据长度={len(base64_data)}")
                 mask_bytes = base64.b64decode(base64_data)
                 mask_image = Image.open(io.BytesIO(mask_bytes)).convert('L')
-                st.caption(f"🔍 调试: mask_image 尺寸={mask_image.size}")
                 
                 if mask_image.size != st.session_state.uploaded_image.size:
                     mask_image = mask_image.resize(st.session_state.uploaded_image.size, Image.Resampling.NEAREST)
                 
                 mask_array = np.array(mask_image)
                 white_pixels = np.sum(mask_array > 128)
-                st.caption(f"🔍 调试: white_pixels={white_pixels}")
                 
                 if white_pixels > 50:
                     has_drawing = True
@@ -333,8 +319,6 @@ with col_canvas:
                     st.warning("⚠️ 涂抹区域太小，请涂抹更大的区域")
             except Exception as e:
                 st.error(f"❌ 数据解析错误: {e}")
-        else:
-            st.caption("🔍 调试: confirmed_mask_data 为空")
         
         # 显示涂抹区域预览
         if has_drawing and mask_image:
