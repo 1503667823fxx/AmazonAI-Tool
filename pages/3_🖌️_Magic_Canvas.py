@@ -50,15 +50,23 @@ with col_tools:
     st.subheader("🛠️ 控制面板")
     
     uploaded_file = st.file_uploader("📁 上传原图", type=["png", "jpg", "jpeg", "webp"])
+    
+    # 只在上传新文件时才处理（通过比较文件名和大小来判断是否是新文件）
     if uploaded_file:
-        image = Image.open(uploaded_file).convert("RGB")
-        max_size = 600
-        if max(image.size) > max_size:
-            image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-        st.session_state.uploaded_image = image
-        st.session_state.mask_data = None
-        st.session_state.confirmed_mask_data = ""
-        st.session_state.canvas_key += 1
+        # 生成文件标识
+        file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+        
+        # 检查是否是新文件
+        if st.session_state.get("last_uploaded_file_id") != file_id:
+            image = Image.open(uploaded_file).convert("RGB")
+            max_size = 600
+            if max(image.size) > max_size:
+                image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            st.session_state.uploaded_image = image
+            st.session_state.mask_data = None
+            st.session_state.confirmed_mask_data = ""
+            st.session_state.canvas_key += 1
+            st.session_state.last_uploaded_file_id = file_id  # 记录当前文件标识
     
     if st.session_state.uploaded_image:
         st.success(f"✅ 图片已加载 ({st.session_state.uploaded_image.size[0]}×{st.session_state.uploaded_image.size[1]})")
