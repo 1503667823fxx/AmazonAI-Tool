@@ -301,14 +301,17 @@ with col_canvas:
                 
                 submitted = st.form_submit_button("✅ 确认数据", type="primary", use_container_width=True)
             
-            # 在 form 外部处理提交结果（避免 rerun 问题）
+            # 在 form 外部处理提交结果
             if submitted:
+                st.caption(f"🔍 调试: form 已提交, mask_data_input 长度={len(mask_data_input) if mask_data_input else 0}")
                 if mask_data_input and mask_data_input.strip():
                     data = mask_data_input.strip()
+                    st.caption(f"🔍 调试: data 开头={data[:50] if len(data) > 50 else data}")
                     if data.startswith('data:image/png;base64,'):
                         st.session_state.confirmed_mask_data = data
-                        st.success("✅ 数据已保存！页面将刷新...")
-                        st.rerun()
+                        st.caption(f"🔍 调试: 已设置 confirmed_mask_data, 长度={len(st.session_state.confirmed_mask_data)}")
+                        st.success("✅ 数据已保存！请点击「开始重绘」按钮")
+                        # 不使用 st.rerun()，让页面自然刷新
                     else:
                         st.error("❌ 数据格式错误，应该以 'data:image/png;base64,' 开头")
                 else:
