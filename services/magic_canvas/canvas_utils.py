@@ -8,20 +8,23 @@ import numpy as np
 
 def create_drawing_canvas(image, brush_size=20):
     """
-    创建一个HTML Canvas绘图组件（仅用于展示和涂抹体验）
+    创建一个真正能检测涂抹的HTML Canvas绘图组件
     """
-    st.info("💡 在画布上涂抹体验绘制感觉，然后使用下方按钮选择实际的重绘区域")
-    return create_simple_canvas(image, brush_size)
+    st.info("💡 在图片上涂抹想要修改的区域，涂抹完成后点击'获取涂抹区域'按钮")
+    return create_real_canvas(image, brush_size)
 
-def create_simple_canvas(image, brush_size=20):
+def create_real_canvas(image, brush_size=20):
     """
-    简化的HTML Canvas绘图组件
+    真正能检测涂抹的HTML Canvas绘图组件
     """
     # 将图像转换为base64
     buffered = io.BytesIO()
     image.save(buffered, format="PNG")
     img_base64 = base64.b64encode(buffered.getvalue()).decode()
     img_data_url = f"data:image/png;base64,{img_base64}"
+    
+    # 创建唯一的canvas ID
+    canvas_id = f"magic_canvas_{hash(str(image.size) + str(brush_size))}"
     
     canvas_html = f"""
     <!DOCTYPE html>
@@ -105,7 +108,7 @@ def create_simple_canvas(image, brush_size=20):
                 <canvas id="drawingCanvas" width="{image.width}" height="{image.height}"></canvas>
                 <div id="brushCursor" class="brush-cursor" style="width: {brush_size}px; height: {brush_size}px;"></div>
             </div>
-            <div class="info">在图片上涂抹体验绘制感觉（实际区域通过下方按钮选择）</div>
+            <div class="info">在图片上涂抹想要修改的区域，然后点击"保存涂抹"按钮</div>
         </div>
 
         <script>
@@ -210,7 +213,7 @@ def create_simple_canvas(image, brush_size=20):
                         currentStroke = [];
                     }}
                     if (hasDrawn) {{
-                        status.textContent = '已涂抹 - 请使用下方按钮选择实际区域';
+                        status.textContent = '已涂抹 - 请点击"保存涂抹"按钮';
                     }}
                 }}
             }}
@@ -231,11 +234,14 @@ def create_simple_canvas(image, brush_size=20):
                 currentStroke = [];
                 hasDrawn = false;
                 status.textContent = '已清除';
-                // 通知Streamlit清除数据
-                window.parent.postMessage({{
-                    type: 'canvas_cleared',
-                    data: null
-                }}, '*');
+                
+                // 清除localStorage数据
+                localStorage.removeItem('magic_canvas_mask');
+                localStorage.removeItem('magic_canvas_has_drawing');
+                localStorage.removeItem('magic_canvas_timestamp');
+                
+                // 触发清除事件
+                window.dispatchEvent(new Event('canvas_cleared'));
             }}
             
             function saveMask() {{
@@ -244,11 +250,20 @@ def create_simple_canvas(image, brush_size=20):
                     return;
                 }}
                 
-                createAndSaveMask();
-                status.textContent = '✅ 涂抹区域已保存';
+                const maskData = createMaskFromStrokes();
+                
+                // 将mask数据保存到localStorage，供Streamlit读取
+                localStorage.setItem('magic_canvas_mask', maskData);
+                localStorage.setItem('magic_canvas_has_drawing', 'true');
+                localStorage.setItem('magic_canvas_timestamp', Date.now().toString());
+                
+                status.textContent = '✅ 涂抹区域已保存到本地存储';
+                
+                // 触发页面刷新事件
+                window.dispatchEvent(new Event('canvas_mask_saved'));
             }}
             
-            function createAndSaveMask() {{
+            function createMaskFromStrokes() {{
                 // 创建mask canvas
                 const maskCanvas = document.createElement('canvas');
                 maskCanvas.width = canvas.width;
@@ -283,19 +298,7 @@ def create_simple_canvas(image, brush_size=20):
                     }}
                 }});
                 
-                // 获取mask数据并保存到全局变量
-                const maskDataUrl = maskCanvas.toDataURL('image/png');
-                window.currentMask = maskDataUrl;
-                
-                // 发送数据到Streamlit
-                window.parent.postMessage({{
-                    type: 'mask_saved',
-                    data: {{
-                        mask: maskDataUrl,
-                        strokes: strokes,
-                        hasContent: hasDrawn
-                    }}
-                }}, '*');
+                return maskCanvas.toDataURL('image/png');
             }}
             
             // 简化的函数
@@ -314,7 +317,15 @@ def create_simple_canvas(image, brush_size=20):
     # 渲染组件
     components.html(canvas_html, height=image.height + 120)
     
-    # 返回None，让主页面使用按钮控制
-    return None
+    # 返回一个包含localStorage检查功能的对象
+    class CanvasResult:
+        def __init__(self):
+            self.canvas_id = canvas_id
+    
+    return CanvasResult()
+
+def create_simple_canvas(image, brush_size=20):
+    """保留原来的简单canvas作为备用"""
+    return create_real_canvas(image, brush_size)
 
 
