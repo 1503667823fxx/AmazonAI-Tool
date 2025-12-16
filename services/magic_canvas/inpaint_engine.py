@@ -114,46 +114,35 @@ class InpaintService:
     def inpaint_with_gemini(self, original_image, mask_image, prompt):
         """
         使用Gemini进行创意重绘
-        支持的模型: gemini-2.5-flash-preview-image-generation, gemini-2.0-flash-exp
+        可用模型: gemini-2.5-flash-image, gemini-3-pro-image-preview
         """
         try:
             if not self.api_key:
                 st.error("❌ 未配置Google API密钥")
                 return None
             
-            # 使用支持图像生成的模型
-            model = genai.GenerativeModel('models/gemini-2.5-flash-preview-image-generation')
+            # 直接使用 gemini-2.5-flash-image 模型
+            model = genai.GenerativeModel('models/gemini-2.5-flash-image')
             
             # 创建更清晰的指令图像
             instruction_image = self.create_instruction_image(original_image, mask_image)
             
             # 优化的提示词
             optimized_prompt = f"""
-你是一个专业的图像编辑AI。请仔细观察这张图片：
+Edit this image: The red highlighted area should be replaced with: {prompt}
 
-任务：对图片进行局部重绘
-- 图片中红色标记的区域需要被替换为：{prompt}
-- 红色标记只是指示区域，不要在最终结果中显示红色标记
-- 保持其他区域完全不变
-- 确保新内容与周围环境自然融合
-- 保持原图的光照、色调和风格
+Instructions:
+- Replace ONLY the red marked region
+- Keep all other areas exactly the same
+- Make the new content blend naturally with surroundings
+- Do NOT show any red marks in the final result
+- Match the lighting and style of the original image
 
-重要提醒：
-1. 不要在结果中显示任何红色标记或蒙版
-2. 只修改红色标记区域内的内容
-3. 新内容要与原图风格一致
-4. 边缘要自然过渡，无明显拼接痕迹
-
-请直接生成修改后的完整图片。
+Generate the complete edited image.
 """
             
-            # 调用Gemini API - 使用 response_modalities 而不是 response_mime_type
-            response = model.generate_content(
-                [optimized_prompt, instruction_image],
-                generation_config=genai.GenerationConfig(
-                    response_modalities=['IMAGE', 'TEXT']
-                )
-            )
+            # 调用Gemini API - 不设置任何 generation_config 避免参数错误
+            response = model.generate_content([optimized_prompt, instruction_image])
             
             # 检查响应并提取图像
             if response and response.candidates:
@@ -163,7 +152,6 @@ class InpaintService:
                             # 检查是否有inline_data（图像数据）
                             if hasattr(part, 'inline_data') and part.inline_data:
                                 try:
-                                    # inline_data.data 已经是bytes或base64字符串
                                     image_data = part.inline_data.data
                                     if isinstance(image_data, str):
                                         image_data = base64.b64decode(image_data)
@@ -171,7 +159,6 @@ class InpaintService:
                                     image_bytes = io.BytesIO(image_data)
                                     result_image = Image.open(image_bytes).convert('RGB')
                                     
-                                    # 确保尺寸匹配
                                     if result_image.size != original_image.size:
                                         result_image = result_image.resize(original_image.size, Image.Resampling.LANCZOS)
                                     
@@ -180,67 +167,14 @@ class InpaintService:
                                     st.warning(f"图像解析错误: {img_error}")
                                     continue
             
-            # 如果没有图像返回，尝试使用备用模型
-            st.info("💡 尝试使用备用模型...")
-            return self.inpaint_with_flash_image(original_image, mask_image, prompt)
+            # 如果没有图像返回，尝试使用 Imagen API
+            st.info("💡 尝试使用 Imagen API...")
+            return self.inpaint_with_imagen(original_image, mask_image, prompt)
             
         except Exception as e:
             st.error(f"❌ Gemini API调用失败: {str(e)}")
-            # 尝试备用方案
-            return self.inpaint_with_flash_image(original_image, mask_image, prompt)
+            return self.inpaint_with_imagen(original_image, mask_image, prompt)
     
-    def inpaint_with_flash_image(self, original_image, mask_image, prompt):
-        """
-        使用 gemini-2.5-flash-image 模型进行重绘
-        """
-        try:
-            # 使用你提供的模型
-            model = genai.GenerativeModel('models/gemini-2.5-flash-image')
-            
-            # 创建指令图像
-            instruction_image = self.create_instruction_image(original_image, mask_image)
-            
-            optimized_prompt = f"""
-Edit this image: Replace the red marked area with {prompt}.
-Keep all other areas unchanged. Make the new content blend naturally.
-Do not show any red marks in the result.
-Generate the complete edited image.
-"""
-            
-            # 不设置 response_mime_type，让模型自动返回图像
-            response = model.generate_content(
-                [optimized_prompt, instruction_image]
-            )
-            
-            # 检查响应并提取图像
-            if response and response.candidates:
-                for candidate in response.candidates:
-                    if hasattr(candidate, 'content') and candidate.content:
-                        for part in candidate.content.parts:
-                            if hasattr(part, 'inline_data') and part.inline_data:
-                                try:
-                                    image_data = part.inline_data.data
-                                    if isinstance(image_data, str):
-                                        image_data = base64.b64decode(image_data)
-                                    
-                                    image_bytes = io.BytesIO(image_data)
-                                    result_image = Image.open(image_bytes).convert('RGB')
-                                    
-                                    if result_image.size != original_image.size:
-                                        result_image = result_image.resize(original_image.size, Image.Resampling.LANCZOS)
-                                    
-                                    return result_image
-                                except Exception as img_error:
-                                    st.warning(f"图像解析错误: {img_error}")
-                                    continue
-            
-            # 尝试 Imagen 方法
-            return self.inpaint_with_imagen(original_image, mask_image, prompt)
-            
-        except Exception as e:
-            st.warning(f"⚠️ gemini-2.5-flash-image 调用失败: {e}")
-            return self.inpaint_with_imagen(original_image, mask_image, prompt)
-
     def inpaint_with_imagen(self, original_image, mask_image, prompt):
         """
         使用Imagen 3模型进行图像编辑
