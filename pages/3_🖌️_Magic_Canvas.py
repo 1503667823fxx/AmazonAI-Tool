@@ -55,7 +55,6 @@ with col_tools:
             image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
         st.session_state.uploaded_image = image
         st.session_state.mask_data = None
-        st.session_state.mask_input_data = ""  # 清除之前的mask数据
         st.session_state.canvas_key += 1
     
     if st.session_state.uploaded_image:
@@ -74,7 +73,6 @@ with col_tools:
 with col_canvas:
     if st.session_state.uploaded_image:
         st.subheader("🎨 涂抹画布")
-        st.caption("在图片上涂抹要修改的区域，涂抹完成后点击「确认涂抹」按钮")
         
         # 将图片转为base64
         buffered = io.BytesIO()
@@ -82,16 +80,13 @@ with col_canvas:
         img_base64 = base64.b64encode(buffered.getvalue()).decode()
         
         w, h = st.session_state.uploaded_image.size
-
-        # 使用隐藏的text_input来接收JavaScript传来的数据
-        mask_receiver = st.empty()
         
-        # HTML Canvas组件 - 自动传输mask数据
+        # HTML Canvas组件 - 涂抹后手动复制粘贴数据
         canvas_html = f"""
         <div style="border: 2px solid #ddd; border-radius: 8px; padding: 10px; background: #f9f9f9;">
             <div style="margin-bottom: 10px; text-align: center;">
                 <button onclick="clearCanvas()" style="padding: 8px 16px; margin: 5px; background: #ff4444; color: white; border: none; border-radius: 4px; cursor: pointer;">🗑️ 清除涂抹</button>
-                <button onclick="confirmMask()" style="padding: 8px 16px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">✅ 确认涂抹</button>
+                <button onclick="exportMask()" style="padding: 8px 16px; margin: 5px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">💾 保存涂抹数据</button>
                 <span id="status" style="margin-left: 10px; color: #666;">准备涂抹</span>
             </div>
             
@@ -101,8 +96,11 @@ with col_canvas:
                 <div id="cursor" style="position: absolute; width: {brush_size}px; height: {brush_size}px; border: 2px solid red; border-radius: 50%; pointer-events: none; display: none; background: rgba(255,0,0,0.2);"></div>
             </div>
             
-            <div id="instructions" style="margin-top: 10px; padding: 10px; background: #e8f4f8; border-radius: 4px; text-align: center;">
-                <strong>操作说明：</strong>在图片上涂抹红色区域 → 点击「确认涂抹」
+            <div style="margin-top: 10px; padding: 10px; background: #e8f4f8; border-radius: 4px;">
+                <div style="text-align: center; margin-bottom: 8px;">
+                    <strong>📋 涂抹数据</strong> <span style="font-size: 12px; color: #666;">(保存后复制下方数据)</span>
+                </div>
+                <textarea id="maskOutput" style="width: 100%; height: 60px; font-size: 10px; border: 1px solid #ccc; border-radius: 4px; padding: 5px;" placeholder="涂抹数据将显示在这里，保存后全选复制"></textarea>
             </div>
         </div>
         
@@ -186,7 +184,7 @@ with col_canvas:
                 drawCtx.beginPath();
                 drawCtx.moveTo(pos.x, pos.y);
                 hasDrawn = true;
-                status.textContent = '已涂抹 - 点击确认涂抹';
+                status.textContent = '已涂抹';
                 status.style.color = '#4CAF50';
             }}
             
@@ -199,11 +197,12 @@ with col_canvas:
                 hasDrawn = false;
                 status.textContent = '已清除';
                 status.style.color = '#666';
+                document.getElementById('maskOutput').value = '';
             }}
             
-            function confirmMask() {{
+            function exportMask() {{
                 if (!hasDrawn) {{
-                    alert('请先在图片上涂抹要修改的区域');
+                    alert('请先在图片上涂抹');
                     return;
                 }}
                 
@@ -231,92 +230,41 @@ with col_canvas:
                 }}
                 
                 const maskData = maskCanvas.toDataURL('image/png');
+                const outputArea = document.getElementById('maskOutput');
+                outputArea.value = maskData;
                 
-                // 将数据存储到sessionStorage
-                sessionStorage.setItem('magic_canvas_mask', maskData);
+                // 自动选中文本方便复制
+                outputArea.select();
+                outputArea.setSelectionRange(0, 99999);
                 
-                status.textContent = '✅ 涂抹已确认！请点击下方按钮获取';
+                status.textContent = '✅ 已保存！请复制下方数据';
                 status.style.color = '#4CAF50';
-                
-                // 显示成功提示
-                document.getElementById('instructions').innerHTML = '<strong style="color: #4CAF50;">✅ 涂抹已保存！请点击下方「获取涂抹数据」按钮</strong>';
             }}
         </script>
         """
         
-        components.html(canvas_html, height=h + 150)
+        components.html(canvas_html, height=h + 200)
         
         st.divider()
         
-        # 获取mask数据的按钮和隐藏输入
-        col_get, col_status = st.columns([1, 2])
+        # 操作说明
+        st.info("📝 **操作步骤：** ① 在图片上涂抹红色区域 → ② 点击「保存涂抹数据」→ ③ 复制上方文本框中的数据 → ④ 粘贴到下方输入框")
         
-        with col_get:
-            # 使用JavaScript获取sessionStorage数据
-            get_mask_html = """
-            <button onclick="getMaskData()" style="padding: 12px 24px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%;">
-                📥 获取涂抹数据
-            </button>
-            <script>
-                function getMaskData() {
-                    const maskData = sessionStorage.getItem('magic_canvas_mask');
-                    if (maskData) {
-                        // 复制到剪贴板
-                        navigator.clipboard.writeText(maskData).then(() => {
-                            alert('✅ 涂抹数据已复制到剪贴板！\\n请粘贴到下方输入框');
-                        }).catch(() => {
-                            // 如果剪贴板API不可用，显示数据让用户手动复制
-                            prompt('请复制以下数据:', maskData);
-                        });
-                    } else {
-                        alert('❌ 未找到涂抹数据，请先涂抹并点击「确认涂抹」');
-                    }
-                }
-            </script>
-            """
-            components.html(get_mask_html, height=50)
+        # 接收mask数据
+        mask_data_input = st.text_area(
+            "📋 粘贴涂抹数据",
+            height=80,
+            placeholder="将上方保存的涂抹数据粘贴到这里...\ndata:image/png;base64,...",
+            key=f"mask_input_{st.session_state.canvas_key}"
+        )
         
-        with col_status:
-            st.info("💡 点击「获取涂抹数据」后，数据会自动复制到剪贴板")
-        
-        # 接收mask数据 - 使用form防止自动刷新
-        if "mask_input_data" not in st.session_state:
-            st.session_state.mask_input_data = ""
-        
-        with st.form("mask_form", clear_on_submit=False):
-            mask_data_input = st.text_area(
-                "📋 粘贴涂抹数据 (Ctrl+V)",
-                value=st.session_state.mask_input_data,
-                height=80,
-                placeholder="data:image/png;base64,...",
-                key=f"mask_input_{st.session_state.canvas_key}"
-            )
-            
-            col_submit, col_clear = st.columns([1, 1])
-            with col_submit:
-                submit_mask = st.form_submit_button("✅ 确认数据", use_container_width=True)
-            with col_clear:
-                clear_mask = st.form_submit_button("🗑️ 清除", use_container_width=True)
-            
-            if submit_mask and mask_data_input:
-                st.session_state.mask_input_data = mask_data_input
-                st.success("✅ 涂抹数据已保存")
-            
-            if clear_mask:
-                st.session_state.mask_input_data = ""
-                st.session_state.mask_data = None
-                st.success("🗑️ 数据已清除")
-
         # 处理mask数据
         has_drawing = False
         mask_image = None
         
-        # 使用session_state中的数据
-        current_mask_data = st.session_state.mask_input_data
-        
-        if current_mask_data and current_mask_data.startswith('data:image/png;base64,'):
+        if mask_data_input and mask_data_input.startswith('data:image/png;base64,'):
             try:
-                base64_data = current_mask_data.split(',')[1]
+                base64_data = mask_data_input.split(',')[1]
                 mask_bytes = base64.b64decode(base64_data)
                 mask_image = Image.open(io.BytesIO(mask_bytes)).convert('L')
                 
@@ -351,7 +299,7 @@ with col_canvas:
         # 处理重绘
         if generate_btn:
             if not has_drawing:
-                st.error("❌ 请先涂抹区域并粘贴涂抹数据")
+                st.error("❌ 请先涂抹并粘贴涂抹数据")
             else:
                 final_mask = mask_image if mask_image else st.session_state.mask_data
                 
