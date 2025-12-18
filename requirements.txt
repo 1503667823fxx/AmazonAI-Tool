@@ -13,6 +13,9 @@ pydub               # 用于音频处理
 opencv-python-headless # 用于视频帧处理 (服务器端专用版本)
 imageio             # 基础图像处理
 proglog             # 用于捕获 Moviepy 的进度条
+hypothesis          # 用于属性测试
+pytest              # 测试框架
+
 
 
 
