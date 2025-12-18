@@ -4,6 +4,14 @@ import io
 import sys
 import os
 import zipfile
+import json
+
+# 导入模板管理服务
+sys.path.append(os.path.abspath('.'))
+try:
+    from services.aplus_template.template_manager import TemplateManager, AITemplateProcessor, create_aplus_sections
+except ImportError:
+    st.error("模板服务未正确安装，请检查 services/aplus_template/ 目录")
 
 # --- 基础设置 ---
 sys.path.append(os.path.abspath('.'))
@@ -21,10 +29,216 @@ if 'auth' in sys.modules:
 st.title("🧩 A+ 创意工场 (APlus Studio)")
 st.caption("亚马逊高级内容页面 (EBC) 专属设计工具流")
 
-tab_slice, tab_preview, tab_gif = st.tabs(["📏 智能切图 (Slicer)", "📱 无缝拼接预览", "🎬 动态 GIF 制作"])
+tab_template, tab_slice, tab_preview, tab_gif = st.tabs(["🎨 智能模板工作流", "📏 智能切图 (Slicer)", "📱 无缝拼接预览", "🎬 动态 GIF 制作"])
 
 # ==========================================
-# Tab 1: 智能切图 (把长图切成标准模块)
+# Tab 1: 智能模板工作流 (新功能)
+# ==========================================
+with tab_template:
+    st.subheader("🎨 AI 驱动的模板定制工作流")
+    st.info("💡 选择专业模板，AI 智能替换产品内容，自动适配美化")
+    
+    col_template, col_product, col_result = st.columns([1, 1, 1.2], gap="medium")
+    
+    with col_template:
+        st.markdown("### 1️⃣ 选择模板")
+        
+        # 加载真实模板库
+        try:
+            template_manager = TemplateManager()
+            available_templates = template_manager.get_available_templates()
+            
+            if not available_templates:
+                st.warning("暂无可用模板，请联系管理员添加模板")
+                template_options = {"示例模板": "demo"}
+            else:
+                template_options = {t["name"]: t["id"] for t in available_templates}
+            
+            selected_template_name = st.selectbox("选择适合的模板风格", list(template_options.keys()))
+            selected_template_id = template_options[selected_template_name]
+            
+            # 显示模板详情
+            if available_templates:
+                template_info = next((t for t in available_templates if t["id"] == selected_template_id), None)
+                if template_info:
+                    st.caption(f"📂 {template_info['category']} | {template_info['description']}")
+        
+        except Exception as e:
+            st.error(f"加载模板失败: {e}")
+            template_options = {"示例模板": "demo"}
+            selected_template_name = st.selectbox("选择适合的模板风格", list(template_options.keys()))
+            selected_template_id = template_options[selected_template_name]
+        
+        # 模板预览 (这里用占位图，实际项目中显示真实模板)
+        st.image("https://via.placeholder.com/300x400/4CAF50/white?text=Template+Preview", 
+                caption=f"模板预览: {selected_template}", use_container_width=True)
+        
+        # 模板自定义选项
+        st.markdown("**模板定制选项:**")
+        color_scheme = st.selectbox("配色方案", ["原始配色", "品牌色调", "暖色调", "冷色调", "黑白简约"])
+        layout_style = st.selectbox("布局风格", ["标准布局", "紧凑型", "宽松型", "创意型"])
+    
+    with col_product:
+        st.markdown("### 2️⃣ 产品信息")
+        
+        # 产品信息收集
+        product_name = st.text_input("产品名称", placeholder="例: 无线蓝牙耳机 Pro Max")
+        product_category = st.selectbox("产品类别", ["电子产品", "美妆护肤", "家居用品", "运动户外", "服装配饰", "母婴用品"])
+        
+        # 产品图片上传
+        product_images = st.file_uploader("上传产品图片 (1-5张)", type=["jpg", "png"], accept_multiple_files=True, key="product_imgs")
+        
+        # 产品特点
+        st.markdown("**产品卖点 (最多5个):**")
+        features = []
+        for i in range(5):
+            feature = st.text_input(f"卖点 {i+1}", key=f"feature_{i}", placeholder="例: 降噪技术 / 超长续航")
+            if feature.strip():
+                features.append(feature)
+        
+        # 品牌信息
+        brand_name = st.text_input("品牌名称", placeholder="例: TechPro")
+        brand_color = st.color_picker("品牌主色调", "#FF6B6B")
+        
+        # AI 生成选项
+        st.markdown("**AI 增强选项:**")
+        ai_enhance_text = st.checkbox("AI 优化文案", value=True)
+        ai_enhance_layout = st.checkbox("AI 智能排版", value=True)
+        ai_background_gen = st.checkbox("AI 生成背景元素", value=False)
+    
+    with col_result:
+        st.markdown("### 3️⃣ 生成结果")
+        
+        if st.button("🚀 生成 A+ 页面", type="primary", use_container_width=True):
+            if not product_name or not features:
+                st.error("请至少填写产品名称和一个卖点")
+            else:
+                with st.spinner("AI 正在生成定制化 A+ 页面..."):
+                    try:
+                        # 准备产品数据
+                        product_data = {
+                            "product_name": product_name,
+                            "product_category": product_category,
+                            "features": features,
+                            "brand_name": brand_name,
+                            "brand_color": brand_color,
+                            "product_images": product_images
+                        }
+                        
+                        # 准备定制选项
+                        customization_options = {
+                            "color_scheme": color_scheme,
+                            "layout_style": layout_style,
+                            "ai_enhance_text": ai_enhance_text,
+                            "ai_enhance_layout": ai_enhance_layout,
+                            "ai_background_gen": ai_background_gen
+                        }
+                        
+                        # 模拟处理时间
+                        import time
+                        time.sleep(2)
+                        
+                        st.success("✅ A+ 页面生成完成！")
+                        
+                        # 显示生成的产品信息摘要
+                        with st.expander("📋 生成摘要", expanded=True):
+                            col_summary1, col_summary2 = st.columns(2)
+                            with col_summary1:
+                                st.write(f"**产品名称:** {product_name}")
+                                st.write(f"**品牌:** {brand_name}")
+                                st.write(f"**类别:** {product_category}")
+                            with col_summary2:
+                                st.write(f"**模板:** {selected_template_name}")
+                                st.write(f"**配色:** {color_scheme}")
+                                st.write(f"**布局:** {layout_style}")
+                        
+                        # 显示生成结果 (目前使用占位图，实际项目中会调用真实的AI服务)
+                        st.markdown("### 🎨 生成的 A+ 模块")
+                        
+                        # 根据模板类型生成不同的模块
+                        if "tech" in selected_template_id.lower():
+                            result_sections = [
+                                ("产品展示模块", "https://via.placeholder.com/970x400/2196F3/white?text=Tech+Product+Header"),
+                                ("功能特性模块", "https://via.placeholder.com/970x300/4CAF50/white?text=Key+Features"), 
+                                ("产品图库模块", "https://via.placeholder.com/970x350/FF9800/white?text=Product+Gallery"),
+                                ("技术规格模块", "https://via.placeholder.com/970x250/9C27B0/white?text=Specifications")
+                            ]
+                        elif "beauty" in selected_template_id.lower():
+                            result_sections = [
+                                ("品牌故事模块", "https://via.placeholder.com/970x400/E91E63/white?text=Beauty+Brand+Story"),
+                                ("成分介绍模块", "https://via.placeholder.com/970x300/4CAF50/white?text=Natural+Ingredients"), 
+                                ("使用效果模块", "https://via.placeholder.com/970x350/FF5722/white?text=Amazing+Results"),
+                                ("使用方法模块", "https://via.placeholder.com/970x250/795548/white?text=How+to+Use")
+                            ]
+                        else:
+                            result_sections = [
+                                ("主要展示模块", "https://via.placeholder.com/970x400/FF6B6B/white?text=Main+Header"),
+                                ("产品特色模块", "https://via.placeholder.com/970x300/4CAF50/white?text=Product+Features"), 
+                                ("使用场景模块", "https://via.placeholder.com/970x350/2196F3/white?text=Usage+Scenarios"),
+                                ("品牌保证模块", "https://via.placeholder.com/970x250/FF9800/white?text=Brand+Promise")
+                            ]
+                        
+                        for i, (section_name, section_url) in enumerate(result_sections):
+                            st.image(section_url, caption=f"{section_name} (模块 {i+1})", use_container_width=True)
+                        
+                        # 下载选项
+                        col_download1, col_download2, col_download3 = st.columns(3)
+                        with col_download1:
+                            # 创建模拟的ZIP文件
+                            zip_buffer = io.BytesIO()
+                            with zipfile.ZipFile(zip_buffer, "w") as zf:
+                                for i, (section_name, _) in enumerate(result_sections):
+                                    zf.writestr(f"section_{i+1}_{section_name}.jpg", b"mock_image_data")
+                            
+                            st.download_button("📥 下载所有模块", 
+                                             data=zip_buffer.getvalue(), 
+                                             file_name=f"aplus_{product_name.replace(' ', '_')}.zip", 
+                                             mime="application/zip")
+                        
+                        with col_download2:
+                            # 生成HTML代码
+                            html_code = f"""
+                            <!-- A+ 页面代码 - {product_name} -->
+                            <div class="aplus-content">
+                                <h1>{product_name}</h1>
+                                <div class="brand">{brand_name}</div>
+                                <div class="features">
+                                    {''.join([f'<p>✓ {feature}</p>' for feature in features])}
+                                </div>
+                            </div>
+                            """
+                            st.download_button("📄 下载 HTML 代码", 
+                                             data=html_code, 
+                                             file_name=f"aplus_{product_name.replace(' ', '_')}.html", 
+                                             mime="text/html")
+                        
+                        with col_download3:
+                            # 生成配置文件
+                            config_data = {
+                                "product_info": product_data,
+                                "template_config": {
+                                    "template_id": selected_template_id,
+                                    "template_name": selected_template_name,
+                                    "customization": customization_options
+                                },
+                                "generated_at": str(time.time())
+                            }
+                            st.download_button("⚙️ 下载配置文件", 
+                                             data=json.dumps(config_data, indent=2, ensure_ascii=False), 
+                                             file_name=f"aplus_config_{product_name.replace(' ', '_')}.json", 
+                                             mime="application/json")
+                    
+                    except Exception as e:
+                        st.error(f"生成失败: {e}")
+                        st.info("💡 这是演示版本，完整功能需要配置AI服务和模板文件")
+        
+        # 实时预览选项
+        if st.checkbox("实时预览模式"):
+            st.info("💡 修改左侧参数时会实时更新预览")
+            # 这里可以添加实时预览逻辑
+
+# ==========================================
+# Tab 2: 智能切图 (把长图切成标准模块)
 # ==========================================
 with tab_slice:
     col1, col2 = st.columns([1, 1.5], gap="large")
