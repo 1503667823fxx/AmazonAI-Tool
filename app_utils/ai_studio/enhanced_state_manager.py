@@ -258,6 +258,25 @@ class EnhancedStateManager:
         except Exception as e:
             handle_ui_error(e, {"operation": "set_streaming_state", "streaming": is_streaming})
     
+    def set_generation_interrupted(self, interrupted: bool, reason: str = "") -> None:
+        """设置生成中断状态"""
+        state = self.get_state()
+        state.generation_interrupted = interrupted
+        state.interrupt_reason = reason
+        self.update_state(state)
+    
+    def is_generation_interrupted(self) -> bool:
+        """检查生成是否被中断"""
+        state = self.get_state()
+        return state.generation_interrupted
+    
+    def clear_interrupt_state(self) -> None:
+        """清除中断状态"""
+        state = self.get_state()
+        state.generation_interrupted = False
+        state.interrupt_reason = ""
+        self.update_state(state)
+    
     def get_messages_for_api(self) -> List[Dict[str, Any]]:
         """Convert messages to API format for backward compatibility"""
         state = self.get_state()
