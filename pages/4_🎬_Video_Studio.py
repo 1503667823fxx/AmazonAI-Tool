@@ -123,7 +123,7 @@ with tab_script:
         
         # 获取可用模板
         available_templates = template_manager.list_templates()
-        template_options = {f"{t.metadata.name} ({t.metadata.category.value})": t.template_id 
+        template_options = {f"{t.metadata.name} ({t.metadata.category.chinese_name})": t.template_id 
                           for t in available_templates}
         
         selected_template_name = st.selectbox(
@@ -145,8 +145,11 @@ with tab_script:
                     st.write(f"**时长:** {template.config.duration}秒")
                     st.write(f"**画幅:** {template.config.aspect_ratio.value}")
                     st.write(f"**质量:** {template.config.quality.value}")
-                    st.write(f"**风格:** {template.config.style.value}")
+                    st.write(f"**风格:** {template.config.style.chinese_name}")
                     st.write(f"**场景数:** {template.config.scene_count}")
+                    st.write(f"**分类:** {template.metadata.category.chinese_name}")
+                    if template.metadata.tags:
+                        st.write(f"**标签:** {', '.join(template.metadata.tags)}")
         
         st.divider()
         
@@ -331,13 +334,22 @@ with tab_assets:
                 "选择生成模型",
                 options=["luma", "runway", "pika"],
                 format_func=lambda x: {
-                    "luma": "Luma Dream Machine",
-                    "runway": "Runway ML",
-                    "pika": "Pika Labs"
+                    "luma": "Luma Dream Machine (梦境机器)",
+                    "runway": "Runway ML (跑道实验室)",
+                    "pika": "Pika Labs (皮卡实验室)"
                 }.get(x, x)
             )
             
-            video_quality = st.selectbox("视频质量", ["720p", "1080p", "4k"], index=1)
+            video_quality = st.selectbox(
+                "视频质量", 
+                ["720p", "1080p", "4k"], 
+                index=1,
+                format_func=lambda x: {
+                    "720p": "720p (高清)",
+                    "1080p": "1080p (全高清)",
+                    "4k": "4K (超高清)"
+                }.get(x, x)
+            )
             
         with col_gen_action:
             st.write("**生成控制**")
