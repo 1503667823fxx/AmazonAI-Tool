@@ -121,7 +121,7 @@ class UISettings:
 class ConversationState:
     """Complete conversation state management"""
     messages: List[BaseMessage] = field(default_factory=list)
-    current_model: str = "models/gemini-flash-latest"
+    current_model: str = "models/gemini-3-flash-preview"
     system_prompt: str = "You are a helpful AI assistant for Amazon E-commerce sellers."
     is_streaming: bool = False
     upload_queue: List[UploadedFile] = field(default_factory=list)
