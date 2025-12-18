@@ -95,6 +95,10 @@ class ChatContainer:
     def _render_user_message_content(self, message: UserMessage) -> None:
         """Render user message content including attachments"""
         
+        # 显示编辑标记
+        if hasattr(message, 'edited') and message.edited:
+            st.caption("✏️ 已编辑")
+        
         # Render reference images if present with chat-friendly sizing
         if message.ref_images:
             # Limit the number of columns and image size for better chat experience
@@ -252,23 +256,33 @@ class ChatContainer:
         """Render enhanced action buttons for a message"""
         
         # Create action columns with more options
-        if message.role == "assistant" and on_regenerate:
+        if message.role == "user":
+            # User messages: Edit, Delete, Copy
+            col1, col2, col3, col4 = st.columns([1, 1, 1, 5])
+        elif message.role == "assistant" and on_regenerate:
+            # AI messages: Delete, Copy, Regenerate
             col1, col2, col3, col4 = st.columns([1, 1, 1, 5])
         else:
             col1, col2, col3 = st.columns([1, 1, 6])
             col4 = None
         
+        # Edit button (only for user messages)
+        if message.role == "user":
+            with col1:
+                if st.button("✏️", key=f"edit_{message.id}", help="编辑消息"):
+                    self._show_edit_dialog(message, idx)
+        
         # Delete button
-        with col1:
-            if st.button("🗑️", key=f"delete_{message.id}", help="Delete message"):
+        with col1 if message.role != "user" else col2:
+            if st.button("🗑️", key=f"delete_{message.id}", help="删除消息"):
                 if on_delete:
                     on_delete(idx)
         
         # Copy button
-        with col2:
-            if st.button("📋", key=f"copy_{message.id}", help="Copy message content"):
+        with col2 if message.role != "user" else col3:
+            if st.button("📋", key=f"copy_{message.id}", help="复制内容"):
                 # Use JavaScript to copy to clipboard
-                escaped_content = message.content.replace('`', '\\`')
+                escaped_content = getattr(message, 'content', '').replace('`', '\\`')
                 copy_js = f"""
                 <script>
                 navigator.clipboard.writeText(`{escaped_content}`).then(function() {{
@@ -277,19 +291,103 @@ class ChatContainer:
                 </script>
                 """
                 st.markdown(copy_js, unsafe_allow_html=True)
-                st.success("Copied to clipboard!", icon="📋")
+                st.success("已复制到剪贴板!", icon="📋")
         
         # Regenerate button (only for AI messages)
-        if col4 and message.role == "assistant" and on_regenerate:
+        if message.role == "assistant" and on_regenerate:
             with col3:
-                if st.button("🔄", key=f"regen_{message.id}", help="Regenerate response"):
+                if st.button("🔄", key=f"regen_{message.id}", help="重新生成"):
                     on_regenerate(idx)
         
         # Additional actions for long messages
         if len(getattr(message, 'content', '')) > 500:
-            with (col3 if col4 is None else col4):
-                if st.button("📖", key=f"expand_{message.id}", help="View full message"):
+            with col4 if col4 else col3:
+                if st.button("📖", key=f"expand_{message.id}", help="查看完整消息"):
                     self._show_message_modal(message)
+    
+    def _show_edit_dialog(self, message: BaseMessage, idx: int) -> None:
+        """显示编辑消息的对话框"""
+        
+        @st.dialog("✏️ 编辑消息")
+        def edit_message_dialog():
+            st.write("编辑您的消息内容：")
+            
+            # 显示编辑标记（如果已编辑过）
+            if hasattr(message, 'edited') and message.edited:
+                st.info("📝 此消息已被编辑过")
+                if hasattr(message, 'original_content') and message.original_content:
+                    with st.expander("查看原始内容"):
+                        st.text(message.original_content)
+            
+            # 编辑框
+            new_content = st.text_area(
+                "消息内容",
+                value=getattr(message, 'content', ''),
+                height=120,
+                key=f"edit_content_{message.id}",
+                help="修改您的消息内容"
+            )
+            
+            # 操作按钮
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("❌ 取消", use_container_width=True):
+                    st.rerun()
+            
+            with col2:
+                if st.button("💾 仅保存", use_container_width=True):
+                    if new_content.strip() and new_content != getattr(message, 'content', ''):
+                        self._handle_message_edit(message, new_content, idx)
+                        st.success("消息已更新！")
+                        st.rerun()
+                    elif not new_content.strip():
+                        st.error("消息内容不能为空")
+                    else:
+                        st.info("内容未发生变化")
+            
+            with col3:
+                if st.button("💾🔄 保存并重新生成", type="primary", use_container_width=True):
+                    if new_content.strip() and new_content != getattr(message, 'content', ''):
+                        self._handle_message_edit_and_regenerate(message, new_content, idx)
+                        st.success("消息已更新，正在重新生成回复...")
+                        st.rerun()
+                    elif not new_content.strip():
+                        st.error("消息内容不能为空")
+                    else:
+                        st.info("内容未发生变化")
+        
+        edit_message_dialog()
+    
+    def _handle_message_edit(self, message: BaseMessage, new_content: str, idx: int) -> None:
+        """处理消息编辑（仅保存）"""
+        
+        if hasattr(message, 'id'):
+            success = state_manager.edit_user_message(message.id, new_content)
+            if not success:
+                st.error("编辑消息失败")
+    
+    def _handle_message_edit_and_regenerate(self, message: BaseMessage, new_content: str, idx: int) -> None:
+        """处理消息编辑并重新生成后续回复"""
+        
+        if not hasattr(message, 'id'):
+            st.error("无法编辑此消息")
+            return
+        
+        # 1. 编辑用户消息
+        success = state_manager.edit_user_message(message.id, new_content)
+        if not success:
+            st.error("编辑消息失败")
+            return
+        
+        # 2. 删除该消息之后的所有AI回复
+        deleted_count = state_manager.delete_messages_after_index(idx)
+        
+        if deleted_count > 0:
+            st.info(f"已删除 {deleted_count} 条后续消息")
+        
+        # 3. 触发重新生成
+        st.session_state.trigger_inference = True
     
     def _show_image_modal(self, image_data: bytes, title: str) -> None:
         """Show image in a modal dialog"""
