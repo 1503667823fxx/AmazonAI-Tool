@@ -41,7 +41,8 @@ class ModelConfig:
         """Validate model configuration"""
         if not self.name or not isinstance(self.name, str):
             return False
-        if not self.api_key or not isinstance(self.api_key, str):
+        # Only validate API key if the model is enabled
+        if self.enabled and (not self.api_key or not isinstance(self.api_key, str)):
             return False
         if self.timeout <= 0:
             return False
@@ -138,10 +139,18 @@ class VideoStudioConfig:
     def validate(self) -> tuple[bool, Optional[str]]:
         """Validate the complete configuration"""
         try:
-            # Validate models
+            # Validate models (only check enabled ones strictly)
+            enabled_models = []
             for name, model_config in self.models.items():
                 if not model_config.validate():
-                    return False, f"Invalid model configuration for '{name}'"
+                    return False, f"Invalid model configuration for '{name}'. Check API key if model is enabled."
+                if model_config.enabled:
+                    enabled_models.append(name)
+            
+            # Warn if no models are enabled but don't fail validation
+            if not enabled_models:
+                # This is a warning condition, not a failure
+                pass
             
             # Validate other components
             if not self.storage.validate():
@@ -225,16 +234,34 @@ class ConfigurationManager:
     
     def load_config(self) -> VideoStudioConfig:
         """Load configuration from file and environment variables"""
-        config = self._load_from_file()
-        config = self._override_with_env_vars(config)
-        
-        # Validate configuration
-        is_valid, error_message = config.validate()
-        if not is_valid:
-            raise ValueError(f"Invalid configuration: {error_message}")
-        
-        self.config = config
-        return config
+        try:
+            config = self._load_from_file()
+            config = self._override_with_env_vars(config)
+            
+            # Validate configuration
+            is_valid, error_message = config.validate()
+            if not is_valid:
+                raise ValueError(f"Invalid configuration: {error_message}")
+            
+            self.config = config
+            return config
+        except Exception as e:
+            # If configuration loading fails, create a minimal working config
+            print(f"Warning: Failed to load configuration ({str(e)}), using minimal default config")
+            config = self._create_minimal_config()
+            self.config = config
+            return config
+    
+    def _create_minimal_config(self) -> VideoStudioConfig:
+        """Create a minimal configuration that works without API keys"""
+        return VideoStudioConfig(
+            models={},  # No models enabled
+            storage=StorageConfig(),
+            workflow=WorkflowConfig(),
+            rendering=RenderingConfig(),
+            debug_mode=True,  # Enable debug mode for troubleshooting
+            log_level="INFO"
+        )
     
     def _load_from_file(self) -> VideoStudioConfig:
         """Load configuration from file"""
@@ -255,30 +282,35 @@ class ConfigurationManager:
     
     def _create_default_config(self) -> VideoStudioConfig:
         """Create default configuration"""
+        # Check for API keys and only enable models that have them
+        luma_api_key = os.getenv("LUMA_API_KEY", "")
+        runway_api_key = os.getenv("RUNWAY_API_KEY", "")
+        pika_api_key = os.getenv("PIKA_API_KEY", "")
+        
         default_models = {
             "luma": ModelConfig(
                 name="luma",
-                api_key=os.getenv("LUMA_API_KEY", ""),
+                api_key=luma_api_key,
                 base_url="https://api.lumalabs.ai/dream-machine/v1",
                 timeout=300,
                 max_retries=3,
-                enabled=True
+                enabled=bool(luma_api_key)  # Only enable if API key is available
             ),
             "runway": ModelConfig(
                 name="runway",
-                api_key=os.getenv("RUNWAY_API_KEY", ""),
+                api_key=runway_api_key,
                 base_url="https://api.runwayml.com/v1",
                 timeout=300,
                 max_retries=3,
-                enabled=True
+                enabled=bool(runway_api_key)  # Only enable if API key is available
             ),
             "pika": ModelConfig(
                 name="pika",
-                api_key=os.getenv("PIKA_API_KEY", ""),
+                api_key=pika_api_key,
                 base_url="https://api.pika.art/v1",
                 timeout=300,
                 max_retries=3,
-                enabled=True
+                enabled=bool(pika_api_key)  # Only enable if API key is available
             )
         }
         
@@ -292,12 +324,32 @@ class ConfigurationManager:
         )
     
     def _override_with_env_vars(self, config: VideoStudioConfig) -> VideoStudioConfig:
-        """Override configuration with environment variables"""
+        """Override configuration with environment variables and Streamlit secrets"""
+        # Try to import streamlit to check for secrets
+        try:
+            import streamlit as st
+            has_streamlit = True
+        except ImportError:
+            has_streamlit = False
+        
         # Override model API keys
         for model_name, model_config in config.models.items():
             env_key = f"{self._env_prefix}{model_name.upper()}_API_KEY"
-            if os.getenv(env_key):
-                model_config.api_key = os.getenv(env_key)
+            simple_key = f"{model_name.upper()}_API_KEY"
+            
+            # Check environment variables first
+            api_key = os.getenv(env_key) or os.getenv(simple_key)
+            
+            # Check Streamlit secrets if available
+            if not api_key and has_streamlit:
+                try:
+                    api_key = st.secrets.get(simple_key) or st.secrets.get(env_key)
+                except:
+                    pass
+            
+            if api_key:
+                model_config.api_key = api_key
+                model_config.enabled = True  # Enable model if API key is found
         
         # Override other settings
         if os.getenv(f"{self._env_prefix}DEBUG_MODE"):
