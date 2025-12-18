@@ -435,9 +435,9 @@ col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
 with col_stat1:
     st.markdown('<div class="stats-card"><h3>10</h3><p>稳定功能</p></div>', unsafe_allow_html=True)
 with col_stat2:
-    st.markdown('<div class="stats-card"><h3>0</h3><p>测试功能</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="stats-card"><h3>1</h3><p>测试功能</p></div>', unsafe_allow_html=True)
 with col_stat3:
-    st.markdown('<div class="stats-card"><h3>2</h3><p>开发中</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="stats-card"><h3>1</h3><p>开发中</p></div>', unsafe_allow_html=True)
 with col_stat4:
     st.markdown('<div class="stats-card"><h3>🟢</h3><p>系统状态</p></div>', unsafe_allow_html=True)
 
@@ -634,20 +634,21 @@ with col5:
     ''', unsafe_allow_html=True)
     st.page_link(t['path'], label="开始使用", use_container_width=True)
 
-# --- 8. 开发中功能 ---
-st.markdown('<div class="category-title">🚧 开发中功能</div>', unsafe_allow_html=True)
+# --- 8. 测试功能 ---
+st.markdown('<div class="category-title">🧪 测试功能</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns(2, gap="large")
 
 with col1:
     st.markdown(f'''
-    <div class="feature-card" style="opacity: 0.6;">
+    <div class="feature-card" style="border: 2px solid #f59e0b;">
         <h4>🎬 Video Studio</h4>
-        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">电商短视频生成 (开发中)</p>
-        <span class="status-badge badge-dev">开发中</span>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">AI视频生成工作台 (测试阶段)</p>
+        <span class="status-badge badge-beta">测试中</span>
     </div>
     ''', unsafe_allow_html=True)
-    st.button("敬请期待", disabled=True, use_container_width=True, key="video_btn")
+    st.page_link("pages/4_🎬_Video_Studio.py", label="🧪 体验测试版", icon="🎬", use_container_width=True)
+    st.caption("⚠️ 测试功能，需要配置API密钥")
 
 with col2:
     st.markdown(f'''
