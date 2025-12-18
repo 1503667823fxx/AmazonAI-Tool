@@ -12,8 +12,26 @@ from app_utils.video_studio.generation_engine import get_generation_engine
 from app_utils.video_studio.asset_manager import AssetManager
 from app_utils.video_studio.template_manager import TemplateManager
 from app_utils.video_studio.models import VideoConfig, TaskStatus, Scene, AspectRatio, VideoQuality
-from services.video_studio.script_engine import generate_video_script 
-from services.video_studio.visual_engine import batch_generate_videos
+# 尝试导入服务模块，如果失败则提供降级功能
+try:
+    from services.video_studio.script_engine import generate_video_script
+    SCRIPT_ENGINE_AVAILABLE = True
+except ImportError as e:
+    st.warning(f"脚本生成引擎不可用: {e}")
+    SCRIPT_ENGINE_AVAILABLE = False
+    
+    def generate_video_script(*args, **kwargs):
+        return {"error": "脚本生成引擎不可用，请检查依赖配置"}
+
+try:
+    from services.video_studio.visual_engine import batch_generate_videos
+    VISUAL_ENGINE_AVAILABLE = True
+except ImportError as e:
+    st.warning(f"视觉生成引擎不可用: {e}")
+    VISUAL_ENGINE_AVAILABLE = False
+    
+    def batch_generate_videos(*args, **kwargs):
+        return {"error": "视觉生成引擎不可用，请检查依赖配置"}
 
 # --- 1. 门禁检查 ---
 if not check_password():
