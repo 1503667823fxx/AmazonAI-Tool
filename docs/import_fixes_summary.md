@@ -20,6 +20,13 @@
 - 将 `scene_generator.py` 中的 `ErrorHandler` 改为 `VideoStudioErrorHandler`
 - 更新相关的类型注解和实例化
 
+### 4. OpenAI 依赖问题
+**问题**: `ModuleNotFoundError: No module named 'openai'`
+**修复**: 
+- 将 `services/video_studio/script_engine.py` 从 OpenAI API 改为 Google Gemini API
+- 使用 `gemini-3.0-flash-preview` 模型
+- 添加优雅的导入错误处理
+
 ## 修复详情
 
 ### 文件修改列表
@@ -54,6 +61,22 @@
    - self.error_handler = error_handler or ErrorHandler()
    + self.error_handler = error_handler or VideoStudioErrorHandler()
    ```
+
+5. **services/video_studio/script_engine.py**
+   ```diff
+   - from openai import OpenAI
+   + import google.generativeai as genai
+   
+   - client = OpenAI(api_key=api_key)
+   + genai.configure(api_key=api_key)
+   
+   - model="gpt-4-turbo-preview"
+   + model = genai.GenerativeModel('gemini-3.0-flash-preview')
+   ```
+
+6. **pages/4_🎬_Video_Studio.py**
+   - 添加了服务模块的优雅导入错误处理
+   - 提供降级功能当依赖不可用时
 
 ### 新增文件
 
@@ -90,6 +113,8 @@ python -m py_compile app_utils/video_studio/scene_generator.py
 - [x] asset_manager.py 语法错误
 - [x] scene_generator.py 导入错误
 - [x] 适配器导入错误处理
+- [x] OpenAI 依赖问题 (改用 Gemini API)
+- [x] 服务模块导入错误处理
 
 ### ✅ 新增功能
 - [x] 优雅的依赖缺失处理
