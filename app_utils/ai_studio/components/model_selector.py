@@ -14,18 +14,18 @@ class ModelSelector:
     
     def __init__(self):
         self.model_map = {
-            "⚡ Gemini Flash (快速)": "models/gemini-flash-latest",
+            "⚡ Gemini 3 Flash (快速)": "models/gemini-3-flash-preview",
             "🎨 Gemini 3 图像 (图像生成)": "models/gemini-3-pro-image-preview", 
             "🧠 Gemini 3 Pro (推理)": "models/gemini-3-pro-preview",
         }
         
         self.model_capabilities = {
-            "models/gemini-flash-latest": {
+            "models/gemini-3-flash-preview": {
                 "supports_vision": True,
                 "supports_image_gen": False,
                 "max_tokens": 8192,
                 "speed": "fast",
-                "description": "快速高效的通用对话模型"
+                "description": "最新的快速高效通用对话模型"
             },
             "models/gemini-3-pro-image-preview": {
                 "supports_vision": True,
@@ -342,7 +342,7 @@ class ModelSelector:
         
         # Quick tasks or if conversation is short
         if any(keyword in task_lower for keyword in ['quick', 'fast', 'simple']) or len(state.messages) < 3:
-            return "models/gemini-flash-latest"
+            return "models/gemini-3-flash-preview"
         
         # Default to current model if no clear preference
         return state.current_model
