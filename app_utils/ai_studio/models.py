@@ -85,6 +85,9 @@ class UserMessage(BaseMessage):
     content: str
     attachments: List[Attachment] = field(default_factory=list)
     ref_images: List[Image.Image] = field(default_factory=list)
+    edited: bool = False
+    edit_timestamp: Optional[datetime] = None
+    original_content: Optional[str] = None
     
     def __post_init__(self):
         super().__post_init__()
