@@ -117,9 +117,16 @@ class ChatContainer:
     def _render_ai_message_content(self, message: AIMessage) -> None:
         """Render AI message content with special handling for different types"""
         
+        # 显示中断标记
+        if message.message_type in ["text_interrupted", "image_interrupted"]:
+            st.caption("⏸️ 生成被暂停")
+        
         if message.message_type == "image_result" and message.hd_data:
             # Render image result with preview and download options
             self._render_image_result(message)
+        elif message.message_type == "image_interrupted":
+            # 图像生成被中断
+            st.warning("⏸️ 图像生成被用户暂停")
         else:
             # Render text content with streaming indicator if needed
             content = message.content
