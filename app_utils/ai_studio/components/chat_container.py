@@ -281,7 +281,7 @@ class ChatContainer:
         
         # Delete button
         with col1 if message.role != "user" else col2:
-            if st.button("🗑️", key=f"delete_{message.id}", help="删除消息"):
+            if st.button("�️", key=f"delete_{message.id}", help="删除消息"):
                 if on_delete:
                     on_delete(idx)
         
@@ -303,13 +303,13 @@ class ChatContainer:
         # Regenerate button (only for AI messages)
         if message.role == "assistant" and on_regenerate:
             with col3:
-                if st.button("🔄", key=f"regen_{message.id}", help="重新生成"):
+                if st.button("�", key=f"regen_{message.id}", help="重新生成"):
                     on_regenerate(idx)
         
         # Additional actions for long messages
         if len(getattr(message, 'content', '')) > 500:
             with col4 if col4 else col3:
-                if st.button("📖", key=f"expand_{message.id}", help="查看完整消息"):
+                if st.button("�", key=f"expand_{message.id}", help="查看完整消息"):
                     self._show_message_modal(message)
     
     def _show_edit_dialog(self, message: BaseMessage, idx: int) -> None:
@@ -855,6 +855,10 @@ class ChatContainer:
     def _render_user_message_responsive(self, message: UserMessage) -> None:
         """Render user message with responsive image handling"""
         
+        # 显示编辑标记
+        if hasattr(message, 'edited') and message.edited:
+            st.caption("✏️ 已编辑")
+        
         # Render reference images with responsive grid
         if message.ref_images:
             # Use responsive column count based on screen size
@@ -884,9 +888,16 @@ class ChatContainer:
     def _render_ai_message_responsive(self, message: AIMessage) -> None:
         """Render AI message with responsive handling"""
         
+        # 显示中断标记
+        if message.message_type in ["text_interrupted", "image_interrupted"]:
+            st.caption("⏸️ 生成被暂停")
+        
         if message.message_type == "image_result" and message.hd_data:
             # Render image result with responsive controls
             self._render_responsive_image_result(message)
+        elif message.message_type == "image_interrupted":
+            # 图像生成被中断
+            st.warning("⏸️ 图像生成被用户暂停")
         else:
             # Render text content with streaming indicator if needed
             content = message.content
@@ -908,23 +919,34 @@ class ChatContainer:
         """Render action buttons with responsive layout"""
         
         # Create responsive action layout
-        if message.role == "assistant" and on_regenerate:
+        if message.role == "user":
+            # User messages: Edit, Delete
+            col1, col2, col3 = st.columns([1, 1, 4])
+        elif message.role == "assistant" and on_regenerate:
+            # AI messages: Delete, Regenerate
             col1, col2, col3 = st.columns([1, 1, 4])
         else:
             col1, col2 = st.columns([1, 5])
             col3 = None
         
+        # Edit button (only for user messages)
+        if message.role == "user":
+            with col1:
+                if st.button("✏️", key=f"edit_{message.id}", help="编辑消息",
+                            use_container_width=True):
+                    self._show_edit_dialog(message, idx)
+        
         # Delete button
-        with col1:
-            if st.button("🗑️", key=f"delete_{message.id}", help="Delete message",
+        with col1 if message.role != "user" else col2:
+            if st.button("🗑️", key=f"delete_{message.id}", help="删除消息",
                         use_container_width=True):
                 if on_delete:
                     on_delete(idx)
         
         # Regenerate button (only for AI messages)
-        if col3 and message.role == "assistant" and on_regenerate:
-            with col2:
-                if st.button("🔄", key=f"regen_{message.id}", help="Regenerate response",
+        if message.role == "assistant" and on_regenerate:
+            with col2 if message.role != "user" else col3:
+                if st.button("🔄", key=f"regen_{message.id}", help="重新生成",
                             use_container_width=True):
                     on_regenerate(idx)
 
