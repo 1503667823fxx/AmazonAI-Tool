@@ -6,7 +6,14 @@
       "description": "适合科技产品的现代简约风格，突出产品的科技感和专业性",
       "sections": ["header", "features", "gallery", "specs"],
       "color_schemes": ["蓝色科技", "黑白简约", "渐变炫彩"],
-      "tags": ["科技", "现代", "简约", "专业"],
+      "tags": ["科技", "现代", "简约", "专业", "电子", "数码", "智能"],
+      "keywords": ["手机", "耳机", "电脑", "智能设备", "数码产品", "科技"],
+      "style_attributes": {
+        "color_tone": "冷色调",
+        "design_style": "简约现代",
+        "target_audience": "科技爱好者",
+        "mood": "专业理性"
+      },
       "replaceable_areas": {
         "product_image": {"x": 100, "y": 50, "width": 300, "height": 300},
         "title_text": {"x": 450, "y": 80, "width": 400, "height": 60},
@@ -22,7 +29,14 @@
       "description": "适合美妆护肤品的优雅风格，强调品质和效果",
       "sections": ["hero", "ingredients", "results", "usage"],
       "color_schemes": ["粉色浪漫", "金色奢华", "自然绿调"],
-      "tags": ["美妆", "优雅", "奢华", "女性"],
+      "tags": ["美妆", "优雅", "奢华", "女性", "护肤", "化妆品"],
+      "keywords": ["口红", "面膜", "精华", "粉底", "护肤品", "化妆品", "美容"],
+      "style_attributes": {
+        "color_tone": "暖色调",
+        "design_style": "优雅奢华",
+        "target_audience": "女性消费者",
+        "mood": "浪漫优雅"
+      },
       "replaceable_areas": {
         "product_image": {"x": 50, "y": 100, "width": 250, "height": 350},
         "brand_logo": {"x": 350, "y": 50, "width": 200, "height": 80},
@@ -63,11 +77,82 @@
       "description": "温柔可爱的母婴风格，强调安全和关爱",
       "sections": ["safety", "comfort", "growth", "care"],
       "color_schemes": ["粉蓝搭配", "柔和彩虹", "纯净白色"],
-      "tags": ["母婴", "可爱", "安全", "温柔"],
+      "tags": ["母婴", "可爱", "安全", "温柔", "儿童", "宝宝"],
+      "keywords": ["奶瓶", "尿布", "玩具", "婴儿车", "儿童服装", "母婴用品"],
+      "style_attributes": {
+        "color_tone": "柔和色调",
+        "design_style": "可爱温馨",
+        "target_audience": "年轻父母",
+        "mood": "温馨关爱"
+      },
       "replaceable_areas": {
         "product_image": {"x": 150, "y": 120, "width": 280, "height": 280},
         "baby_scene": {"x": 450, "y": 80, "width": 200, "height": 320},
         "safety_icon": {"x": 50, "y": 50, "width": 80, "height": 80}
+      }
+    },
+    "halloween_spooky": {
+      "name": "万圣节恐怖风",
+      "category": "节日主题",
+      "description": "万圣节主题模板，适合万圣节服装、装饰品等",
+      "sections": ["spooky_hero", "costume_gallery", "party_scenes", "accessories"],
+      "color_schemes": ["橙黑经典", "紫色神秘", "血红恐怖"],
+      "tags": ["万圣节", "恐怖", "派对", "服装", "装饰", "节日"],
+      "keywords": ["南瓜", "鬼魂", "巫师", "吸血鬼", "万圣节服装", "面具", "糖果", "恐怖", "派对"],
+      "style_attributes": {
+        "color_tone": "暗色调",
+        "design_style": "恐怖神秘",
+        "target_audience": "节日爱好者",
+        "mood": "刺激恐怖"
+      },
+      "season": "秋季",
+      "holiday": "万圣节",
+      "replaceable_areas": {
+        "product_image": {"x": 200, "y": 100, "width": 300, "height": 300},
+        "costume_scene": {"x": 50, "y": 50, "width": 400, "height": 200},
+        "title_text": {"x": 520, "y": 120, "width": 400, "height": 60}
+      }
+    },
+    "christmas_festive": {
+      "name": "圣诞节庆风",
+      "category": "节日主题",
+      "description": "圣诞节主题模板，适合圣诞装饰、礼品等",
+      "sections": ["festive_hero", "gift_gallery", "family_scenes", "decorations"],
+      "color_schemes": ["红绿经典", "金色奢华", "雪白纯净"],
+      "tags": ["圣诞节", "节日", "礼品", "装饰", "家庭", "庆祝"],
+      "keywords": ["圣诞树", "礼物", "圣诞老人", "雪花", "圣诞装饰", "节日礼品", "家庭聚会"],
+      "style_attributes": {
+        "color_tone": "暖色调",
+        "design_style": "节日庆祝",
+        "target_audience": "家庭用户",
+        "mood": "温馨欢乐"
+      },
+      "season": "冬季",
+      "holiday": "圣诞节",
+      "replaceable_areas": {
+        "product_image": {"x": 100, "y": 80, "width": 350, "height": 300},
+        "family_scene": {"x": 500, "y": 50, "width": 400, "height": 250},
+        "title_text": {"x": 100, "y": 400, "width": 500, "height": 50}
+      }
+    },
+    "vintage_retro": {
+      "name": "复古怀旧风",
+      "category": "风格主题",
+      "description": "复古怀旧风格，适合vintage产品、手工艺品等",
+      "sections": ["retro_hero", "vintage_gallery", "craft_details", "story"],
+      "color_schemes": ["棕色怀旧", "米色复古", "深绿经典"],
+      "tags": ["复古", "怀旧", "vintage", "手工", "经典", "传统"],
+      "keywords": ["复古", "怀旧", "vintage", "手工制作", "传统工艺", "经典设计", "古董"],
+      "style_attributes": {
+        "color_tone": "复古色调",
+        "design_style": "怀旧复古",
+        "target_audience": "复古爱好者",
+        "mood": "怀旧温暖"
+      },
+      "replaceable_areas": {
+        "product_image": {"x": 150, "y": 100, "width": 300, "height": 280},
+        "craft_detail": {"x": 500, "y": 80, "width": 350, "height": 200},
+        "story_text": {"x": 100, "y": 400, "width": 600, "height": 100}
       }
     }
   },
