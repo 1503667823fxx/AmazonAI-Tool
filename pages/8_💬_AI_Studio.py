@@ -139,7 +139,7 @@ def render_fallback_interface():
     
     # Basic model selection
     model_options = {
-        "Gemini Flash": "models/gemini-flash-latest",
+        "Gemini Flash": "models/gemini-3-flash-preview",
         "Gemini Pro": "models/gemini-3-pro-preview"
     }
     
