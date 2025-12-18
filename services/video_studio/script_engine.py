@@ -1,6 +1,6 @@
 import json
 import re
-from openai import OpenAI
+import google.generativeai as genai
 import streamlit as st
 
 def _clean_json_string(json_str):
@@ -33,7 +33,7 @@ def generate_video_script(api_key, product_info, video_duration=15, style="Amazo
     核心功能：根据商品信息生成分镜脚本。
     
     Args:
-        api_key (str): 从 st.secrets 获取的密钥
+        api_key (str): 从 st.secrets 获取的 Google API 密钥
         product_info (str): 商品标题、卖点或 ASIN 信息
         video_duration (int): 目标时长（秒）
         style (str): 视频风格
@@ -42,7 +42,8 @@ def generate_video_script(api_key, product_info, video_duration=15, style="Amazo
         dict: 包含场景列表的结构化数据
     """
     
-    client = OpenAI(api_key=api_key) # 初始化客户端，不硬编码 Key
+    # 配置 Gemini API
+    genai.configure(api_key=api_key)
 
     # 亚马逊视频专用 Prompt：强调视觉冲击和卖点
     system_prompt = f"""
@@ -83,16 +84,22 @@ def generate_video_script(api_key, product_info, video_duration=15, style="Amazo
     """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4-turbo-preview", # 或 gpt-3.5-turbo，建议用 GPT-4 保证 JSON 格式稳定
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.7
+        # 使用 Gemini 3.0 Flash Preview 模型
+        model = genai.GenerativeModel('gemini-3.0-flash-preview')
+        
+        # 组合完整的提示词
+        full_prompt = f"{system_prompt}\n\n{user_prompt}"
+        
+        # 生成内容
+        response = model.generate_content(
+            full_prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.7,
+                max_output_tokens=2048,
+            )
         )
 
-        raw_content = response.choices[0].message.content
+        raw_content = response.text
         script_data = _clean_json_string(raw_content)
         return script_data
 
