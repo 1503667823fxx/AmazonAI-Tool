@@ -39,6 +39,12 @@ class EnhancedStateManager:
             else:
                 st.session_state[self.state_key] = ConversationState()
         
+        # 自动迁移旧模型配置
+        state = st.session_state[self.state_key]
+        if state.current_model == "models/gemini-flash-latest":
+            state.current_model = "models/gemini-3-flash-preview"
+            st.session_state[self.state_key] = state
+        
         # Initialize vision service if not present
         if "studio_vision_svc" not in st.session_state:
             if VISION_SERVICE_AVAILABLE and StudioVisionService:
