@@ -16,6 +16,9 @@ proglog             # 用于捕获 Moviepy 的进度条
 hypothesis          # 用于属性测试
 pytest              # 测试框架
 
+# Video Studio 依赖
+aiohttp             # 异步HTTP客户端，用于模型适配器API调用
+psutil              # 系统性能监控
 
 
 
