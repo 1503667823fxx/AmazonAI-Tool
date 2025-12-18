@@ -65,7 +65,19 @@ if 'selected_template' not in st.session_state:
     st.session_state.selected_template = None
 
 # 获取后端系统实例
-asset_manager, template_manager = initialize_backend_systems()
+try:
+    asset_manager, template_manager = initialize_backend_systems()
+except Exception as e:
+    st.error(f"❌ Video Studio 初始化失败: {str(e)}")
+    st.info("💡 这通常是由于缺少 API 密钥配置导致的。请在 Streamlit Secrets 中配置以下密钥：")
+    st.code("""
+# 在 Streamlit Cloud 的 Secrets 中添加：
+LUMA_API_KEY = "your_luma_api_key"
+RUNWAY_API_KEY = "your_runway_api_key"  
+PIKA_API_KEY = "your_pika_api_key"
+    """)
+    st.info("如果暂时不需要视频生成功能，可以忽略此错误，其他功能仍可正常使用。")
+    st.stop()
 
 # --- 3. 侧边栏配置 ---
 config = ui_components.render_sidebar()
