@@ -123,7 +123,11 @@ with tab_script:
         
         # 获取可用模板
         available_templates = template_manager.list_templates()
-        template_options = {f"{t.metadata.name} ({t.metadata.category.chinese_name})": t.template_id 
+        
+        # 使用本地化工具
+        from app_utils.video_studio.localization import format_template_display_name
+        
+        template_options = {format_template_display_name(t): t.template_id 
                           for t in available_templates}
         
         selected_template_name = st.selectbox(
@@ -141,13 +145,15 @@ with tab_script:
                 template = st.session_state.selected_template
                 st.info(f"**{template.metadata.name}**\n\n{template.metadata.description}")
                 
+                from app_utils.video_studio.localization import get_category_chinese_name, get_style_chinese_name
+                
                 with st.expander("模板详情"):
                     st.write(f"**时长:** {template.config.duration}秒")
                     st.write(f"**画幅:** {template.config.aspect_ratio.value}")
                     st.write(f"**质量:** {template.config.quality.value}")
-                    st.write(f"**风格:** {template.config.style.chinese_name}")
+                    st.write(f"**风格:** {get_style_chinese_name(template.config.style)}")
                     st.write(f"**场景数:** {template.config.scene_count}")
-                    st.write(f"**分类:** {template.metadata.category.chinese_name}")
+                    st.write(f"**分类:** {get_category_chinese_name(template.metadata.category)}")
                     if template.metadata.tags:
                         st.write(f"**标签:** {', '.join(template.metadata.tags)}")
         
@@ -330,25 +336,21 @@ with tab_assets:
                 st.stop()
             
             # 生成配置
+            from app_utils.video_studio.localization import get_model_chinese_name
+            
             generation_model = st.selectbox(
                 "选择生成模型",
                 options=["luma", "runway", "pika"],
-                format_func=lambda x: {
-                    "luma": "Luma Dream Machine (梦境机器)",
-                    "runway": "Runway ML (跑道实验室)",
-                    "pika": "Pika Labs (皮卡实验室)"
-                }.get(x, x)
+                format_func=get_model_chinese_name
             )
+            
+            from app_utils.video_studio.localization import get_quality_chinese_name
             
             video_quality = st.selectbox(
                 "视频质量", 
                 ["720p", "1080p", "4k"], 
                 index=1,
-                format_func=lambda x: {
-                    "720p": "720p (高清)",
-                    "1080p": "1080p (全高清)",
-                    "4k": "4K (超高清)"
-                }.get(x, x)
+                format_func=get_quality_chinese_name
             )
             
         with col_gen_action:
