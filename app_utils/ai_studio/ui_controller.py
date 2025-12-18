@@ -250,6 +250,19 @@ class UIController:
         """Enhanced image generation with better progress indicators and error handling"""
         
         with st.chat_message("assistant"):
+            # 创建控制区域
+            control_container = st.container()
+            
+            # 清除任何之前的中断状态
+            state_manager.clear_interrupt_state()
+            
+            with control_container:
+                col1, col2 = st.columns([1, 5])
+                with col1:
+                    if st.button("⏸️ 暂停", key="pause_image_generation", help="暂停图像生成", type="secondary"):
+                        state_manager.set_generation_interrupted(True, "用户手动暂停图像生成")
+                        st.rerun()
+            
             # Create progress container
             progress_container = st.container()
             status_container = st.container()
@@ -294,10 +307,19 @@ class UIController:
             progress_text = progress_container.empty()
             
             def update_progress(message: str, value: float):
-                """Update progress indicators"""
+                """Update progress indicators with interrupt check"""
+                # 检查中断状态
+                if state_manager.is_generation_interrupted():
+                    interrupt_reason = state_manager.get_state().interrupt_reason
+                    progress_bar.progress(0)
+                    progress_text.text("生成已暂停")
+                    status.update(label=f"⏸️ 生成已暂停：{interrupt_reason}", state="error")
+                    return False  # 返回False表示应该中断
+                
                 progress_bar.progress(value)
                 progress_text.text(message)
                 status.update(label=f"🎨 {message}", state="running")
+                return True  # 返回True表示继续
             
             try:
                 # Step 1: Resolve reference images (support multiple images)
@@ -318,6 +340,14 @@ class UIController:
                 
                 # Step 2: Generate image with enhanced progress tracking
                 update_progress("Starting image generation...", 0.2)
+                
+                # 检查中断状态
+                if state_manager.is_generation_interrupted():
+                    interrupt_reason = state_manager.get_state().interrupt_reason
+                    with status:
+                        st.warning(f"⏸️ 图像生成已暂停：{interrupt_reason}")
+                    state_manager.clear_interrupt_state()
+                    return
                 
                 # Get aspect ratio setting from model selector
                 aspect_ratio_prompt = model_selector.get_current_aspect_ratio_prompt()
@@ -455,26 +485,41 @@ class UIController:
                     st.write(f"• Auto-retry: ✅ with exponential backoff")
     
     def _handle_text_generation(self, user_message, model_name: str) -> None:
-        """Handle text generation inference"""
+        """Handle text generation inference with interrupt support"""
         
         with st.chat_message("assistant"):
-            placeholder = st.empty()
-            full_response = ""
+            # 创建控制区域和内容区域
+            control_container = st.container()
+            content_container = st.container()
             
-            try:
-                # Import chat service
-                from services.ai_studio.chat_service import StudioChatService
+            # 清除任何之前的中断状态
+            state_manager.clear_interrupt_state()
+            
+            with control_container:
+                col1, col2 = st.columns([1, 5])
+                with col1:
+                    if st.button("⏸️ 暂停", key="pause_generation", help="暂停当前生成", type="secondary"):
+                        state_manager.set_generation_interrupted(True, "用户手动暂停")
+                        st.rerun()
+            
+            with content_container:
+                placeholder = st.empty()
+                full_response = ""
                 
-                # Get API key
-                api_key = st.secrets.get("GOOGLE_API_KEY")
-                
-                # Create chat service
-                state = state_manager.get_state()
-                chat_svc = StudioChatService(
-                    api_key=api_key,
-                    model_name=model_name,
-                    system_instruction=state.system_prompt
-                )
+                try:
+                    # Import chat service
+                    from services.ai_studio.chat_service import StudioChatService
+                    
+                    # Get API key
+                    api_key = st.secrets.get("GOOGLE_API_KEY")
+                    
+                    # Create chat service
+                    state = state_manager.get_state()
+                    chat_svc = StudioChatService(
+                        api_key=api_key,
+                        model_name=model_name,
+                        system_instruction=state.system_prompt
+                    )
                 
                 # Get conversation history for API
                 api_messages = state_manager.get_messages_for_api()
@@ -493,7 +538,15 @@ class UIController:
                 # Send message and stream response
                 response = chat_session.send_message(current_payload, stream=True)
                 
+                interrupted = False
                 for chunk in response:
+                    # 检查中断状态
+                    if state_manager.is_generation_interrupted():
+                        interrupted = True
+                        interrupt_reason = state_manager.get_state().interrupt_reason
+                        placeholder.warning(f"⏸️ 生成已暂停：{interrupt_reason}")
+                        break
+                    
                     # Check if chunk has text content
                     if hasattr(chunk, 'text') and chunk.text:
                         full_response += chunk.text
@@ -505,21 +558,49 @@ class UIController:
                                 full_response += part.text
                                 placeholder.markdown(full_response + "▌")
                 
-                # Finalize response
-                if full_response.strip():
+                # 处理生成结果
+                if interrupted:
+                    # 生成被中断
+                    if full_response.strip():
+                        # 保存部分回复
+                        final_content = f"{full_response}\n\n*[生成被用户暂停]*"
+                        placeholder.markdown(final_content)
+                        
+                        # 添加部分回复到对话历史
+                        state_manager.add_ai_message(
+                            content=final_content,
+                            model_used=model_name,
+                            message_type="text_interrupted"
+                        )
+                    else:
+                        placeholder.warning("⏸️ 生成在开始前被暂停")
+                    
+                    # 清除中断状态
+                    state_manager.clear_interrupt_state()
+                    
+                elif full_response.strip():
+                    # 正常完成
                     placeholder.markdown(full_response)
+                    
+                    # Add AI message to conversation
+                    state_manager.add_ai_message(
+                        content=full_response,
+                        model_used=model_name,
+                        message_type="text"
+                    )
                 else:
                     # Handle empty response
                     full_response = "抱歉，我无法生成回复。请重试。"
                     placeholder.markdown(full_response)
+                    
+                    # Add AI message to conversation
+                    state_manager.add_ai_message(
+                        content=full_response,
+                        model_used=model_name,
+                        message_type="text"
+                    )
                 
-                # Add AI message to conversation
-                state_manager.add_ai_message(
-                    content=full_response,
-                    model_used=model_name,
-                    message_type="text"
-                )
-                
+                # 无论是否中断，都需要rerun来更新UI
                 st.rerun()
                 
             except Exception as e:
