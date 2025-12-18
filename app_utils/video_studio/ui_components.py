@@ -419,9 +419,8 @@ def render_template_selector(template_manager):
             if x == "all":
                 return "全部模板"
             try:
-                from app_utils.video_studio.template_manager import TemplateCategory
-                category_enum = TemplateCategory(x)
-                return category_enum.chinese_name
+                from app_utils.video_studio.localization import get_category_chinese_name
+                return get_category_chinese_name(x)
             except:
                 return x.replace("_", " ").title()
         
