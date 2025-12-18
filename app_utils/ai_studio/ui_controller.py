@@ -520,91 +520,91 @@ class UIController:
                         model_name=model_name,
                         system_instruction=state.system_prompt
                     )
-                
-                # Get conversation history for API
-                api_messages = state_manager.get_messages_for_api()
-                history_msgs = api_messages[:-1]  # All except last message
-                
-                # Create chat session
-                chat_session = chat_svc.create_chat_session(history_msgs)
-                
-                # Prepare current message payload
-                current_payload = []
-                if hasattr(user_message, 'ref_images') and user_message.ref_images:
-                    current_payload.extend(user_message.ref_images)
-                if user_message.content:
-                    current_payload.append(user_message.content)
-                
-                # Send message and stream response
-                response = chat_session.send_message(current_payload, stream=True)
-                
-                interrupted = False
-                for chunk in response:
-                    # 检查中断状态
-                    if state_manager.is_generation_interrupted():
-                        interrupted = True
-                        interrupt_reason = state_manager.get_state().interrupt_reason
-                        placeholder.warning(f"⏸️ 生成已暂停：{interrupt_reason}")
-                        break
                     
-                    # Check if chunk has text content
-                    if hasattr(chunk, 'text') and chunk.text:
-                        full_response += chunk.text
-                        placeholder.markdown(full_response + "▌")
-                    elif hasattr(chunk, 'parts') and chunk.parts:
-                        # Handle parts-based response
-                        for part in chunk.parts:
-                            if hasattr(part, 'text') and part.text:
-                                full_response += part.text
-                                placeholder.markdown(full_response + "▌")
-                
-                # 处理生成结果
-                if interrupted:
-                    # 生成被中断
-                    if full_response.strip():
-                        # 保存部分回复
-                        final_content = f"{full_response}\n\n*[生成被用户暂停]*"
-                        placeholder.markdown(final_content)
+                    # Get conversation history for API
+                    api_messages = state_manager.get_messages_for_api()
+                    history_msgs = api_messages[:-1]  # All except last message
+                    
+                    # Create chat session
+                    chat_session = chat_svc.create_chat_session(history_msgs)
+                    
+                    # Prepare current message payload
+                    current_payload = []
+                    if hasattr(user_message, 'ref_images') and user_message.ref_images:
+                        current_payload.extend(user_message.ref_images)
+                    if user_message.content:
+                        current_payload.append(user_message.content)
+                    
+                    # Send message and stream response
+                    response = chat_session.send_message(current_payload, stream=True)
+                    
+                    interrupted = False
+                    for chunk in response:
+                        # 检查中断状态
+                        if state_manager.is_generation_interrupted():
+                            interrupted = True
+                            interrupt_reason = state_manager.get_state().interrupt_reason
+                            placeholder.warning(f"⏸️ 生成已暂停：{interrupt_reason}")
+                            break
                         
-                        # 添加部分回复到对话历史
+                        # Check if chunk has text content
+                        if hasattr(chunk, 'text') and chunk.text:
+                            full_response += chunk.text
+                            placeholder.markdown(full_response + "▌")
+                        elif hasattr(chunk, 'parts') and chunk.parts:
+                            # Handle parts-based response
+                            for part in chunk.parts:
+                                if hasattr(part, 'text') and part.text:
+                                    full_response += part.text
+                                    placeholder.markdown(full_response + "▌")
+                    
+                    # 处理生成结果
+                    if interrupted:
+                        # 生成被中断
+                        if full_response.strip():
+                            # 保存部分回复
+                            final_content = f"{full_response}\n\n*[生成被用户暂停]*"
+                            placeholder.markdown(final_content)
+                            
+                            # 添加部分回复到对话历史
+                            state_manager.add_ai_message(
+                                content=final_content,
+                                model_used=model_name,
+                                message_type="text_interrupted"
+                            )
+                        else:
+                            placeholder.warning("⏸️ 生成在开始前被暂停")
+                        
+                        # 清除中断状态
+                        state_manager.clear_interrupt_state()
+                        
+                    elif full_response.strip():
+                        # 正常完成
+                        placeholder.markdown(full_response)
+                        
+                        # Add AI message to conversation
                         state_manager.add_ai_message(
-                            content=final_content,
+                            content=full_response,
                             model_used=model_name,
-                            message_type="text_interrupted"
+                            message_type="text"
                         )
                     else:
-                        placeholder.warning("⏸️ 生成在开始前被暂停")
+                        # Handle empty response
+                        full_response = "抱歉，我无法生成回复。请重试。"
+                        placeholder.markdown(full_response)
+                        
+                        # Add AI message to conversation
+                        state_manager.add_ai_message(
+                            content=full_response,
+                            model_used=model_name,
+                            message_type="text"
+                        )
                     
-                    # 清除中断状态
-                    state_manager.clear_interrupt_state()
+                    # 无论是否中断，都需要rerun来更新UI
+                    st.rerun()
                     
-                elif full_response.strip():
-                    # 正常完成
-                    placeholder.markdown(full_response)
-                    
-                    # Add AI message to conversation
-                    state_manager.add_ai_message(
-                        content=full_response,
-                        model_used=model_name,
-                        message_type="text"
-                    )
-                else:
-                    # Handle empty response
-                    full_response = "抱歉，我无法生成回复。请重试。"
-                    placeholder.markdown(full_response)
-                    
-                    # Add AI message to conversation
-                    state_manager.add_ai_message(
-                        content=full_response,
-                        model_used=model_name,
-                        message_type="text"
-                    )
-                
-                # 无论是否中断，都需要rerun来更新UI
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"Chat Error: {e}")
+                except Exception as e:
+                    st.error(f"Chat Error: {e}")
     
     def _handle_message_delete(self, message_index: int) -> None:
         """Handle message deletion with confirmation"""
