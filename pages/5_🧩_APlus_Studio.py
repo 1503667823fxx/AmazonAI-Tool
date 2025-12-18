@@ -9,9 +9,10 @@ import json
 # 导入模板管理服务
 sys.path.append(os.path.abspath('.'))
 try:
-    from services.aplus_template.template_manager import TemplateManager, AITemplateProcessor, create_aplus_sections
+    from app_utils.aplus_studio.template_manager import TemplateManager, AITemplateProcessor, create_aplus_sections
+    from app_utils.aplus_studio.search_engine import TemplateSearchEngine, SmartTemplateRecommender
 except ImportError:
-    st.error("模板服务未正确安装，请检查 services/aplus_template/ 目录")
+    st.error("模板服务未正确安装，请检查 app_utils/aplus_studio/ 目录")
 
 # --- 基础设置 ---
 sys.path.append(os.path.abspath('.'))
@@ -27,51 +28,143 @@ if 'auth' in sys.modules:
         st.stop()
 
 st.title("🧩 A+ 创意工场 (APlus Studio)")
-st.caption("亚马逊高级内容页面 (EBC) 专属设计工具流")
-
-tab_template, tab_slice, tab_preview, tab_gif = st.tabs(["🎨 智能模板工作流", "📏 智能切图 (Slicer)", "📱 无缝拼接预览", "🎬 动态 GIF 制作"])
+st.caption("AI 驱动的亚马逊 A+ 页面智能生成工具")
 
 # ==========================================
-# Tab 1: 智能模板工作流 (新功能)
+# 智能模板工作流
 # ==========================================
-with tab_template:
     st.subheader("🎨 AI 驱动的模板定制工作流")
     st.info("💡 选择专业模板，AI 智能替换产品内容，自动适配美化")
     
     col_template, col_product, col_result = st.columns([1, 1, 1.2], gap="medium")
     
     with col_template:
-        st.markdown("### 1️⃣ 选择模板")
+        st.markdown("### 1️⃣ 智能模板选择")
         
-        # 加载真实模板库
+        # 初始化搜索引擎
         try:
-            template_manager = TemplateManager()
-            available_templates = template_manager.get_available_templates()
+            search_engine = TemplateSearchEngine()
+            recommender = SmartTemplateRecommender(search_engine)
             
-            if not available_templates:
-                st.warning("暂无可用模板，请联系管理员添加模板")
-                template_options = {"示例模板": "demo"}
+            # 搜索功能
+            st.markdown("**🔍 搜索模板**")
+            search_query = st.text_input("输入关键词搜索", placeholder="例: 南瓜服、万圣节、科技产品、美妆...")
+            
+            # 搜索建议
+            if search_query and len(search_query) >= 2:
+                suggestions = search_engine.get_search_suggestions(search_query)
+                if suggestions:
+                    st.caption(f"💡 搜索建议: {' | '.join(suggestions[:4])}")
+            
+            # 快速筛选
+            col_filter1, col_filter2 = st.columns(2)
+            with col_filter1:
+                category_filter = st.selectbox("按类别筛选", 
+                    ["全部", "电子产品", "美妆护肤", "家居用品", "运动户外", "母婴用品", "节日主题", "风格主题"])
+            with col_filter2:
+                holiday_filter = st.selectbox("按节日筛选", 
+                    ["全部", "万圣节", "圣诞节", "春节", "情人节", "母亲节"])
+            
+            # 执行搜索
+            if search_query:
+                search_results = search_engine.search_templates(search_query, limit=8)
             else:
-                template_options = {t["name"]: t["id"] for t in available_templates}
+                search_results = search_engine._get_all_templates()
             
-            selected_template_name = st.selectbox("选择适合的模板风格", list(template_options.keys()))
-            selected_template_id = template_options[selected_template_name]
+            # 应用筛选
+            if category_filter != "全部":
+                search_results = [r for r in search_results if r["config"].get("category") == category_filter]
+            if holiday_filter != "全部":
+                search_results = [r for r in search_results if r["config"].get("holiday") == holiday_filter]
             
-            # 显示模板详情
-            if available_templates:
-                template_info = next((t for t in available_templates if t["id"] == selected_template_id), None)
-                if template_info:
-                    st.caption(f"📂 {template_info['category']} | {template_info['description']}")
+            # 显示搜索结果
+            if search_results:
+                st.markdown("**📋 搜索结果**")
+                
+                # 创建模板选择器
+                template_options = {}
+                for result in search_results[:6]:  # 最多显示6个结果
+                    template_id = result["template_id"]
+                    template_config = result["config"]
+                    score = result.get("score", 0)
+                    match_reasons = result.get("match_reasons", [])
+                    
+                    # 构建显示名称
+                    display_name = template_config["name"]
+                    if score > 5:  # 高相关性
+                        display_name = f"⭐ {display_name}"
+                    if match_reasons:
+                        display_name += f" ({match_reasons[0]})"
+                    
+                    template_options[display_name] = template_id
+                
+                selected_template_name = st.selectbox("选择模板", list(template_options.keys()))
+                selected_template_id = template_options[selected_template_name]
+                
+                # 显示选中模板的详细信息
+                selected_result = next((r for r in search_results if r["template_id"] == selected_template_id), None)
+                if selected_result:
+                    template_config = selected_result["config"]
+                    
+                    # 模板信息
+                    st.caption(f"📂 {template_config.get('category', '')} | {template_config.get('description', '')}")
+                    
+                    # 匹配原因
+                    if "match_reasons" in selected_result and selected_result["match_reasons"]:
+                        st.success(f"✨ 匹配原因: {' | '.join(selected_result['match_reasons'])}")
+                    
+                    # 标签展示
+                    if template_config.get("tags"):
+                        tags_text = " ".join([f"#{tag}" for tag in template_config["tags"][:4]])
+                        st.caption(f"🏷️ {tags_text}")
+            
+            else:
+                st.warning("未找到匹配的模板，请尝试其他关键词")
+                # 提供默认选项
+                template_options = {"示例模板": "demo"}
+                selected_template_name = st.selectbox("选择模板", list(template_options.keys()))
+                selected_template_id = template_options[selected_template_name]
         
         except Exception as e:
-            st.error(f"加载模板失败: {e}")
+            st.error(f"搜索功能加载失败: {e}")
+            # 降级到基础模板选择
             template_options = {"示例模板": "demo"}
-            selected_template_name = st.selectbox("选择适合的模板风格", list(template_options.keys()))
+            selected_template_name = st.selectbox("选择模板", list(template_options.keys()))
             selected_template_id = template_options[selected_template_name]
         
-        # 模板预览 (这里用占位图，实际项目中显示真实模板)
-        st.image("https://via.placeholder.com/300x400/4CAF50/white?text=Template+Preview", 
-                caption=f"模板预览: {selected_template}", use_container_width=True)
+        # 模板预览
+        st.markdown("**🖼️ 模板预览**")
+        
+        # 根据模板ID显示不同的预览图
+        preview_colors = {
+            "tech_modern": "2196F3",
+            "beauty_elegant": "E91E63", 
+            "home_cozy": "FF9800",
+            "sports_dynamic": "4CAF50",
+            "baby_cute": "FF69B4",
+            "halloween_spooky": "FF4500",
+            "christmas_festive": "DC143C",
+            "vintage_retro": "8B4513"
+        }
+        
+        color = preview_colors.get(selected_template_id, "4CAF50")
+        preview_url = f"https://via.placeholder.com/300x400/{color}/white?text={selected_template_name.replace(' ', '+')}"
+        
+        st.image(preview_url, caption=f"模板预览: {selected_template_name}", use_container_width=True)
+        
+        # 显示相似模板
+        if search_results and len(search_results) > 1:
+            try:
+                similar_templates = search_engine.get_similar_templates(selected_template_id, limit=3)
+                if similar_templates:
+                    with st.expander("🔗 相似模板推荐"):
+                        for sim in similar_templates:
+                            sim_name = sim["config"]["name"]
+                            sim_category = sim["config"].get("category", "")
+                            similarity = sim.get("similarity_score", 0)
+                            st.caption(f"• {sim_name} ({sim_category}) - 相似度: {similarity:.1f}")
+            except:
+                pass
         
         # 模板自定义选项
         st.markdown("**模板定制选项:**")
@@ -99,6 +192,28 @@ with tab_template:
         # 品牌信息
         brand_name = st.text_input("品牌名称", placeholder="例: TechPro")
         brand_color = st.color_picker("品牌主色调", "#FF6B6B")
+        
+        # 智能推荐
+        if product_name and product_category and features:
+            if st.button("🤖 获取AI推荐模板", help="根据产品信息智能推荐最适合的模板"):
+                try:
+                    recommendations = recommender.recommend_by_product_info(
+                        product_name, product_category, features
+                    )
+                    if recommendations:
+                        st.markdown("**🎯 AI推荐模板:**")
+                        for i, rec in enumerate(recommendations[:3]):
+                            template_name = rec["config"]["name"]
+                            reason = rec.get("recommendation_reason", "风格匹配")
+                            score = rec.get("score", 0)
+                            
+                            if st.button(f"📌 {template_name}", key=f"rec_{i}", 
+                                       help=f"推荐原因: {reason} (匹配度: {score:.1f})"):
+                                # 更新选中的模板
+                                st.session_state.recommended_template = rec["template_id"]
+                                st.rerun()
+                except Exception as e:
+                    st.error(f"推荐功能暂时不可用: {e}")
         
         # AI 生成选项
         st.markdown("**AI 增强选项:**")
@@ -236,181 +351,3 @@ with tab_template:
         if st.checkbox("实时预览模式"):
             st.info("💡 修改左侧参数时会实时更新预览")
             # 这里可以添加实时预览逻辑
-
-# ==========================================
-# Tab 2: 智能切图 (把长图切成标准模块)
-# ==========================================
-with tab_slice:
-    col1, col2 = st.columns([1, 1.5], gap="large")
-    
-    with col1:
-        st.subheader("1. 上传长图")
-        st.info("💡 用于将设计师制作的整张长海报，自动切割为亚马逊 A+ 标准模块图 (通常宽度 970px)。")
-        
-        uploaded_long_img = st.file_uploader("上传长图 (JPG/PNG)", type=["jpg", "png", "jpeg"])
-        
-        slice_height = st.number_input("单张切片高度 (px)", min_value=100, value=600, step=100, help="亚马逊标准模块通常为 600px 或 300px")
-        output_format = st.radio("输出格式", ["JPEG", "PNG"], horizontal=True)
-        
-        btn_slice = st.button("🔪 开始切图", type="primary")
-
-    with col2:
-        st.subheader("2. 切片结果")
-        if uploaded_long_img and btn_slice:
-            image = Image.open(uploaded_long_img)
-            img_w, img_h = image.size
-            
-            st.caption(f"原始尺寸: {img_w}x{img_h} px")
-            
-            # 切图逻辑
-            slices = []
-            num_slices = (img_h + slice_height - 1) // slice_height # 向上取整
-            
-            # 准备压缩包
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, "w") as zf:
-                
-                for i in range(num_slices):
-                    top = i * slice_height
-                    bottom = min((i + 1) * slice_height, img_h)
-                    
-                    # 裁剪
-                    crop_img = image.crop((0, top, img_w, bottom))
-                    
-                    # 转字节
-                    img_byte_arr = io.BytesIO()
-                    ext = output_format.lower()
-                    if ext == "jpeg":
-                        crop_img = crop_img.convert("RGB")
-                    crop_img.save(img_byte_arr, format=output_format, quality=95)
-                    img_bytes = img_byte_arr.getvalue()
-                    
-                    # 存入列表用于显示
-                    slices.append(crop_img)
-                    
-                    # 写入压缩包
-                    zf.writestr(f"slice_{i+1:02d}.{ext}", img_bytes)
-            
-            # 显示切片
-            st.success(f"成功切为 {len(slices)} 张图片！")
-            
-            # 下载全部
-            st.download_button(
-                "📦 打包下载所有切片 (ZIP)", 
-                data=zip_buffer.getvalue(), 
-                file_name="aplus_slices.zip", 
-                mime="application/zip"
-            )
-            
-            # 预览
-            with st.expander("查看切片详情", expanded=True):
-                grid = st.columns(2)
-                for idx, s_img in enumerate(slices):
-                    with grid[idx % 2]:
-                        st.image(s_img, caption=f"Slice {idx+1} ({s_img.width}x{s_img.height})", use_container_width=True)
-
-# ==========================================
-# Tab 2: 无缝拼接预览 (模拟前台效果)
-# ==========================================
-with tab_preview:
-    st.subheader("📱 移动端/PC端 滚动预览")
-    st.caption("上传多张切片，检查拼接处是否自然无缝。")
-    
-    preview_files = st.file_uploader("按顺序上传所有切片 (支持多选)", type=["jpg", "png"], accept_multiple_files=True)
-    
-    if preview_files:
-        # 排序逻辑：尝试按文件名排序，否则按上传顺序
-        try:
-            preview_files.sort(key=lambda x: x.name)
-        except:
-            pass
-            
-        st.divider()
-        
-        # 模拟无缝拼接：使用 st.image 的特性，将 margin 设为 0 (CSS hack)
-        st.markdown("""
-        <style>
-            .seamless-container img {
-                display: block;
-                margin-bottom: -5px; /* 消除图片间隙 */
-                width: 100%;
-            }
-            .preview-frame {
-                border: 10px solid #333;
-                border-radius: 20px;
-                padding: 10px;
-                background: #fff;
-                max-width: 500px; /* 模拟手机宽度 */
-                margin: 0 auto;
-                overflow-y: auto;
-                max-height: 800px;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            }
-        </style>
-        """, unsafe_allow_html=True)
-        
-        st.markdown('<div class="preview-frame">', unsafe_allow_html=True)
-        for p_file in preview_files:
-            # 直接读取并显示，不加 caption 以免破坏无缝感
-            img = Image.open(p_file)
-            st.image(img, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-# ==========================================
-# Tab 3: 动态 GIF 制作 (简单动效)
-# ==========================================
-with tab_gif:
-    c_g1, c_g2 = st.columns([1, 1.5], gap="large")
-    
-    with c_g1:
-        st.subheader("1. 制作设置")
-        gif_files = st.file_uploader("上传关键帧 (2-10张)", type=["jpg", "png"], accept_multiple_files=True, key="gif_upload")
-        
-        duration = st.slider("每帧停留时间 (毫秒)", 100, 2000, 500, step=100)
-        loop_count = st.number_input("循环次数 (0=无限循环)", value=0)
-        resize_width = st.number_input("统一宽度缩放 (px, 0=不缩放)", value=970)
-        
-        btn_gif = st.button("🎬 生成 GIF", type="primary")
-        
-    with c_g2:
-        st.subheader("2. 效果预览")
-        if btn_gif and gif_files:
-            if len(gif_files) < 2:
-                st.error("至少需要上传 2 张图片才能制作 GIF")
-            else:
-                try:
-                    frames = []
-                    for f in gif_files:
-                        im = Image.open(f)
-                        # 统一尺寸逻辑
-                        if resize_width > 0:
-                            ratio = resize_width / im.width
-                            new_h = int(im.height * ratio)
-                            im = im.resize((resize_width, new_h), Image.Resampling.LANCZOS)
-                        frames.append(im)
-                    
-                    # 保存 GIF
-                    gif_buffer = io.BytesIO()
-                    # duration 是每帧的时间(ms)
-                    frames[0].save(
-                        gif_buffer, 
-                        format='GIF', 
-                        save_all=True, 
-                        append_images=frames[1:], 
-                        optimize=True, 
-                        duration=duration, 
-                        loop=loop_count
-                    )
-                    
-                    st.success("GIF 生成成功！")
-                    st.image(gif_buffer.getvalue(), caption="生成的动态 A+ 模块")
-                    
-                    st.download_button(
-                        "📥 下载 GIF", 
-                        data=gif_buffer.getvalue(), 
-                        file_name="aplus_motion.gif", 
-                        mime="image/gif"
-                    )
-                    
-                except Exception as e:
-                    st.error(f"生成失败: {e}")
