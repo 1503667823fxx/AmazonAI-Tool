@@ -92,7 +92,10 @@ from .generation_engine import (
 from .adapters import (
     LumaAdapter,
     RunwayAdapter,
-    PikaAdapter
+    PikaAdapter,
+    LUMA_AVAILABLE,
+    RUNWAY_AVAILABLE,
+    PIKA_AVAILABLE
 )
 
 from .workflow_manager import (
