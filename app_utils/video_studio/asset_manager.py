@@ -459,7 +459,7 @@ class AssetManager:
                 
                 # Create thumbnail
                 if options.create_thumbnail:
-                    thumbnail_path = await self._create_thumbnail(img, asset_id, options.thumbnail_size)
+                    thumbnail_path = self._create_thumbnail(img, asset_id, options.thumbnail_size)
                     metadata.thumbnail_path = thumbnail_path
                 
                 # Update metadata with final dimensions
@@ -469,7 +469,7 @@ class AssetManager:
             self.logger.error(f"Failed to process image {asset_id}: {e}")
             raise RuntimeError(f"Image processing failed: {str(e)}") from e
     
-    async def _create_thumbnail(self, img: Image.Image, asset_id: str, size: Tuple[int, int]) -> str:
+    def _create_thumbnail(self, img: Image.Image, asset_id: str, size: Tuple[int, int]) -> str:
         """Create thumbnail for image"""
         thumbnail_path = self.base_path / "thumbnails" / f"{asset_id}_thumb.jpg"
         
@@ -690,7 +690,7 @@ class AssetManager:
                 )
                 
                 # Create thumbnail
-                thumbnail_path = await self._create_thumbnail(img, new_asset_id, (256, 256))
+                thumbnail_path = self._create_thumbnail(img, new_asset_id, (256, 256))
                 new_metadata.thumbnail_path = thumbnail_path
                 
                 # Register new asset
