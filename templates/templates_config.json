@@ -1,0 +1,100 @@
+{
+  "templates": {
+    "tech_modern": {
+      "name": "科技现代风",
+      "category": "电子产品",
+      "description": "适合科技产品的现代简约风格，突出产品的科技感和专业性",
+      "sections": ["header", "features", "gallery", "specs"],
+      "color_schemes": ["蓝色科技", "黑白简约", "渐变炫彩"],
+      "tags": ["科技", "现代", "简约", "专业"],
+      "replaceable_areas": {
+        "product_image": {"x": 100, "y": 50, "width": 300, "height": 300},
+        "title_text": {"x": 450, "y": 80, "width": 400, "height": 60},
+        "feature_1": {"x": 450, "y": 160, "width": 400, "height": 40},
+        "feature_2": {"x": 450, "y": 210, "width": 400, "height": 40},
+        "feature_3": {"x": 450, "y": 260, "width": 400, "height": 40},
+        "brand_logo": {"x": 50, "y": 20, "width": 150, "height": 50}
+      }
+    },
+    "beauty_elegant": {
+      "name": "美妆优雅风",
+      "category": "美妆护肤",
+      "description": "适合美妆护肤品的优雅风格，强调品质和效果",
+      "sections": ["hero", "ingredients", "results", "usage"],
+      "color_schemes": ["粉色浪漫", "金色奢华", "自然绿调"],
+      "tags": ["美妆", "优雅", "奢华", "女性"],
+      "replaceable_areas": {
+        "product_image": {"x": 50, "y": 100, "width": 250, "height": 350},
+        "brand_logo": {"x": 350, "y": 50, "width": 200, "height": 80},
+        "title_text": {"x": 350, "y": 150, "width": 300, "height": 50},
+        "benefit_1": {"x": 350, "y": 220, "width": 300, "height": 30},
+        "benefit_2": {"x": 350, "y": 260, "width": 300, "height": 30}
+      }
+    },
+    "home_cozy": {
+      "name": "家居温馨风",
+      "category": "家居用品",
+      "description": "温馨舒适的家居风格，营造家的温暖感觉",
+      "sections": ["lifestyle", "features", "scenes", "details"],
+      "color_schemes": ["暖色调", "北欧风", "原木色"],
+      "tags": ["家居", "温馨", "舒适", "生活"],
+      "replaceable_areas": {
+        "product_image": {"x": 200, "y": 80, "width": 350, "height": 280},
+        "scene_image": {"x": 50, "y": 400, "width": 500, "height": 200},
+        "title_text": {"x": 50, "y": 30, "width": 500, "height": 40}
+      }
+    },
+    "sports_dynamic": {
+      "name": "运动活力风",
+      "category": "运动户外",
+      "description": "充满活力的运动风格，展现产品的专业性和动感",
+      "sections": ["action", "performance", "features", "lifestyle"],
+      "color_schemes": ["活力橙", "运动蓝", "黑红搭配"],
+      "tags": ["运动", "活力", "专业", "户外"],
+      "replaceable_areas": {
+        "product_image": {"x": 300, "y": 100, "width": 300, "height": 300},
+        "action_scene": {"x": 50, "y": 50, "width": 200, "height": 350},
+        "title_text": {"x": 50, "y": 450, "width": 550, "height": 50}
+      }
+    },
+    "baby_cute": {
+      "name": "母婴可爱风",
+      "category": "母婴用品",
+      "description": "温柔可爱的母婴风格，强调安全和关爱",
+      "sections": ["safety", "comfort", "growth", "care"],
+      "color_schemes": ["粉蓝搭配", "柔和彩虹", "纯净白色"],
+      "tags": ["母婴", "可爱", "安全", "温柔"],
+      "replaceable_areas": {
+        "product_image": {"x": 150, "y": 120, "width": 280, "height": 280},
+        "baby_scene": {"x": 450, "y": 80, "width": 200, "height": 320},
+        "safety_icon": {"x": 50, "y": 50, "width": 80, "height": 80}
+      }
+    }
+  },
+  "ai_features": {
+    "text_enhancement": {
+      "enabled": true,
+      "description": "AI 优化产品文案，提升吸引力和转化率"
+    },
+    "layout_optimization": {
+      "enabled": true,
+      "description": "智能调整布局，确保视觉平衡和用户体验"
+    },
+    "background_generation": {
+      "enabled": true,
+      "description": "AI 生成匹配的背景元素和装饰"
+    },
+    "color_matching": {
+      "enabled": true,
+      "description": "根据产品特性智能匹配最佳配色方案"
+    }
+  },
+  "output_formats": {
+    "standard_sizes": {
+      "desktop": {"width": 970, "height": 600},
+      "mobile": {"width": 414, "height": 600}
+    },
+    "supported_formats": ["JPEG", "PNG", "WebP"],
+    "quality_options": ["高清", "标准", "压缩"]
+  }
+}
