@@ -8,7 +8,9 @@
 ### 技术文档
 - **[Video Studio 模板系统文档](video_studio_template_system.md)** - Video Studio 模板系统的完整技术文档
 - **[Video Studio 依赖安装指南](video_studio_dependencies.md)** - Video Studio 所需依赖的安装和配置指南
+- **[API 配置指南](api_configuration.md)** - AI API 的配置和使用说明 (Gemini, Luma 等)
 - **[Streamlit Cloud 部署指南](streamlit_cloud_deployment.md)** - 云端部署的专门指南和故障排除
+- **[导入问题修复总结](import_fixes_summary.md)** - 已修复的导入和依赖问题总结
 - **[Bug 修复记录](BUG_FIX_LOG.md)** - 项目开发过程中的Bug修复记录
 
 ### 归档文档
