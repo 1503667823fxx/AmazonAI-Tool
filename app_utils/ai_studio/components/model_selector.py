@@ -68,17 +68,8 @@ class ModelSelector:
             self.model_map[custom_label] = current_model
             current_label = custom_label
         
-        # Enhanced model selection header with status
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.subheader("🤖 AI 模型选择")
-        with col2:
-            # Show current model status
-            caps = self.model_capabilities.get(current_model, {})
-            if caps.get('supports_image_gen'):
-                st.success("🎨 图像模式")
-            else:
-                st.info("💬 对话模式")
+        # 简化的模型选择标题
+        st.subheader("🤖 模型选择")
         
         # Enhanced model selector with better UX
         selected_label = st.selectbox(
@@ -95,13 +86,8 @@ class ModelSelector:
         if selected_model_id != current_model:
             self._handle_enhanced_model_switch(current_model, selected_model_id)
         
-        # Enhanced model information display
-        self._render_enhanced_model_info(selected_model_id)
-        
-        # Show model comparison if multiple models available
-        if len(self.model_map) > 1:
-            with st.expander("📊 Compare Models", expanded=False):
-                self._render_model_comparison_table()
+        # 简化的模型信息显示 - 只显示基本状态
+        self._render_simple_model_status(selected_model_id)
         
         # Determine if this is image generation mode
         is_image_mode = self._is_image_generation_mode(selected_model_id)
@@ -113,55 +99,15 @@ class ModelSelector:
         return selected_model_id, is_image_mode
     
     def _handle_enhanced_model_switch(self, old_model: str, new_model: str) -> None:
-        """Handle model switching with enhanced context preservation and feedback"""
+        """简化的模型切换处理"""
         
-        # Check if context preservation is needed
-        state = state_manager.get_state()
-        
-        if len(state.messages) > 0:
-            # Show enhanced context preservation info
-            old_caps = self.model_capabilities.get(old_model, {})
-            new_caps = self.model_capabilities.get(new_model, {})
-            
-            # Check compatibility
-            compatibility_issues = self._check_model_compatibility(old_caps, new_caps)
-            
-            if compatibility_issues:
-                with st.expander("⚠️ Model Switch Impact Analysis", expanded=True):
-                    st.warning("**Context Preservation Notice**")
-                    st.write("Switching models may affect your conversation. Here's what will change:")
-                    
-                    for issue in compatibility_issues:
-                        st.write(f"• {issue}")
-                    
-                    # Show what will be preserved
-                    st.info("**What will be preserved:**")
-                    st.write("• All conversation messages and history")
-                    st.write("• Current conversation context")
-                    if not new_caps.get('supports_image_gen', False):
-                        st.write("• System prompt settings")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("✅ Continue Switch", type="primary"):
-                            self._perform_model_switch(old_model, new_model)
-                            st.success(f"Successfully switched to {self._get_model_display_name(new_model)}")
-                            st.rerun()
-                    with col2:
-                        if st.button("❌ Cancel"):
-                            st.rerun()
-                    with col3:
-                        if st.button("📊 Compare Models"):
-                            st.session_state.show_model_comparison = True
-                            st.rerun()
-                    return
-            else:
-                # No compatibility issues, show simple confirmation
-                st.info(f"Switching from {self._get_model_display_name(old_model)} to {self._get_model_display_name(new_model)}")
-        
-        # Proceed with model switch
+        # 直接切换模型，不显示冗余提示
         self._perform_model_switch(old_model, new_model)
-        st.success(f"Model updated to {self._get_model_display_name(new_model)}")
+        
+        # 只在有对话历史时显示简单提示
+        state = state_manager.get_state()
+        if len(state.messages) > 0:
+            st.info(f"已切换到 {self._get_model_display_name(new_model)}，对话历史已保留")
     
     def _perform_model_switch(self, old_model: str, new_model: str) -> None:
         """Perform the actual model switch with proper state management"""
@@ -208,71 +154,25 @@ class ModelSelector:
         
         return issues
     
-    def _render_enhanced_model_info(self, model_id: str) -> None:
-        """Render enhanced information about the selected model"""
+    def _render_simple_model_status(self, model_id: str) -> None:
+        """渲染简化的模型状态信息"""
         
         caps = self.model_capabilities.get(model_id, {})
         
         if caps:
-            # Always show key model info in a compact format
-            col1, col2, col3 = st.columns(3)
+            # 只显示最基本的信息
+            if caps.get('supports_image_gen'):
+                st.info("🎨 当前模式：图像生成")
+            else:
+                st.info("💬 当前模式：文本对话")
             
-            with col1:
-                speed = caps.get('speed', 'unknown')
-                speed_map = {"fast": "快速", "medium": "中等", "slow": "较慢"}
-                speed_text = speed_map.get(speed, "未知")
-                speed_color = {"fast": "🟢", "medium": "🟡", "slow": "🔴"}.get(speed, "⚪")
-                st.metric("速度", f"{speed_color} {speed_text}")
-            
-            with col2:
-                tokens = caps.get('max_tokens', 0)
-                st.metric("最大令牌", f"{tokens:,}")
-            
-            with col3:
-                capabilities = []
-                if caps.get('supports_vision'):
-                    capabilities.append("👁️ 视觉")
+            # 可选：显示一个简单的功能提醒（只显示一次）
+            if not st.session_state.get("model_tip_shown", False):
                 if caps.get('supports_image_gen'):
-                    capabilities.append("🎨 图像生成")
-                
-                cap_text = " • ".join(capabilities) if capabilities else "💬 纯文本"
-                st.metric("功能", cap_text)
-            
-            # Detailed info in expandable section
-            with st.expander("📋 Detailed Model Information", expanded=False):
-                st.write(f"**Description:** {caps.get('description', 'No description available')}")
-                
-                # Feature matrix
-                st.write("**Feature Support:**")
-                features = [
-                    ("Text Conversations", "✅", "All models support text-based conversations"),
-                    ("Vision/Image Input", "✅" if caps.get('supports_vision') else "❌", 
-                     "Can analyze and understand images" if caps.get('supports_vision') else "Text-only input"),
-                    ("Image Generation", "✅" if caps.get('supports_image_gen') else "❌",
-                     "Can create and generate images" if caps.get('supports_image_gen') else "Cannot generate images"),
-                    ("Streaming Responses", "✅" if not caps.get('supports_image_gen') else "❌",
-                     "Real-time response streaming" if not caps.get('supports_image_gen') else "Batch processing for images")
-                ]
-                
-                for feature, status, description in features:
-                    col_a, col_b, col_c = st.columns([2, 1, 3])
-                    with col_a:
-                        st.write(f"**{feature}**")
-                    with col_b:
-                        st.write(status)
-                    with col_c:
-                        st.write(f"*{description}*")
-                
-                # Performance characteristics
-                st.write("**Performance Characteristics:**")
-                perf_data = {
-                    "Response Speed": caps.get('speed', 'Unknown').title(),
-                    "Token Limit": f"{caps.get('max_tokens', 'Unknown'):,}",
-                    "Best Use Cases": self._get_use_cases(caps)
-                }
-                
-                for key, value in perf_data.items():
-                    st.write(f"• **{key}:** {value}")
+                    st.success("💡 提示：可以上传参考图片来生成相似风格的图像")
+                else:
+                    st.success("💡 提示：可以上传图片让AI分析内容")
+                st.session_state.model_tip_shown = True
     
     def _get_use_cases(self, capabilities: Dict) -> str:
         """Get recommended use cases for a model based on its capabilities"""
@@ -314,86 +214,32 @@ class ModelSelector:
                 self._render_model_comparison_table()
     
     def _render_enhanced_system_prompt_editor(self, model_id: str) -> None:
-        """Render enhanced system prompt editor with validation and presets"""
+        """渲染简化的系统提示编辑器"""
         
         if self._is_image_generation_mode(model_id):
-            return  # Don't show system prompt for image generation models
+            return  # 图像生成模式不显示系统提示
         
-        st.subheader("🎭 系统角色与指令")
+        st.subheader("🎭 系统提示")
         
         state = state_manager.get_state()
         current_prompt = state.system_prompt
         
-        # Preset prompts for quick selection
-        col1, col2 = st.columns([3, 1])
+        # 简化的系统提示编辑器
+        new_prompt = st.text_area(
+            "系统指令",
+            value=current_prompt,
+            height=80,
+            help="定义AI的行为方式",
+            key="simple_system_prompt_editor",
+            placeholder="例如：你是专业的电商助手..."
+        )
         
-        with col2:
-            preset_prompts = {
-                "默认助手": "你是一个专为亚马逊电商卖家服务的AI助手。",
-                "电商专家": "你是亚马逊电商专家，专精于产品listing、SEO优化和卖家策略。请提供详细、可操作的建议。",
-                "创意文案": "你是专门为电商撰写引人注目的产品描述和营销内容的创意文案专家。",
-                "数据分析师": "你是数据分析专家，帮助解读业务指标、销售数据和电商业务的市场趋势。",
-                "客服专家": "你是客户服务专家，帮助创建专业、有同理心的回复并有效解决客户问题。",
-                "自定义": ""
-            }
-            
-            selected_preset = st.selectbox(
-                "快速预设",
-                list(preset_prompts.keys()),
-                key="system_prompt_presets",
-                help="选择一个预设或选择'自定义'来编写您自己的指令"
-            )
-        
-        with col1:
-            # Determine initial value based on preset selection
-            if selected_preset != "自定义":
-                initial_prompt = preset_prompts[selected_preset]
-            else:
-                initial_prompt = current_prompt
-            
-            new_prompt = st.text_area(
-                "系统指令",
-                value=initial_prompt,
-                height=100,
-                help="定义AI的行为和回应方式。请具体说明语调、专业程度和回应风格。",
-                key="enhanced_system_prompt_editor",
-                placeholder="输入AI行为和个性的自定义指令..."
-            )
-        
-        # Real-time validation feedback
-        validation_result = self._validate_system_prompt(new_prompt)
-        prompt_length = len(new_prompt)
-        
-        # Show validation status
-        col_a, col_b, col_c = st.columns([2, 1, 1])
-        
-        with col_a:
-            if validation_result:
-                st.success("✅ Valid system prompt")
-            else:
-                st.error("❌ Invalid system prompt - contains restricted patterns")
-        
-        with col_b:
-            color = "normal" if prompt_length <= 5000 else "inverse" if prompt_length <= 8000 else "off"
-            st.metric("Length", f"{prompt_length:,}/10,000", delta=None)
-        
-        with col_c:
-            if st.button("💾 Apply Prompt", disabled=not validation_result or new_prompt == current_prompt):
+        # 简单的应用按钮
+        if new_prompt != current_prompt:
+            if st.button("💾 应用", type="primary"):
                 if self._apply_system_prompt_with_confirmation(new_prompt):
-                    st.success("System prompt updated successfully!")
+                    st.success("系统提示已更新！")
                     st.rerun()
-        
-        # Show prompt preview
-        if new_prompt and new_prompt != current_prompt:
-            with st.expander("👀 Preview Changes", expanded=False):
-                st.write("**Current Prompt:**")
-                st.code(current_prompt if current_prompt else "(No system prompt set)")
-                st.write("**New Prompt:**")
-                st.code(new_prompt)
-                
-                # Show what will change
-                if not current_prompt and new_prompt:
-                    st.info("This will set your first system prompt.")
                 elif current_prompt and not new_prompt:
                     st.warning("This will remove your current system prompt.")
                 else:
