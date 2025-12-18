@@ -100,7 +100,7 @@ class AIMessage(BaseMessage):
     content: str
     model_used: str
     generation_info: Optional[GenerationInfo] = None
-    message_type: Literal["text", "image_result"] = "text"
+    message_type: Literal["text", "image_result", "text_interrupted", "image_interrupted"] = "text"
     hd_data: Optional[bytes] = None  # For image results
     
     def __post_init__(self):
@@ -127,6 +127,8 @@ class ConversationState:
     current_model: str = "models/gemini-3-flash-preview"
     system_prompt: str = "You are a helpful AI assistant for Amazon E-commerce sellers."
     is_streaming: bool = False
+    generation_interrupted: bool = False
+    interrupt_reason: str = ""
     upload_queue: List[UploadedFile] = field(default_factory=list)
     ui_settings: UISettings = field(default_factory=UISettings)
     msg_uid: int = 0
