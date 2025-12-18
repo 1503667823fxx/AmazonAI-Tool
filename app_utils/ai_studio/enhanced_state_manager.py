@@ -173,6 +173,42 @@ class EnhancedStateManager:
             self.update_state(state)
         return success
     
+    def edit_user_message(self, message_id: str, new_content: str) -> bool:
+        """Edit a user message by ID"""
+        state = self.get_state()
+        
+        for message in state.messages:
+            if message.id == message_id and isinstance(message, UserMessage):
+                # 保存原始内容（如果是第一次编辑）
+                if not message.edited:
+                    message.original_content = message.content
+                
+                # 更新内容
+                message.content = new_content
+                message.edited = True
+                message.edit_timestamp = datetime.now()
+                
+                self.update_state(state)
+                return True
+        
+        return False
+    
+    def delete_messages_after_index(self, start_index: int) -> int:
+        """删除指定索引之后的所有消息"""
+        state = self.get_state()
+        
+        if start_index >= len(state.messages):
+            return 0
+        
+        messages_to_remove = state.messages[start_index + 1:]
+        deleted_count = len(messages_to_remove)
+        
+        # 保留前面的消息
+        state.messages = state.messages[:start_index + 1]
+        
+        self.update_state(state)
+        return deleted_count
+    
     def clear_conversation(self) -> None:
         """Clear all messages"""
         state = self.get_state()
