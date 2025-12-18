@@ -55,6 +55,12 @@ class ModelSelector:
         state = state_manager.get_state()
         current_model = state.current_model
         
+        # 自动迁移旧模型到新模型
+        if current_model == "models/gemini-flash-latest":
+            current_model = "models/gemini-3-flash-preview"
+            state_manager.update_model(current_model)
+            st.info("🔄 已自动更新到最新的 Gemini 3 Flash 模型")
+        
         # Find current selection in model map
         current_label = None
         for label, model_id in self.model_map.items():
@@ -62,9 +68,9 @@ class ModelSelector:
                 current_label = label
                 break
         
-        # If current model not in map, add it
+        # If current model still not in map, add it as custom
         if current_label is None:
-            custom_label = f"🔧 Custom ({current_model})"
+            custom_label = f"🔧 自定义 ({current_model})"
             self.model_map[custom_label] = current_model
             current_label = custom_label
         
