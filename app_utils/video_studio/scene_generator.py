@@ -15,7 +15,7 @@ import logging
 from datetime import datetime
 
 from .models import Scene, VideoConfig, TaskStatus
-from .error_handler import ErrorHandler
+from .error_handler import VideoStudioErrorHandler
 
 
 @dataclass
@@ -61,9 +61,9 @@ class SceneGenerator:
     and batch processing capabilities for multiple scenes.
     """
     
-    def __init__(self, error_handler: Optional[ErrorHandler] = None):
+    def __init__(self, error_handler: Optional[VideoStudioErrorHandler] = None):
         """Initialize the scene generator with optional error handler."""
-        self.error_handler = error_handler or ErrorHandler()
+        self.error_handler = error_handler or VideoStudioErrorHandler()
         self.logger = logging.getLogger(__name__)
         
         # Define required fields for scene validation
