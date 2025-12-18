@@ -415,10 +415,20 @@ def render_template_selector(template_manager):
         categories = template_manager.get_template_categories()
         
         # 分类选择
+        def format_category(x):
+            if x == "all":
+                return "全部模板"
+            try:
+                from app_utils.video_studio.template_manager import TemplateCategory
+                category_enum = TemplateCategory(x)
+                return category_enum.chinese_name
+            except:
+                return x.replace("_", " ").title()
+        
         selected_category = st.selectbox(
             "选择模板分类",
             options=["all"] + categories,
-            format_func=lambda x: "全部模板" if x == "all" else x.replace("_", " ").title(),
+            format_func=format_category,
             key="template_category_selector"
         )
         
