@@ -35,6 +35,14 @@ from .error_handler import (
     with_circuit_breaker
 )
 
+from .localization import (
+    get_category_chinese_name,
+    get_style_chinese_name,
+    get_model_chinese_name,
+    get_quality_chinese_name,
+    format_template_display_name
+)
+
 from .config import (
     VideoStudioConfig,
     ModelConfig,
@@ -540,7 +548,14 @@ __all__ = [
     'model_logger',
     'workflow_logger',
     'asset_logger',
-    'render_logger'
+    'render_logger',
+    
+    # Localization
+    'get_category_chinese_name',
+    'get_style_chinese_name',
+    'get_model_chinese_name',
+    'get_quality_chinese_name',
+    'format_template_display_name'
 ]
 
 # Version information
