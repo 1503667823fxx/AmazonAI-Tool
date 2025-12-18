@@ -27,6 +27,19 @@ class TemplateCategory(Enum):
     STORYTELLING = "storytelling"
     EDUCATIONAL = "educational"
     CUSTOM = "custom"
+    
+    @property
+    def chinese_name(self) -> str:
+        """Get Chinese name for the category"""
+        chinese_names = {
+            "product_showcase": "商品展示",
+            "promotional": "推广宣传",
+            "social_media": "社交媒体",
+            "storytelling": "故事叙述",
+            "educational": "教育培训",
+            "custom": "自定义"
+        }
+        return chinese_names.get(self.value, self.value)
 
 
 class VideoStyle(Enum):
@@ -39,6 +52,21 @@ class VideoStyle(Enum):
     MODERN = "modern"
     VINTAGE = "vintage"
     PROFESSIONAL = "professional"
+    
+    @property
+    def chinese_name(self) -> str:
+        """Get Chinese name for the style"""
+        chinese_names = {
+            "cinematic": "电影风格",
+            "dynamic": "动感活力",
+            "minimal": "简约风格",
+            "energetic": "高能激情",
+            "elegant": "优雅精致",
+            "modern": "现代时尚",
+            "vintage": "复古怀旧",
+            "professional": "专业商务"
+        }
+        return chinese_names.get(self.value, self.value)
 
 
 @dataclass
@@ -195,10 +223,10 @@ class TemplateManager:
         self._templates["product_cinematic"] = VideoTemplate(
             template_id="product_cinematic",
             metadata=TemplateMetadata(
-                name="Cinematic Product Showcase",
-                description="Professional cinematic style for premium product presentations",
+                name="电影级商品展示",
+                description="专业电影风格，适合高端商品展示和品牌宣传",
                 category=TemplateCategory.PRODUCT_SHOWCASE,
-                tags=["cinematic", "premium", "professional", "product"]
+                tags=["电影风格", "高端", "专业", "商品展示"]
             ),
             config=TemplateConfig(
                 duration=15,
@@ -239,10 +267,10 @@ class TemplateManager:
         self._templates["social_dynamic"] = VideoTemplate(
             template_id="social_dynamic",
             metadata=TemplateMetadata(
-                name="Dynamic Social Media",
-                description="Fast-paced, energetic style perfect for social media platforms",
+                name="动感社交媒体",
+                description="快节奏、高能量风格，完美适配抖音、小红书等社交平台",
                 category=TemplateCategory.SOCIAL_MEDIA,
-                tags=["social", "dynamic", "energetic", "short-form"]
+                tags=["社交媒体", "动感", "高能量", "短视频"]
             ),
             config=TemplateConfig(
                 duration=10,
@@ -289,10 +317,10 @@ class TemplateManager:
         self._templates["minimal_elegant"] = VideoTemplate(
             template_id="minimal_elegant",
             metadata=TemplateMetadata(
-                name="Minimal Elegant",
-                description="Clean, minimalist design with elegant transitions",
+                name="简约优雅",
+                description="简洁的极简主义设计，优雅的过渡效果，适合高端品牌",
                 category=TemplateCategory.PRODUCT_SHOWCASE,
-                tags=["minimal", "elegant", "clean", "sophisticated"]
+                tags=["极简", "优雅", "简洁", "高端"]
             ),
             config=TemplateConfig(
                 duration=12,
@@ -333,10 +361,10 @@ class TemplateManager:
         self._templates["promo_energetic"] = VideoTemplate(
             template_id="promo_energetic",
             metadata=TemplateMetadata(
-                name="Energetic Promotional",
-                description="High-energy promotional video with bold visuals",
+                name="高能推广",
+                description="高能量推广视频，大胆的视觉效果，适合促销活动",
                 category=TemplateCategory.PROMOTIONAL,
-                tags=["promotional", "energetic", "bold", "attention-grabbing"]
+                tags=["推广", "高能量", "大胆", "吸睛"]
             ),
             config=TemplateConfig(
                 duration=20,
@@ -389,10 +417,10 @@ class TemplateManager:
         self._templates["professional_modern"] = VideoTemplate(
             template_id="professional_modern",
             metadata=TemplateMetadata(
-                name="Professional Modern",
-                description="Contemporary professional style for business presentations",
+                name="现代商务",
+                description="现代专业风格，适合商务演示和企业宣传",
                 category=TemplateCategory.EDUCATIONAL,
-                tags=["professional", "modern", "business", "corporate"]
+                tags=["专业", "现代", "商务", "企业"]
             ),
             config=TemplateConfig(
                 duration=30,
