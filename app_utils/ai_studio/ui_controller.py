@@ -67,9 +67,8 @@ class UIController:
         # Render main chat area
         self._render_chat_area(state)
         
-        # Render input area first (always show unless explicitly streaming)
-        if not state.is_streaming:
-            self._render_input_area()
+        # Render input area (always show, but disable during streaming)
+        self._render_input_area()
         
         # Handle inference if triggered (after input area is rendered)
         if st.session_state.get("trigger_inference", False):
@@ -95,8 +94,7 @@ class UIController:
             # Conversation controls
             self._render_conversation_controls()
             
-            # Optional: Model comparison
-            model_selector.render_model_comparison()
+            # 移除冗余的模型比较功能
     
     def _render_conversation_controls(self) -> None:
         """Render enhanced conversation management controls"""
@@ -179,18 +177,18 @@ class UIController:
         )
     
     def _render_input_area(self) -> None:
-        """Render the input area for user messages"""
+        """Render the input area for user messages (always visible, disabled during streaming)"""
         
         state = state_manager.get_state()
         
-        # Check if input should be disabled
+        # Input is disabled during streaming, but always visible
         input_disabled = state.is_streaming
         
         # Render input interface
         user_input, uploaded_images = input_panel.render_input_interface(disabled=input_disabled)
         
-        # Handle user input
-        if user_input:
+        # Handle user input (only if not disabled)
+        if user_input and not input_disabled:
             self._handle_user_input(user_input, uploaded_images)
     
     def _handle_user_input(self, user_input: str, uploaded_images: list) -> None:
