@@ -12,7 +12,7 @@ def render_upscale_sidebar():
     scale_factor = st.sidebar.selectbox(
         "🔎 放大倍数",
         options=[2, 4, 6, 8],
-        index=2,  # 默认选择6倍
+        index=0,  # 默认选择2倍
         help="选择图片放大倍数，倍数越高细节越丰富但处理时间越长"
     )
     
