@@ -16,7 +16,11 @@ if "upscale_result_url" not in st.session_state:
     st.session_state["upscale_result_url"] = None
 
 engine = UpscaleEngine()
-model_type, scale_factor, enable_face_enhance, preserve_structure, output_format = render_upscale_sidebar()
+
+# 渲染侧边栏并获取参数
+sidebar_result = render_upscale_sidebar()
+model_type, scale_factor, enable_face_enhance, preserve_structure, output_format = sidebar_result
+
 uploaded_file = st.file_uploader("📤 上传图片", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
