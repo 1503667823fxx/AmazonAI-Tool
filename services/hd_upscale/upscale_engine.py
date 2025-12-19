@@ -28,16 +28,45 @@ class UpscaleEngine:
             # 基础参数
             input_params = {
                 "image": image_file,
-                "scale": scale,
             }
             
             # 根据不同模型调整参数
             if model_type == "real_esrgan":
+                input_params["scale"] = scale
                 input_params["face_enhance"] = face_enhance
+                
+            elif model_type == "gfpgan":
+                # GFPGAN 主要用于人脸修复
+                input_params["version"] = "1.4"
+                input_params["scale"] = scale
+                
+            elif model_type == "codeformer":
+                # CodeFormer 人脸修复参数
+                input_params["upscale"] = scale
+                input_params["face_upsample"] = True
+                input_params["background_enhance"] = True
+                input_params["codeformer_fidelity"] = 0.7 if preserve_structure else 0.5
+                
             elif model_type == "swinir":
-                # SwinIR 对结构保持更好，可以调整参数
+                # SwinIR Transformer架构
+                input_params["scale"] = scale
                 if preserve_structure:
                     input_params["task"] = "real_sr"  # 真实图像超分辨率任务
+                else:
+                    input_params["task"] = "classical_sr"  # 经典超分辨率
+                    
+            elif model_type == "bsrgan":
+                # BSRGAN 盲超分辨率
+                input_params["scale"] = scale
+                input_params["face_enhance"] = face_enhance
+                
+            elif model_type == "esrgan":
+                # ESRGAN 基础参数
+                input_params["scale"] = scale
+                
+            else:
+                # 默认参数
+                input_params["scale"] = scale
             
             output = self.client.run(model_id, input=input_params)
             
