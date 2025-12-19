@@ -9,12 +9,22 @@ def render_upscale_sidebar():
     model_choice = st.sidebar.selectbox(
         "🤖 AI模型选择",
         options=[
-            ("real_esrgan", "Real-ESRGAN (通用推荐)"),
-            ("esrgan", "ESRGAN (结构保持)"),
-            ("swinir", "SwinIR (细节专家)")
+            ("real_esrgan", "🌟 Real-ESRGAN (通用推荐)"),
+            ("swinir", "🔬 SwinIR (细节结构专家)"),
+            ("gfpgan", "👤 GFPGAN (人脸修复专家)"),
+            ("codeformer", "🎭 CodeFormer (身份保持)"),
+            ("bsrgan", "🔧 BSRGAN (真实降质修复)"),
+            ("esrgan", "⚡ ESRGAN (平衡性能)")
         ],
         format_func=lambda x: x[1],
-        help="不同模型适合不同类型的图像：\n- Real-ESRGAN: 照片和自然图像\n- ESRGAN: 更好的结构保持\n- SwinIR: 专门优化细节结构"
+        help="""选择最适合你图像类型的AI模型：
+        
+🌟 Real-ESRGAN: 照片和自然图像的通用选择
+🔬 SwinIR: 最佳细节保持，适合文字、线条、结构图
+👤 GFPGAN: 专门修复人脸，保持面部细节
+🎭 CodeFormer: 最新人脸技术，保持身份特征
+🔧 BSRGAN: 处理真实世界的模糊、噪声图像
+⚡ ESRGAN: 速度与质量的平衡选择"""
     )
     
     scale = st.sidebar.select_slider(
@@ -71,12 +81,15 @@ def render_comparison_result(original_file, result_url, download_data):
         
         # === 极速下载区 ===
         if download_data:
-            # 方案 A: 转换好的 JPEG (如果处理成功)
+            # 根据格式动态调整下载按钮
+            file_ext = "png" if st.session_state.get("output_format", "JPEG") == "PNG" else "jpg"
+            mime_type = "image/png" if file_ext == "png" else "image/jpeg"
+            
             st.download_button(
-                label="📥 点击下载 JPEG (已转码)",
+                label=f"📥 点击下载 {file_ext.upper()} (已转码)",
                 data=download_data,
-                file_name="upscaled_hd.jpg",
-                mime="image/jpeg",
+                file_name=f"upscaled_hd.{file_ext}",
+                mime=mime_type,
                 use_container_width=True,
                 type="primary" # 高亮按钮
             )
