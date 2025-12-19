@@ -3,10 +3,10 @@ import streamlit as st
 
 def render_upscale_sidebar():
     """渲染侧边栏控制面板"""
-    st.sidebar.header("⚙️ SUPIR 高清放大设置")
+    st.sidebar.header("⚙️ SUPIR v0q 高清放大")
     
     # 显示模型信息
-    st.sidebar.info("🚀 使用 SUPIR 模型\n先进的超分辨率技术，专门优化细节结构保持")
+    st.sidebar.info("🚀 使用 SUPIR v0q 模型\n专业超分辨率技术，专门解决细节结构模糊问题")
     
     # 输出格式选择
     output_format = st.sidebar.selectbox(
@@ -15,24 +15,7 @@ def render_upscale_sidebar():
         help="PNG无损保持最佳细节，JPEG文件更小"
     )
     
-    # 高级设置
-    with st.sidebar.expander("🔧 高级设置"):
-        st.info("💡 如果遇到内存错误，这些选项可以帮助优化")
-        
-        memory_mode = st.radio(
-            "内存模式",
-            options=["标准", "优化"],
-            help="优化模式使用更少内存，适合大图片"
-        )
-        
-        quality_preset = st.selectbox(
-            "质量预设",
-            options=["高质量 (慢)", "平衡", "快速"],
-            index=1,
-            help="选择处理速度和质量的平衡"
-        )
-    
-    return output_format, memory_mode, quality_preset
+    return output_format
 
 def render_comparison_result(original_file, result_url, download_data):
     """
