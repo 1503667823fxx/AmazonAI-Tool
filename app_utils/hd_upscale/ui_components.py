@@ -10,21 +10,15 @@ def render_upscale_sidebar():
         "🤖 AI模型选择",
         options=[
             ("real_esrgan", "🌟 Real-ESRGAN (通用推荐)"),
-            ("swinir", "🔬 SwinIR (细节结构专家)"),
-            ("gfpgan", "👤 GFPGAN (人脸修复专家)"),
-            ("codeformer", "🎭 CodeFormer (身份保持)"),
-            ("bsrgan", "🔧 BSRGAN (真实降质修复)"),
-            ("esrgan", "⚡ ESRGAN (平衡性能)")
+            ("real_esrgan_v2", "🔧 Real-ESRGAN V2 (结构优化)")
         ],
         format_func=lambda x: x[1],
         help="""选择最适合你图像类型的AI模型：
         
-🌟 Real-ESRGAN: 照片和自然图像的通用选择
-🔬 SwinIR: 最佳细节保持，适合文字、线条、结构图
-👤 GFPGAN: 专门修复人脸，保持面部细节
-🎭 CodeFormer: 最新人脸技术，保持身份特征
-🔧 BSRGAN: 处理真实世界的模糊、噪声图像
-⚡ ESRGAN: 速度与质量的平衡选择"""
+🌟 Real-ESRGAN: 照片和自然图像的通用选择，经过验证稳定可用
+🔧 Real-ESRGAN V2: 可能有更好的结构保持能力，适合细节图像
+
+注意：为了确保稳定性，目前只提供经过验证的模型"""
     )
     
     scale = st.sidebar.select_slider(
