@@ -3,52 +3,19 @@ import streamlit as st
 
 def render_upscale_sidebar():
     """渲染侧边栏控制面板"""
-    st.sidebar.header("⚙️ 放大设置")
+    st.sidebar.header("⚙️ SUPIR 高清放大设置")
     
-    # 模型选择
-    model_choice = st.sidebar.selectbox(
-        "🤖 AI模型选择",
-        options=[
-            ("real_esrgan", "🌟 Real-ESRGAN (通用推荐)"),
-            ("real_esrgan_v2", "🔧 Real-ESRGAN V2 (结构优化)")
-        ],
-        format_func=lambda x: x[1],
-        help="""选择最适合你图像类型的AI模型：
-        
-🌟 Real-ESRGAN: 照片和自然图像的通用选择，经过验证稳定可用
-🔧 Real-ESRGAN V2: 可能有更好的结构保持能力，适合细节图像
-
-注意：为了确保稳定性，目前只提供经过验证的模型"""
+    # 显示模型信息
+    st.sidebar.info("🚀 使用 SUPIR 模型\n先进的超分辨率技术，专门优化细节结构保持")
+    
+    # 输出格式选择
+    output_format = st.sidebar.selectbox(
+        "💾 输出格式",
+        options=["PNG", "JPEG"],
+        help="PNG无损保持最佳细节，JPEG文件更小"
     )
     
-    scale = st.sidebar.select_slider(
-        "🔎 放大倍数 (Scale)",
-        options=[2, 4],
-        value=4,
-        help="2x 速度更快，4x 细节更丰富"
-    )
-    
-    face_enhance = st.sidebar.checkbox(
-        "🙂 面部增强 (Face Enhance)",
-        value=False,
-        help="如果是人像模特图，建议开启此选项以修复面部细节"
-    )
-    
-    # 高级设置
-    with st.sidebar.expander("🔧 高级设置"):
-        preserve_structure = st.checkbox(
-            "📐 结构保护模式",
-            value=False,
-            help="启用后会优先保持原图的几何结构和线条清晰度"
-        )
-        
-        output_format = st.selectbox(
-            "💾 输出格式",
-            options=["JPEG", "PNG"],
-            help="PNG无损但文件大，JPEG有损但文件小"
-        )
-    
-    return model_choice[0], scale, face_enhance, preserve_structure, output_format
+    return output_format
 
 def render_comparison_result(original_file, result_url, download_data):
     """
