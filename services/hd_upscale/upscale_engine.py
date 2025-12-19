@@ -11,12 +11,12 @@ class UpscaleEngine:
         except Exception:
             self.client = None
 
-    def process_image(self, image_file, scale_factor=6):
+    def process_image(self, image_file, scale_factor=2):
         """
         使用Crystal Upscaler模型执行图片放大
         根据你提供的正确代码实现
         :param image_file: 上传的图片文件
-        :param scale_factor: 放大倍数 (默认6倍)
+        :param scale_factor: 放大倍数 (默认2倍)
         :return: 放大后的图片 URL (字符串)
         """
         if not self.client:
