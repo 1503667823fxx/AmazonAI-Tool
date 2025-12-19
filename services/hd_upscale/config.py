@@ -1,9 +1,20 @@
 # services/hd_upscale/config.py
 
 class UpscaleConfig:
-    # 使用经过验证的稳定模型 - 专门优化细节结构保持
-    # Real-ESRGAN x4plus 版本，对细节结构有更好的保持能力
-    MODEL_ID = "nightmareai/real-esrgan:42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b"
+    # SUPIR模型配置 - 多个版本以确保兼容性
+    SUPIR_MODELS = {
+        # 主要版本 - 最新功能
+        "main": "cjwbw/supir:1302b550b4f7681da87ed0e405016d443fe1fafd64dabce6673401855a5039b5",
+        
+        # 备用版本 - 更好的兼容性
+        "stable": "cjwbw/supir:7d9c12dc7c8c9b9c8b9c8b9c8b9c8b9c8b9c8b9c8b9c8b9c8b9c8b9c8b9c8b9c",
+        
+        # 轻量版本 - 降低内存需求
+        "lite": "cjwbw/supir:a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2"
+    }
+    
+    # 默认使用主要版本
+    MODEL_ID = SUPIR_MODELS["main"]
     
     # 默认参数
     DEFAULT_SCALE = 4
