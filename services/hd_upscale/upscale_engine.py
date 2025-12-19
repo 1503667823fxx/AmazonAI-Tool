@@ -11,23 +11,25 @@ class UpscaleEngine:
         except Exception:
             self.client = None
 
-    def process_image(self, image_file):
+    def process_image(self, image_file, scale_factor=6):
         """
-        使用SUPIR v0q模型执行图片放大
+        使用Crystal Upscaler模型执行图片放大
         根据你提供的正确代码实现
         :param image_file: 上传的图片文件
+        :param scale_factor: 放大倍数 (默认6倍)
         :return: 放大后的图片 URL (字符串)
         """
         if not self.client:
             raise ValueError("API Client 未初始化")
 
         try:
-            # 根据你提供的正确代码，SUPIR v0q只需要image参数
+            # 根据你提供的正确代码，Crystal Upscaler需要image和scale_factor参数
             input_params = {
-                "image": image_file
+                "image": image_file,
+                "scale_factor": scale_factor
             }
             
-            # 调用SUPIR v0q模型
+            # 调用Crystal Upscaler模型
             output = self.client.run(UpscaleConfig.MODEL_ID, input=input_params)
             
             # 根据你的参考代码处理输出
@@ -42,4 +44,4 @@ class UpscaleEngine:
                 return str(output)
 
         except Exception as e:
-            raise RuntimeError(f"SUPIR v0q模型调用失败: {str(e)}")
+            raise RuntimeError(f"Crystal Upscaler模型调用失败: {str(e)}")
