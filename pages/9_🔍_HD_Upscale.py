@@ -16,7 +16,7 @@ if "upscale_result_url" not in st.session_state:
     st.session_state["upscale_result_url"] = None
 
 engine = UpscaleEngine()
-scale_factor, enable_face_enhance = render_upscale_sidebar()
+model_type, scale_factor, enable_face_enhance, preserve_structure, output_format = render_upscale_sidebar()
 uploaded_file = st.file_uploader("📤 上传图片", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
@@ -33,15 +33,23 @@ if uploaded_file:
                 st.error("API Key 缺失")
             else:
                 try:
-                    with st.spinner("正在云端运算..."):
+                    with st.spinner(f"正在使用 {model_type.upper()} 模型云端运算..."):
                         # A. 获取 URL (现在肯定是字符串了)
-                        final_url = engine.process_image(uploaded_file, scale_factor, enable_face_enhance)
+                        final_url = engine.process_image(
+                            uploaded_file, 
+                            scale_factor, 
+                            enable_face_enhance,
+                            model_type,
+                            preserve_structure
+                        )
                         
                         # B. 存入状态
                         st.session_state["upscale_result_url"] = final_url
+                        st.session_state["output_format"] = output_format
+                        st.session_state["preserve_structure"] = preserve_structure
                         
                         # C. 触发缓存 (双重保险：强制 str)
-                        fast_convert_and_cache(str(final_url))
+                        fast_convert_and_cache(str(final_url), output_format, preserve_structure)
                         
                         st.rerun()
                 except Exception as e:
@@ -50,9 +58,11 @@ if uploaded_file:
     # 7. 结果展示
     if st.session_state["upscale_result_url"]:
         url = st.session_state["upscale_result_url"]
+        saved_format = st.session_state.get("output_format", "JPEG")
+        saved_preserve = st.session_state.get("preserve_structure", False)
         
         # [关键] 这里的 url 必须是字符串，缓存才能工作
-        cached_data = fast_convert_and_cache(str(url))
+        cached_data = fast_convert_and_cache(str(url), saved_format, saved_preserve)
         
         render_comparison_result(
             original_file=uploaded_file, 
