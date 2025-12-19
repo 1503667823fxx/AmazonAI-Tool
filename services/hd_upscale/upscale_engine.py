@@ -11,54 +11,38 @@ class UpscaleEngine:
         except Exception:
             self.client = None
 
-    def process_image(self, image_file, scale=4, face_enhance=False, model_type="real_esrgan", preserve_structure=False):
+    def process_image(self, image_file):
         """
-        执行图片放大
-        :param model_type: 模型类型选择
-        :param preserve_structure: 是否启用结构保护模式
-        :return: 放大后的图片 URL (绝对纯净的字符串)
+        使用SUPIR模型执行图片放大
+        :param image_file: 上传的图片文件
+        :return: 放大后的图片 URL (字符串)
         """
         if not self.client:
             raise ValueError("API Client 未初始化")
 
         try:
-            # 根据模型类型选择对应的模型ID
-            model_id = UpscaleConfig.MODELS.get(model_type, UpscaleConfig.MODELS["real_esrgan"])
-            
-            # 基础参数
+            # SUPIR模型的输入参数 (根据参考代码)
             input_params = {
-                "image": image_file,
+                "image": image_file
             }
             
-            # 根据不同模型调整参数
-            if model_type == "real_esrgan":
-                input_params["scale"] = scale
-                input_params["face_enhance"] = face_enhance
-                
-            elif model_type == "real_esrgan_v2":
-                # Real-ESRGAN V2 - 可能有更好的结构保持
-                input_params["scale"] = scale
-                input_params["face_enhance"] = face_enhance
-                
-            else:
-                # 默认参数
-                input_params["scale"] = scale
-                input_params["face_enhance"] = face_enhance
+            # 调用SUPIR模型
+            output = self.client.run(UpscaleConfig.MODEL_ID, input=input_params)
             
-            output = self.client.run(model_id, input=input_params)
-            
-            # --- [核心修复开始] ---
-            # 1. 如果是列表，取第一个元素
-            if isinstance(output, list):
-                if len(output) > 0:
-                    output = output[0]
+            # 处理输出结果
+            if hasattr(output, 'url'):
+                # 如果输出有url方法，调用它
+                return str(output.url())
+            elif isinstance(output, list) and len(output) > 0:
+                # 如果是列表，取第一个元素
+                result = output[0]
+                if hasattr(result, 'url'):
+                    return str(result.url())
                 else:
-                    return None
-            
-            # 2. [关键] 无论它是 FileOutput 对象还是什么，强制转为普通字符串
-            # Replicate 的 FileOutput 对象只要 str() 一下就会变回 URL
-            return str(output)
-            # --- [核心修复结束] ---
+                    return str(result)
+            else:
+                # 直接转换为字符串
+                return str(output)
 
         except Exception as e:
-            raise RuntimeError(f"放大服务调用失败: {str(e)}")
+            raise RuntimeError(f"SUPIR模型调用失败: {str(e)}")
