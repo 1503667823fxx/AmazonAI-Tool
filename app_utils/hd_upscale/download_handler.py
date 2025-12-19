@@ -8,13 +8,14 @@ from PIL import Image
 # show_spinner=False 防止在后台静默处理时界面乱跳
 # ttl=3600 缓存保留1小时，避免内存撑爆
 @st.cache_data(show_spinner=False, ttl=3600)
-def fast_convert_and_cache(image_url, output_format="PNG"):
+def fast_convert_and_cache(image_url, output_format="PNG", image_type="general"):
     """
     高速下载并转换处理模块。
     被 @st.cache_data 标记后，对同一个 URL，此函数只会运行一次。
     后续调用会直接从内存返回数据，实现'零延迟'下载。
     
     :param output_format: 输出格式 "JPEG" 或 "PNG"
+    :param image_type: 图像类型 "general", "structure", "mixed"
     """
     try:
         # 1. 容错处理：确保 URL 是字符串
@@ -48,8 +49,15 @@ def fast_convert_and_cache(image_url, output_format="PNG"):
                 background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
                 img = background
             
-            # 使用高质量JPEG
-            img.save(output_buffer, format="JPEG", quality=95, optimize=True)
+            # 根据图像类型调整JPEG质量
+            if image_type == "structure":
+                quality = 98  # 结构图像使用最高质量
+            elif image_type == "mixed":
+                quality = 97  # 混合图像使用高质量
+            else:
+                quality = 95  # 通用图像使用标准高质量
+                
+            img.save(output_buffer, format="JPEG", quality=quality, optimize=True)
         
         return output_buffer.getvalue()
 
