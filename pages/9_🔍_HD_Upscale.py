@@ -11,7 +11,7 @@ st.set_page_config(page_title="Amazon AI - HD Upscale", page_icon="🔍", layout
 if not auth.check_password():
     st.stop()
 
-st.title("🔍 SUPIR v0q 极致高清化 (专业超分辨率)")
+st.title("💎 Crystal Upscaler 极致高清化 (水晶级超分辨率)")
 
 if "upscale_result_url" not in st.session_state:
     st.session_state["upscale_result_url"] = None
@@ -19,7 +19,7 @@ if "upscale_result_url" not in st.session_state:
 engine = UpscaleEngine()
 
 # 渲染侧边栏并获取参数
-output_format = render_upscale_sidebar()
+scale_factor, output_format = render_upscale_sidebar()
 
 uploaded_file = st.file_uploader("📤 上传图片", type=["jpg", "jpeg", "png"])
 
@@ -47,21 +47,22 @@ if uploaded_file:
                 st.error("API Key 缺失")
             else:
                 try:
-                    with st.spinner("正在使用 SUPIR v0q 模型云端运算..."):
+                    with st.spinner(f"正在使用 Crystal Upscaler 模型云端运算... ({scale_factor}x放大)"):
                         # 使用预处理后的文件
                         processed_file = st.session_state.get("processed_file", uploaded_file)
                         
                         # A. 获取 URL
-                        final_url = engine.process_image(processed_file)
+                        final_url = engine.process_image(processed_file, scale_factor)
                         
                         # B. 存入状态
                         st.session_state["upscale_result_url"] = final_url
                         st.session_state["output_format"] = output_format
+                        st.session_state["scale_factor"] = scale_factor
                         
                         # C. 触发缓存
                         fast_convert_and_cache(str(final_url), output_format)
                         
-                        st.success("✅ SUPIR v0q 处理完成！")
+                        st.success(f"✅ Crystal Upscaler {scale_factor}x 处理完成！")
                         st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
