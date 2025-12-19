@@ -8,14 +8,13 @@ from PIL import Image
 # show_spinner=False 防止在后台静默处理时界面乱跳
 # ttl=3600 缓存保留1小时，避免内存撑爆
 @st.cache_data(show_spinner=False, ttl=3600)
-def fast_convert_and_cache(image_url, output_format="JPEG", preserve_structure=False):
+def fast_convert_and_cache(image_url, output_format="PNG"):
     """
     高速下载并转换处理模块。
     被 @st.cache_data 标记后，对同一个 URL，此函数只会运行一次。
     后续调用会直接从内存返回数据，实现'零延迟'下载。
     
     :param output_format: 输出格式 "JPEG" 或 "PNG"
-    :param preserve_structure: 是否保护结构细节
     """
     try:
         # 1. 容错处理：确保 URL 是字符串
@@ -49,9 +48,8 @@ def fast_convert_and_cache(image_url, output_format="JPEG", preserve_structure=F
                 background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
                 img = background
             
-            # 根据是否保护结构调整质量
-            quality = 98 if preserve_structure else 95
-            img.save(output_buffer, format="JPEG", quality=quality, optimize=True)
+            # 使用高质量JPEG
+            img.save(output_buffer, format="JPEG", quality=95, optimize=True)
         
         return output_buffer.getvalue()
 
