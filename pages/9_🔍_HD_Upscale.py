@@ -10,7 +10,7 @@ st.set_page_config(page_title="Amazon AI - HD Upscale", page_icon="🔍", layout
 if not auth.check_password():
     st.stop()
 
-st.title("🔍 SUPIR 极致高清化 (AI超分辨率)")
+st.title("🔍 图片极致高清化 (HD Upscale)")
 
 if "upscale_result_url" not in st.session_state:
     st.session_state["upscale_result_url"] = None
@@ -18,9 +18,17 @@ if "upscale_result_url" not in st.session_state:
 engine = UpscaleEngine()
 
 # 渲染侧边栏并获取参数
-output_format = render_upscale_sidebar()
+scale, face_enhance, image_type, output_format = render_upscale_sidebar()
 
 uploaded_file = st.file_uploader("📤 上传图片", type=["jpg", "jpeg", "png"])
+
+# 根据图像类型显示优化提示
+if image_type == "structure":
+    st.info("🔬 **结构图像模式**: 已优化用于处理包含文字、线条、图表的图像，将最大程度保持细节清晰度")
+elif image_type == "mixed":
+    st.info("🎯 **混合图像模式**: 已优化用于处理包含文字的照片，平衡自然纹理和结构细节")
+else:
+    st.info("🌟 **通用图像模式**: 适合处理照片、风景等自然图像")
 
 if uploaded_file:
     if "last_uploaded_name" not in st.session_state or st.session_state["last_uploaded_name"] != uploaded_file.name:
@@ -36,16 +44,17 @@ if uploaded_file:
                 st.error("API Key 缺失")
             else:
                 try:
-                    with st.spinner("正在使用 SUPIR 模型云端运算..."):
+                    with st.spinner("正在使用 Real-ESRGAN 模型云端运算..."):
                         # A. 获取 URL
-                        final_url = engine.process_image(uploaded_file)
+                        final_url = engine.process_image(uploaded_file, scale, face_enhance)
                         
                         # B. 存入状态
                         st.session_state["upscale_result_url"] = final_url
                         st.session_state["output_format"] = output_format
+                        st.session_state["image_type"] = image_type
                         
                         # C. 触发缓存
-                        fast_convert_and_cache(str(final_url), output_format)
+                        fast_convert_and_cache(str(final_url), output_format, image_type)
                         
                         st.rerun()
                 except Exception as e:
@@ -57,7 +66,8 @@ if uploaded_file:
         saved_format = st.session_state.get("output_format", "PNG")
         
         # [关键] 这里的 url 必须是字符串，缓存才能工作
-        cached_data = fast_convert_and_cache(str(url), saved_format)
+        saved_image_type = st.session_state.get("image_type", "general")
+        cached_data = fast_convert_and_cache(str(url), saved_format, saved_image_type)
         
         render_comparison_result(
             original_file=uploaded_file, 
