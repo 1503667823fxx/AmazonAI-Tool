@@ -11,7 +11,7 @@ st.set_page_config(page_title="Amazon AI - HD Upscale", page_icon="🔍", layout
 if not auth.check_password():
     st.stop()
 
-st.title("🔍 SUPIR 极致高清化 (AI超分辨率)")
+st.title("🔍 SUPIR v0q 极致高清化 (专业超分辨率)")
 
 if "upscale_result_url" not in st.session_state:
     st.session_state["upscale_result_url"] = None
@@ -19,7 +19,7 @@ if "upscale_result_url" not in st.session_state:
 engine = UpscaleEngine()
 
 # 渲染侧边栏并获取参数
-output_format, memory_mode, quality_preset = render_upscale_sidebar()
+output_format = render_upscale_sidebar()
 
 uploaded_file = st.file_uploader("📤 上传图片", type=["jpg", "jpeg", "png"])
 
@@ -47,47 +47,22 @@ if uploaded_file:
                 st.error("API Key 缺失")
             else:
                 try:
-                    # 根据设置选择处理模式
-                    use_memory_optimization = (memory_mode == "优化")
-                    
-                    spinner_text = f"正在使用 SUPIR 模型云端运算... ({quality_preset})"
-                    if use_memory_optimization:
-                        spinner_text += " [内存优化模式]"
-                    
-                    with st.spinner(spinner_text):
-                        try:
-                            # 使用预处理后的文件
-                            processed_file = st.session_state.get("processed_file", uploaded_file)
-                            
-                            # A. 获取 URL
-                            final_url = engine.process_image(processed_file, use_fallback=use_memory_optimization, quality_preset=quality_preset)
-                            
-                            # B. 存入状态
-                            st.session_state["upscale_result_url"] = final_url
-                            st.session_state["output_format"] = output_format
-                            
-                            # C. 触发缓存
-                            fast_convert_and_cache(str(final_url), output_format)
-                            
-                            st.success("✅ 处理完成！")
-                            st.rerun()
-                            
-                        except Exception as inner_e:
-                            # 如果标准模式失败，自动尝试内存优化模式
-                            if not use_memory_optimization and "memory" in str(inner_e).lower():
-                                st.warning("⚠️ 标准模式内存不足，自动切换到优化模式...")
-                                try:
-                                    processed_file = st.session_state.get("processed_file", uploaded_file)
-                                    final_url = engine.process_image(processed_file, use_fallback=True, quality_preset="快速")
-                                    st.session_state["upscale_result_url"] = final_url
-                                    st.session_state["output_format"] = output_format
-                                    fast_convert_and_cache(str(final_url), output_format)
-                                    st.success("✅ 内存优化模式处理完成！")
-                                    st.rerun()
-                                except Exception as fallback_e:
-                                    raise fallback_e
-                            else:
-                                raise inner_e
+                    with st.spinner("正在使用 SUPIR v0q 模型云端运算..."):
+                        # 使用预处理后的文件
+                        processed_file = st.session_state.get("processed_file", uploaded_file)
+                        
+                        # A. 获取 URL
+                        final_url = engine.process_image(processed_file)
+                        
+                        # B. 存入状态
+                        st.session_state["upscale_result_url"] = final_url
+                        st.session_state["output_format"] = output_format
+                        
+                        # C. 触发缓存
+                        fast_convert_and_cache(str(final_url), output_format)
+                        
+                        st.success("✅ SUPIR v0q 处理完成！")
+                        st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
 
