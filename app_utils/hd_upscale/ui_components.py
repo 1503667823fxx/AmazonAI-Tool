@@ -3,10 +3,18 @@ import streamlit as st
 
 def render_upscale_sidebar():
     """渲染侧边栏控制面板"""
-    st.sidebar.header("⚙️ SUPIR v0q 高清放大")
+    st.sidebar.header("⚙️ Crystal Upscaler 高清放大")
     
     # 显示模型信息
-    st.sidebar.info("🚀 使用 SUPIR v0q 模型\n专业超分辨率技术，专门解决细节结构模糊问题")
+    st.sidebar.info("💎 使用 Crystal Upscaler 模型\n专业超分辨率技术，专门优化细节结构和清晰度")
+    
+    # 放大倍数选择
+    scale_factor = st.sidebar.selectbox(
+        "🔎 放大倍数",
+        options=[2, 4, 6, 8],
+        index=2,  # 默认选择6倍
+        help="选择图片放大倍数，倍数越高细节越丰富但处理时间越长"
+    )
     
     # 输出格式选择
     output_format = st.sidebar.selectbox(
@@ -15,7 +23,7 @@ def render_upscale_sidebar():
         help="PNG无损保持最佳细节，JPEG文件更小"
     )
     
-    return output_format
+    return scale_factor, output_format
 
 def render_comparison_result(original_file, result_url, download_data):
     """
@@ -31,7 +39,12 @@ def render_comparison_result(original_file, result_url, download_data):
         st.image(original_file, use_container_width=True)
         
     with col2:
-        st.success(f"Upscaled (高清图)")
+        # 显示放大倍数信息
+        scale_info = st.session_state.get("scale_factor", "")
+        if scale_info:
+            st.success(f"Crystal Upscaled {scale_info}x (高清图)")
+        else:
+            st.success(f"Crystal Upscaled (高清图)")
         
         # 优先显示 URL (速度最快)，因为 download_data 可能还在后台处理
         # 容错：处理列表类型的 URL
