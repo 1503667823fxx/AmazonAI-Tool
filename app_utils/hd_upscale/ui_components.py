@@ -5,6 +5,18 @@ def render_upscale_sidebar():
     """渲染侧边栏控制面板"""
     st.sidebar.header("⚙️ 放大设置")
     
+    # 模型选择
+    model_choice = st.sidebar.selectbox(
+        "🤖 AI模型选择",
+        options=[
+            ("real_esrgan", "Real-ESRGAN (通用推荐)"),
+            ("esrgan", "ESRGAN (结构保持)"),
+            ("swinir", "SwinIR (细节专家)")
+        ],
+        format_func=lambda x: x[1],
+        help="不同模型适合不同类型的图像：\n- Real-ESRGAN: 照片和自然图像\n- ESRGAN: 更好的结构保持\n- SwinIR: 专门优化细节结构"
+    )
+    
     scale = st.sidebar.select_slider(
         "🔎 放大倍数 (Scale)",
         options=[2, 4],
@@ -18,7 +30,21 @@ def render_upscale_sidebar():
         help="如果是人像模特图，建议开启此选项以修复面部细节"
     )
     
-    return scale, face_enhance
+    # 高级设置
+    with st.sidebar.expander("🔧 高级设置"):
+        preserve_structure = st.checkbox(
+            "📐 结构保护模式",
+            value=False,
+            help="启用后会优先保持原图的几何结构和线条清晰度"
+        )
+        
+        output_format = st.selectbox(
+            "💾 输出格式",
+            options=["JPEG", "PNG"],
+            help="PNG无损但文件大，JPEG有损但文件小"
+        )
+    
+    return model_choice[0], scale, face_enhance, preserve_structure, output_format
 
 def render_comparison_result(original_file, result_url, download_data):
     """
