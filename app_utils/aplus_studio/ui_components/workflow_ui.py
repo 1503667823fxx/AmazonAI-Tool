@@ -47,7 +47,7 @@ class WorkflowUI:
         Returns:
             工作流状态信息
         """
-        st.markdown("### 🔄 A+页面制作工作流")
+        # 不在这里显示标题，由调用方负责显示
         
         # 获取或创建工作流会话
         session = self._get_or_create_session(session_id)
