@@ -47,6 +47,10 @@ class WorkflowUI:
         Returns:
             工作流状态信息
         """
+        # 添加调试标记
+        if st.session_state.get('aplus_debug_mode', False):
+            st.write("🔍 调试: WorkflowUI.render() 开始")
+        
         # 不在这里显示标题，由调用方负责显示
         
         # 获取或创建工作流会话
