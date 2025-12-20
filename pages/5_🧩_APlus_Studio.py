@@ -449,12 +449,12 @@ class RouteManager:
         if not session_id:
             return
         
-        workflow_engine = self.component_manager.get_component('workflow_engine')
-        if workflow_engine:
-            session = workflow_engine.get_session(session_id)
+        workflow_service = self.component_manager.get_component('workflow_service')
+        if workflow_service:
+            session = workflow_service.get_session(session_id)
             if session:
                 session.product_data = product_data
-                workflow_engine.update_session(session)
+                workflow_service.update_session(session)
     
     def _show_workflow_guidance(self):
         """显示工作流指引"""
