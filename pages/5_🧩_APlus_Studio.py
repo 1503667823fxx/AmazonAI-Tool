@@ -288,11 +288,8 @@ class RouteManager:
         """渲染工作流模式界面"""
         # 使用容器确保内容只渲染一次
         with st.container():
-            # 不在这里显示标题，让 WorkflowUI 组件自己管理
-            # st.subheader("🔄 A+页面制作工作流")
-            
             # 显示进度指示和帮助提示
-            # self._show_workflow_guidance()  # 暂时注释掉，测试是否有重复标题
+            self._show_workflow_guidance()
             
             workflow_ui = self.component_manager.get_ui_component('workflow_ui')
             if not workflow_ui:
@@ -302,20 +299,15 @@ class RouteManager:
                 )
                 return
             
-            # 添加更多调试信息
-            st.write("🔍 无条件调试: 准备调用 workflow_ui.render()")
-            
             # 使用性能优化器测量渲染时间
             performance_optimizer = st.session_state.get('aplus_performance_optimizer')
             
             if performance_optimizer:
                 @performance_optimizer.measure_operation_time("workflow_render")
                 def render_workflow():
-                    st.write("🔍 无条件调试: 在 render_workflow() 内部")
                     return workflow_ui.render()
             else:
                 def render_workflow():
-                    st.write("🔍 无条件调试: 在 render_workflow() 内部 (无性能优化器)")
                     return workflow_ui.render()
             
             # 渲染工作流界面
