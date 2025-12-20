@@ -95,6 +95,25 @@ class WorkflowService(IWorkflowEngine):
             print(f"删除会话失败: {e}")
             return False
     
+    def next_step(self, session_id: str) -> bool:
+        """进入下一步"""
+        return self.advance_step(session_id)
+    
+    def previous_step(self, session_id: str) -> bool:
+        """返回上一步"""
+        return self.go_back_step(session_id)
+    
+    def complete_workflow(self, session_id: str) -> bool:
+        """完成工作流"""
+        return self.complete_session(session_id)
+    
+    def save_progress(self, session_id: str) -> bool:
+        """保存进度"""
+        session = self.get_session(session_id)
+        if not session:
+            return False
+        return self.update_session(session)
+    
     def advance_step(self, session_id: str) -> bool:
         """推进到下一步"""
         session = self.get_session(session_id)
@@ -286,7 +305,34 @@ class StepProcessorService(IStepProcessor):
             4: self._handle_result_generation
         }
     
-    def process_step(self, session: WorkflowSession, step_data: Dict[str, Any]) -> Dict[str, Any]:
+    def process_step(self, session: WorkflowSession, step_data: Dict[str, Any]) -> bool:
+        """处理工作流步骤"""
+        current_step = session.current_step
+        
+        if current_step in self.step_handlers:
+            result = self.step_handlers[current_step](session, step_data)
+            return result.get("success", False)
+        else:
+            return False
+    
+    def validate_step(self, session: WorkflowSession, step_number: int) -> bool:
+        """验证步骤完成条件"""
+        if step_number == 0:  # 模板选择
+            return bool(session.template_id)
+        elif step_number == 1:  # 产品输入
+            return bool(session.product_data and 
+                       session.product_data.name and 
+                       session.product_data.category)
+        elif step_number == 2:  # 定制选项
+            return bool(session.customization_options.get("color_scheme"))
+        elif step_number == 3:  # AI处理
+            return bool(session.step_data.get("ai_processing_started"))
+        elif step_number == 4:  # 结果生成
+            return bool(session.step_data.get("result_generated"))
+        else:
+            return False
+    
+    def process_step_detailed(self, session: WorkflowSession, step_data: Dict[str, Any]) -> Dict[str, Any]:
         """处理工作流步骤"""
         current_step = session.current_step
         
