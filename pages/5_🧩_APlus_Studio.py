@@ -30,16 +30,62 @@ except ImportError:
             if solutions:
                 for solution in solutions:
                     st.warning(f"💡 {solution}")
+        
+        def show_warning_feedback(self, message, actions=None):
+            st.warning(f"⚠️ {message}")
+            if actions:
+                for action in actions:
+                    if isinstance(action, dict) and "label" in action:
+                        if st.button(action["label"]):
+                            if "callback" in action:
+                                action["callback"]()
+        
+        def show_tips_and_hints(self, tips):
+            with st.expander("💡 使用提示", expanded=False):
+                for tip in tips:
+                    st.info(f"• {tip}")
+        
+        def show_step_guidance(self, current_step, total_steps, step_name, step_desc, completion_criteria=None):
+            st.info(f"📍 步骤 {current_step}/{total_steps}: {step_name}")
+            st.write(step_desc)
+            if completion_criteria:
+                with st.expander("完成标准", expanded=False):
+                    for criteria in completion_criteria:
+                        st.write(f"• {criteria}")
+            return None
+        
+        def show_keyboard_shortcuts(self, shortcuts):
+            with st.expander("⌨️ 键盘快捷键", expanded=False):
+                for key, desc in shortcuts.items():
+                    st.write(f"**{key}**: {desc}")
     
     class PerformanceOptimizer:
-        def __init__(self): pass
+        def __init__(self): 
+            self.metrics = {}
+        
         def measure_operation_time(self, name): 
-            def decorator(func): return func
+            def decorator(func): 
+                return func
             return decorator
+        
+        def show_performance_metrics(self):
+            if self.metrics:
+                st.info("📊 性能指标: " + ", ".join([f"{k}: {v}" for k, v in self.metrics.items()]))
+            else:
+                st.info("📊 性能监控已启用")
     
     class ResponsiveLayoutManager:
         def __init__(self): pass
-        def optimize_mobile_layout(self): pass
+        
+        def optimize_mobile_layout(self): 
+            pass
+        
+        def create_responsive_columns(self, desktop_ratios=None, mobile_ratios=None):
+            # 简化版本，直接返回标准列布局
+            if desktop_ratios:
+                return st.columns(desktop_ratios)
+            else:
+                return st.columns([1, 1, 1])
 
 # 全局状态管理类
 class APlusStudioState:
@@ -256,9 +302,13 @@ class RouteManager:
         # 使用性能优化器测量渲染时间
         performance_optimizer = st.session_state.get('aplus_performance_optimizer')
         
-        @performance_optimizer.measure_operation_time("workflow_render")
-        def render_workflow():
-            return workflow_ui.render()
+        if performance_optimizer:
+            @performance_optimizer.measure_operation_time("workflow_render")
+            def render_workflow():
+                return workflow_ui.render()
+        else:
+            def render_workflow():
+                return workflow_ui.render()
         
         # 渲染工作流界面
         with st.spinner("正在加载工作流界面..."):
@@ -269,7 +319,7 @@ class RouteManager:
             self._handle_workflow_result(workflow_result)
         
         # 显示性能指标（开发模式）
-        if st.session_state.get('aplus_debug_mode', False):
+        if st.session_state.get('aplus_debug_mode', False) and performance_optimizer:
             performance_optimizer.show_performance_metrics()
     
     def render_classic_mode(self):
