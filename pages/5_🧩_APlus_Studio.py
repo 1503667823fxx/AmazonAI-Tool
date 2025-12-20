@@ -164,23 +164,12 @@ class ComponentManager:
             return True
         
         try:
-            # 先只导入 TemplateService 进行测试
-            print("开始导入核心组件...")
-            
-            try:
-                from services.aplus_studio import TemplateService
-                print("✓ TemplateService 导入成功")
-            except Exception as e:
-                raise ImportError(f"TemplateService 导入失败: {e}")
-            
-            # 暂时注释其他服务的导入
-            # CategoryService = None
-            # SearchService = None
-            # WorkflowService = None
-            # StepProcessorService = None
-            # GeminiService = None
-            # ImageCompositorService = None
-            # FileService = None
+            # 导入核心组件
+            from services.aplus_studio import (
+                TemplateService, CategoryService, SearchService,
+                WorkflowService, StepProcessorService,
+                GeminiService, ImageCompositorService, FileService
+            )
             
             # 导入UI组件
             from app_utils.aplus_studio.ui_components.template_library_ui import TemplateLibraryUI
@@ -188,21 +177,18 @@ class ComponentManager:
             from app_utils.aplus_studio.ui_components.workflow_ui import WorkflowUI
             from app_utils.aplus_studio.ui_components.ai_status_ui import AIStatusUI
             
-            # 初始化核心组件 - 暂时只初始化 TemplateService
+            # 初始化核心组件
             self.components['template_service'] = TemplateService()
-            print("✓ TemplateService 初始化成功")
-            
-            # 暂时注释其他组件
-            # self.components['category_service'] = CategoryService()
-            # self.components['search_service'] = SearchService(
-            #     self.components['template_service'], 
-            #     self.components['category_service']
-            # )
-            # self.components['workflow_service'] = WorkflowService()
-            # self.components['step_processor_service'] = StepProcessorService()
-            # self.components['file_service'] = FileService()
-            # self.components['gemini_service'] = GeminiService()
-            # self.components['image_compositor_service'] = ImageCompositorService()
+            self.components['category_service'] = CategoryService()
+            self.components['search_service'] = SearchService(
+                self.components['template_service'], 
+                self.components['category_service']
+            )
+            self.components['workflow_service'] = WorkflowService()
+            self.components['step_processor_service'] = StepProcessorService()
+            self.components['file_service'] = FileService()
+            self.components['gemini_service'] = GeminiService()
+            self.components['image_compositor_service'] = ImageCompositorService()
             
             # 初始化UI组件
             self.ui_components['template_ui'] = TemplateLibraryUI(
