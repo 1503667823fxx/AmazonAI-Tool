@@ -295,7 +295,7 @@ class RouteManager:
             st.subheader("🔄 A+页面制作工作流")
             
             # 显示进度指示和帮助提示
-            self._show_workflow_guidance()
+            # self._show_workflow_guidance()  # 暂时注释掉，测试是否有重复标题
             
             workflow_ui = self.component_manager.get_ui_component('workflow_ui')
             if not workflow_ui:
