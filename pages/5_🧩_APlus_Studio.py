@@ -317,12 +317,12 @@ class RouteManager:
                     return workflow_ui.render()
             
             # 渲染工作流界面
-            # with st.spinner("正在加载工作流界面..."):
-            #     workflow_result = render_workflow()
+            with st.spinner("正在加载工作流界面..."):
+                workflow_result = render_workflow()
             
             # 暂时注释掉工作流UI渲染，测试标题重复问题
-            st.info("🔧 工作流UI已暂时禁用，正在调试标题重复问题")
-            workflow_result = None
+            # st.info("🔧 工作流UI已暂时禁用，正在调试标题重复问题")
+            # workflow_result = None
             
             # 处理工作流结果
             if workflow_result:
