@@ -47,48 +47,24 @@ class WorkflowUI:
         Returns:
             工作流状态信息
         """
-        # 无条件显示调试信息
-        st.write("🔍 DEBUG: WorkflowUI.render() 被调用")
-        st.write(f"🔍 DEBUG: 调试模式状态: {st.session_state.get('aplus_debug_mode', False)}")
-        
         # 在这里显示标题
         st.subheader("🔄 A+页面制作工作流")
         
-        # 添加调试标记
-        if st.session_state.get('aplus_debug_mode', False):
-            st.write("🔍 调试: WorkflowUI.render() 开始")
-        
-        # 标题由此组件负责显示
-        
         # 获取或创建工作流会话
         session = self._get_or_create_session(session_id)
-        
-        if st.session_state.get('aplus_debug_mode', False):
-            st.write("🔍 调试: 会话创建完成")
         
         if not session:
             st.error("工作流会话创建失败")
             return {"status": "error"}
         
         # 渲染进度条
-        if st.session_state.get('aplus_debug_mode', False):
-            st.write("🔍 调试: 准备渲染进度条")
         self._render_progress_bar(session)
-        
-        if st.session_state.get('aplus_debug_mode', False):
-            st.write("🔍 调试: 进度条渲染完成，准备渲染步骤导航")
         
         # 渲染步骤导航
         self._render_step_navigation(session)
         
-        if st.session_state.get('aplus_debug_mode', False):
-            st.write("🔍 调试: 步骤导航渲染完成，准备渲染当前步骤")
-        
         # 渲染当前步骤内容
         step_result = self._render_current_step(session)
-        
-        if st.session_state.get('aplus_debug_mode', False):
-            st.write("🔍 调试: 当前步骤渲染完成")
         
         # 渲染控制按钮
         control_result = self._render_control_buttons(session)
