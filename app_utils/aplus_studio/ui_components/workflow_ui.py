@@ -56,18 +56,32 @@ class WorkflowUI:
         # 获取或创建工作流会话
         session = self._get_or_create_session(session_id)
         
+        if st.session_state.get('aplus_debug_mode', False):
+            st.write("🔍 调试: 会话创建完成")
+        
         if not session:
             st.error("工作流会话创建失败")
             return {"status": "error"}
         
         # 渲染进度条
+        if st.session_state.get('aplus_debug_mode', False):
+            st.write("🔍 调试: 准备渲染进度条")
         self._render_progress_bar(session)
+        
+        if st.session_state.get('aplus_debug_mode', False):
+            st.write("🔍 调试: 进度条渲染完成，准备渲染步骤导航")
         
         # 渲染步骤导航
         self._render_step_navigation(session)
         
+        if st.session_state.get('aplus_debug_mode', False):
+            st.write("🔍 调试: 步骤导航渲染完成，准备渲染当前步骤")
+        
         # 渲染当前步骤内容
         step_result = self._render_current_step(session)
+        
+        if st.session_state.get('aplus_debug_mode', False):
+            st.write("🔍 调试: 当前步骤渲染完成")
         
         # 渲染控制按钮
         control_result = self._render_control_buttons(session)
