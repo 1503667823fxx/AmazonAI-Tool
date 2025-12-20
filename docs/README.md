@@ -2,16 +2,11 @@
 
 ## 文档结构
 
-### 用户指南
-- **[Magic Canvas 使用说明](magic_canvas_user_guide.md)** - Magic Canvas AI重绘工具的详细使用指南
-
 ### 技术文档
-- **[Video Studio 模板系统文档](video_studio_template_system.md)** - Video Studio 模板系统的完整技术文档
-- **[Video Studio 依赖安装指南](video_studio_dependencies.md)** - Video Studio 所需依赖的安装和配置指南
-- **[API 配置指南](api_configuration.md)** - AI API 的配置和使用说明 (Gemini, Luma 等)
+- **[API 配置指南](api_configuration.md)** - AI API 的配置和使用说明
 - **[Streamlit Cloud 部署指南](streamlit_cloud_deployment.md)** - 云端部署的专门指南和故障排除
-- **[导入问题修复总结](import_fixes_summary.md)** - 已修复的导入和依赖问题总结
-- **[Bug 修复记录](BUG_FIX_LOG.md)** - 项目开发过程中的Bug修复记录
+- **[模板搜索指南](template_search_guide.md)** - 模板搜索功能使用指南
+- **[APlus 模板指南](aplus_template_guide.md)** - APlus 模板系统使用指南
 
 ### 归档文档
 - **[archive/](archive/)** - 项目开发过程中的历史文档和报告
@@ -20,15 +15,11 @@
 
 ## 核心组件文档
 
-### Video Studio 核心组件
-详细的组件文档位于各组件目录下：
-- `app_utils/video_studio/README.md` - Video Studio 核心组件说明
-
-### 项目规范
+### 模板库管理系统
 项目的完整规范文档位于：
-- `.kiro/specs/video-studio-redesign/requirements.md` - 需求文档
-- `.kiro/specs/video-studio-redesign/design.md` - 设计文档  
-- `.kiro/specs/video-studio-redesign/tasks.md` - 任务列表
+- `.kiro/specs/template-library-management/requirements.md` - 需求文档
+- `.kiro/specs/template-library-management/design.md` - 设计文档  
+- `.kiro/specs/template-library-management/tasks.md` - 任务列表
 
 ## 文档维护
 
