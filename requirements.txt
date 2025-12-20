@@ -20,6 +20,15 @@ pytest              # 测试框架
 aiohttp             # 异步HTTP客户端，用于模型适配器API调用
 psutil              # 系统性能监控
 
+# Template Library Management System 依赖
+pydantic>=2.0.0     # 数据验证和序列化
+PyYAML>=6.0         # YAML配置文件处理
+jsonschema>=4.0.0   # JSON Schema验证
+rich>=13.0.0        # 终端美化输出
+click>=8.0.0        # CLI框架
+tqdm>=4.65.0        # 进度条
+pathlib2>=2.3.0     # 路径处理增强
+
 
 
 
