@@ -47,6 +47,10 @@ class WorkflowUI:
         Returns:
             工作流状态信息
         """
+        # 无条件显示调试信息
+        st.write("🔍 DEBUG: WorkflowUI.render() 被调用")
+        st.write(f"🔍 DEBUG: 调试模式状态: {st.session_state.get('aplus_debug_mode', False)}")
+        
         # 添加调试标记
         if st.session_state.get('aplus_debug_mode', False):
             st.write("🔍 调试: WorkflowUI.render() 开始")
