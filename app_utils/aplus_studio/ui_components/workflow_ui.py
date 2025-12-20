@@ -51,11 +51,14 @@ class WorkflowUI:
         st.write("🔍 DEBUG: WorkflowUI.render() 被调用")
         st.write(f"🔍 DEBUG: 调试模式状态: {st.session_state.get('aplus_debug_mode', False)}")
         
+        # 在这里显示标题
+        st.subheader("🔄 A+页面制作工作流")
+        
         # 添加调试标记
         if st.session_state.get('aplus_debug_mode', False):
             st.write("🔍 调试: WorkflowUI.render() 开始")
         
-        # 不在这里显示标题，由调用方负责显示
+        # 标题由此组件负责显示
         
         # 获取或创建工作流会话
         session = self._get_or_create_session(session_id)
