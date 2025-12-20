@@ -1,0 +1,31 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2024-01-01T00:00:00Z",
+  "categories": {
+    "electronics": {
+      "name": "电子产品",
+      "template_count": 0,
+      "templates": []
+    },
+    "beauty": {
+      "name": "美妆护肤", 
+      "template_count": 0,
+      "templates": []
+    },
+    "home": {
+      "name": "家居用品",
+      "template_count": 0,
+      "templates": []
+    },
+    "seasonal": {
+      "name": "季节性",
+      "template_count": 0,
+      "templates": []
+    }
+  },
+  "metadata": {
+    "created_at": "2024-01-01T00:00:00Z",
+    "index_type": "category",
+    "description": "分类索引，按分类组织模板"
+  }
+}

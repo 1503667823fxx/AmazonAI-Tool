@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2024-01-01T00:00:00Z",
+  "total_templates": 0,
+  "index": {},
+  "metadata": {
+    "created_at": "2024-01-01T00:00:00Z",
+    "index_type": "search",
+    "description": "搜索索引，用于快速查找模板"
+  }
+}

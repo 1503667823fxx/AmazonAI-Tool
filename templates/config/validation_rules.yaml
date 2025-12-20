@@ -1,0 +1,78 @@
+validation_rules:
+  template_naming:
+    pattern: "^[a-z][a-z0-9_]*[a-z0-9]$"
+    min_length: 3
+    max_length: 50
+    description: "模板名称必须以字母开头，只能包含小写字母、数字和下划线"
+    
+  image_validation:
+    formats:
+      allowed: ["jpg", "jpeg", "png"]
+      preferred: "jpg"
+    dimensions:
+      desktop:
+        width: 1464
+        height: 600
+        tolerance: 0  # 严格匹配
+      mobile:
+        width: 600
+        height: 450
+        tolerance: 0  # 严格匹配
+      preview:
+        width: 300
+        height: 200
+        tolerance: 5  # 允许5像素误差
+    file_size:
+      max_size_mb: 5
+      recommended_size_mb: 2
+      
+  config_validation:
+    required_fields:
+      - "id"
+      - "name"
+      - "category"
+      - "template_type"
+      - "status"
+      - "description"
+    
+    field_constraints:
+      id:
+        pattern: "^[a-z][a-z0-9_]*[a-z0-9]$"
+        max_length: 50
+      name:
+        max_length: 100
+        min_length: 2
+      description:
+        max_length: 500
+        min_length: 10
+      tags:
+        max_count: 20
+        max_length_per_tag: 30
+      keywords:
+        max_count: 50
+        max_length_per_keyword: 20
+        
+  directory_validation:
+    required_structure:
+      files:
+        - "template.json"
+        - "README.md" 
+        - "preview.jpg"
+      directories:
+        - "desktop"
+        - "mobile"
+    
+    file_permissions:
+      read_only: ["template.json"]
+      read_write: ["README.md"]
+      
+  quality_thresholds:
+    completeness_score:
+      minimum: 70
+      recommended: 85
+    design_quality:
+      minimum: 60
+      recommended: 80
+    usability_score:
+      minimum: 70
+      recommended: 85

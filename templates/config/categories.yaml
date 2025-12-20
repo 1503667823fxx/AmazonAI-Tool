@@ -1,0 +1,60 @@
+categories:
+  electronics:
+    name: "电子产品"
+    description: "数码设备、智能产品、电子配件等"
+    subcategories:
+      - mobile_accessories  # 手机配件
+      - audio_devices      # 音频设备
+      - smart_home         # 智能家居
+      - gaming_gear        # 游戏设备
+    
+  beauty:
+    name: "美妆护肤"
+    description: "化妆品、护肤品、美容工具等"
+    subcategories:
+      - skincare          # 护肤品
+      - makeup            # 化妆品
+      - beauty_tools      # 美容工具
+      - fragrance         # 香水香氛
+    
+  home:
+    name: "家居用品"
+    description: "家具、装饰、生活用品等"
+    subcategories:
+      - furniture         # 家具
+      - decoration        # 装饰品
+      - kitchen           # 厨房用品
+      - storage           # 收纳用品
+    
+  seasonal:
+    name: "季节性"
+    description: "节日、季节主题模板"
+    subcategories:
+      - spring            # 春季
+      - summer            # 夏季
+      - autumn            # 秋季
+      - winter            # 冬季
+      - holidays          # 节日主题
+
+style_tags:
+  design_style:
+    - modern      # 现代
+    - vintage     # 复古
+    - minimal     # 简约
+    - luxury      # 奢华
+    - casual      # 休闲
+    - professional # 专业
+  
+  color_tone:
+    - warm        # 暖色调
+    - cool        # 冷色调
+    - neutral     # 中性色调
+    - vibrant     # 鲜艳色调
+    - monochrome  # 单色调
+  
+  target_audience:
+    - young_adults    # 年轻人
+    - professionals   # 专业人士
+    - families        # 家庭用户
+    - seniors         # 老年人
+    - tech_enthusiasts # 科技爱好者

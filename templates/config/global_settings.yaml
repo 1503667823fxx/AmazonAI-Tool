@@ -1,0 +1,38 @@
+global_settings:
+  version: "1.0.0"
+  schema_version: "1.0"
+  
+  system_config:
+    default_template_type: "standard"
+    default_status: "draft"
+    auto_generate_metadata: true
+    auto_validate_on_save: true
+    
+  file_management:
+    backup_enabled: true
+    backup_retention_days: 30
+    auto_cleanup_temp_files: true
+    max_template_count: 1000
+    
+  indexing:
+    auto_rebuild_index: true
+    index_update_interval_minutes: 5
+    search_cache_enabled: true
+    search_cache_ttl_minutes: 30
+    
+  quality_control:
+    auto_quality_check: true
+    quality_check_on_publish: true
+    min_quality_score_for_publish: 75
+    
+  logging:
+    log_level: "INFO"
+    log_file: "logs/template_system.log"
+    max_log_size_mb: 100
+    log_retention_days: 7
+    
+  performance:
+    image_processing_threads: 4
+    batch_operation_chunk_size: 50
+    cache_enabled: true
+    cache_size_mb: 256

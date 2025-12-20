@@ -1,0 +1,95 @@
+template_types:
+  standard:
+    name: "标准模板"
+    description: "通用的A+页面模板，包含完整的桌面和移动版本"
+    required_sections:
+      - header
+      - features
+      - gallery
+      - specs
+    optional_sections:
+      - hero
+      - lifestyle
+      - ingredients
+      - results
+      - usage
+    dimensions:
+      desktop:
+        width: 1464
+        height: 600
+      mobile:
+        width: 600
+        height: 450
+      preview:
+        width: 300
+        height: 200
+    
+  minimal:
+    name: "简约模板"
+    description: "简化版模板，适合快速创建"
+    required_sections:
+      - header
+      - features
+    optional_sections:
+      - gallery
+      - specs
+    dimensions:
+      desktop:
+        width: 1464
+        height: 600
+      mobile:
+        width: 600
+        height: 450
+      preview:
+        width: 300
+        height: 200
+    
+  premium:
+    name: "高级模板"
+    description: "功能丰富的高级模板，包含更多定制选项"
+    required_sections:
+      - hero
+      - header
+      - features
+      - gallery
+      - specs
+      - lifestyle
+    optional_sections:
+      - ingredients
+      - results
+      - usage
+    dimensions:
+      desktop:
+        width: 1464
+        height: 600
+      mobile:
+        width: 600
+        height: 450
+      preview:
+        width: 300
+        height: 200
+
+validation_rules:
+  file_naming:
+    pattern: "^[a-z0-9_]+$"
+    description: "文件名只能包含小写字母、数字和下划线"
+  
+  image_formats:
+    allowed: ["jpg", "jpeg", "png"]
+    preferred: "jpg"
+  
+  config_format:
+    type: "json"
+    schema_version: "1.0"
+  
+  directory_structure:
+    required_files:
+      - "template.json"
+      - "README.md"
+      - "preview.jpg"
+    required_directories:
+      - "desktop"
+      - "mobile"
+    optional_directories:
+      - "docs"
+      - "metadata"
