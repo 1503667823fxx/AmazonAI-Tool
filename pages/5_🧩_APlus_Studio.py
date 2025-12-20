@@ -286,41 +286,47 @@ class RouteManager:
     
     def render_workflow_mode(self):
         """渲染工作流模式界面"""
-        st.subheader("🔄 A+页面制作工作流")
-        
-        # 显示进度指示和帮助提示
-        self._show_workflow_guidance()
-        
-        workflow_ui = self.component_manager.get_ui_component('workflow_ui')
-        if not workflow_ui:
-            self.state_manager.set_error(
-                "工作流UI组件未初始化", 
-                ["检查组件导入", "重新加载页面", "联系技术支持"]
-            )
-            return
-        
-        # 使用性能优化器测量渲染时间
-        performance_optimizer = st.session_state.get('aplus_performance_optimizer')
-        
-        if performance_optimizer:
-            @performance_optimizer.measure_operation_time("workflow_render")
-            def render_workflow():
-                return workflow_ui.render()
-        else:
-            def render_workflow():
-                return workflow_ui.render()
-        
-        # 渲染工作流界面
-        with st.spinner("正在加载工作流界面..."):
-            workflow_result = render_workflow()
-        
-        # 处理工作流结果
-        if workflow_result:
-            self._handle_workflow_result(workflow_result)
-        
-        # 显示性能指标（开发模式）
-        if st.session_state.get('aplus_debug_mode', False) and performance_optimizer:
-            performance_optimizer.show_performance_metrics()
+        # 使用容器确保内容只渲染一次
+        with st.container():
+            # 添加调试信息
+            if st.session_state.get('aplus_debug_mode', False):
+                st.write("🔍 调试: 渲染工作流模式标题")
+            
+            st.subheader("🔄 A+页面制作工作流")
+            
+            # 显示进度指示和帮助提示
+            self._show_workflow_guidance()
+            
+            workflow_ui = self.component_manager.get_ui_component('workflow_ui')
+            if not workflow_ui:
+                self.state_manager.set_error(
+                    "工作流UI组件未初始化", 
+                    ["检查组件导入", "重新加载页面", "联系技术支持"]
+                )
+                return
+            
+            # 使用性能优化器测量渲染时间
+            performance_optimizer = st.session_state.get('aplus_performance_optimizer')
+            
+            if performance_optimizer:
+                @performance_optimizer.measure_operation_time("workflow_render")
+                def render_workflow():
+                    return workflow_ui.render()
+            else:
+                def render_workflow():
+                    return workflow_ui.render()
+            
+            # 渲染工作流界面
+            with st.spinner("正在加载工作流界面..."):
+                workflow_result = render_workflow()
+            
+            # 处理工作流结果
+            if workflow_result:
+                self._handle_workflow_result(workflow_result)
+            
+            # 显示性能指标（开发模式）
+            if st.session_state.get('aplus_debug_mode', False) and performance_optimizer:
+                performance_optimizer.show_performance_metrics()
     
     def render_classic_mode(self):
         """渲染经典三列布局模式"""
