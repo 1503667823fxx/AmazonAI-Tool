@@ -305,15 +305,20 @@ class RouteManager:
                 )
                 return
             
+            # 添加更多调试信息
+            st.write("🔍 无条件调试: 准备调用 workflow_ui.render()")
+            
             # 使用性能优化器测量渲染时间
             performance_optimizer = st.session_state.get('aplus_performance_optimizer')
             
             if performance_optimizer:
                 @performance_optimizer.measure_operation_time("workflow_render")
                 def render_workflow():
+                    st.write("🔍 无条件调试: 在 render_workflow() 内部")
                     return workflow_ui.render()
             else:
                 def render_workflow():
+                    st.write("🔍 无条件调试: 在 render_workflow() 内部 (无性能优化器)")
                     return workflow_ui.render()
             
             # 渲染工作流界面
