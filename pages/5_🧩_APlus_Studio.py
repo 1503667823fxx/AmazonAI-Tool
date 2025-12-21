@@ -165,7 +165,7 @@ def render_selling_points_analysis_tab(controller: APlusController):
     st.header("💡 产品卖点分析")
     st.caption("上传产品图片，让AI智能分析产品卖点并生成营销建议")
     
-    # 检查是否有基础产品分析
+    # 检查当前会话状态
     session = controller.state_manager.get_current_session()
     
     col1, col2 = st.columns([1, 1])
@@ -183,24 +183,24 @@ def render_selling_points_analysis_tab(controller: APlusController):
         )
         
         if uploaded_files:
-            st.write(f"已上传 {len(uploaded_files)} 张图片")
-            
-            # 显示上传的图片预览
-            if len(uploaded_files) <= 4:
-                cols = st.columns(len(uploaded_files))
-                for i, file in enumerate(uploaded_files):
-                    with cols[i]:
-                        image = Image.open(file)
-                        st.image(image, caption=f"图片 {i+1}", use_container_width=True)
-            else:
-                # 如果图片太多，显示网格
-                for i in range(0, len(uploaded_files), 3):
-                    cols = st.columns(3)
-                    for j in range(3):
-                        if i + j < len(uploaded_files):
-                            with cols[j]:
-                                image = Image.open(uploaded_files[i + j])
-                                st.image(image, caption=f"图片 {i+j+1}", use_container_width=True)
+            # 图片预览 - 默认收起
+            with st.expander(f"📷 已上传 {len(uploaded_files)} 张图片", expanded=False):
+                # 显示上传的图片预览 - 紧凑布局
+                if len(uploaded_files) <= 3:
+                    cols = st.columns(len(uploaded_files))
+                    for i, file in enumerate(uploaded_files):
+                        with cols[i]:
+                            image = Image.open(file)
+                            st.image(image, caption=f"图片 {i+1}", use_container_width=True)
+                else:
+                    # 如果图片多，使用2列布局
+                    for i in range(0, len(uploaded_files), 2):
+                        cols = st.columns(2)
+                        for j in range(2):
+                            if i + j < len(uploaded_files):
+                                with cols[j]:
+                                    image = Image.open(uploaded_files[i + j])
+                                    st.image(image, caption=f"图片 {i+j+1}", use_container_width=True)
             
             # 分析按钮
             if st.button("🔍 开始卖点分析", type="primary", use_container_width=True):
@@ -230,25 +230,14 @@ def render_selling_points_analysis_tab(controller: APlusController):
         else:
             st.info("👆 请上传产品图片开始分析")
             
-            # 显示示例
-            with st.expander("💡 分析示例", expanded=False):
+            # 功能说明 - 紧凑版本
+            with st.expander("💡 功能说明", expanded=False):
                 st.markdown("""
-                **AI卖点分析将识别：**
-                
-                🎯 **核心卖点**
-                - 产品的主要功能特点
-                - 独特的设计优势
-                - 材质和工艺亮点
-                
-                🎨 **视觉特征**
-                - 颜色搭配和美学风格
-                - 产品形态和设计语言
-                - 使用场景和氛围
-                
-                💼 **营销建议**
-                - 目标用户群体定位
-                - 情感触发点分析
-                - A+页面展示建议
+                **AI将分析：**
+                - 🎯 核心卖点识别
+                - 🎨 视觉特征分析  
+                - 💼 营销建议生成
+                - 🏠 使用场景定位
                 """)
     
     with col2:
@@ -257,27 +246,178 @@ def render_selling_points_analysis_tab(controller: APlusController):
         # 显示分析结果
         if 'selling_points_result' in st.session_state:
             result = st.session_state['selling_points_result']
-            render_selling_points_results(result)
+            render_selling_points_results_compact(result)
         else:
             st.info("等待图片上传和分析...")
             
-            # 显示功能介绍
+            # 简化的功能介绍
             st.markdown("""
-            **🚀 AI卖点分析功能：**
+            **🚀 智能卖点分析**
             
-            - **智能识别**：自动识别产品的核心卖点和特征
-            - **视觉分析**：分析产品的设计风格和美学特点  
-            - **营销洞察**：提供针对性的营销建议和定位策略
-            - **A+优化**：生成适合Amazon A+页面的展示建议
-            
-            **📈 分析维度：**
-            - 产品功能特点
-            - 设计美学风格
-            - 材质工艺品质
-            - 使用场景定位
-            - 目标用户画像
-            - 情感价值主张
+            - 📈 自动识别产品优势
+            - 🎨 分析设计风格特点  
+            - 💡 生成营销建议
+            - 📋 提供可复制文案
             """)
+
+
+def render_selling_points_results_compact(result: Dict[str, Any]):
+    """渲染卖点分析结果 - 紧凑版本"""
+    if not result:
+        st.warning("分析结果为空")
+        return
+    
+    # 获取分析ID，用于生成唯一的key
+    analysis_id = result.get('analysis_id', 'default')
+    
+    # 核心卖点 - 紧凑显示
+    if 'key_selling_points' in result:
+        st.markdown("**🎯 核心卖点**")
+        selling_points = result['key_selling_points']
+        
+        # 只显示前3个卖点，避免界面过长
+        display_points = selling_points[:3]
+        copyable_points = []
+        
+        for i, point in enumerate(display_points, 1):
+            title = point.get('title', '卖点')
+            description = point.get('description', '暂无描述')
+            confidence = point.get('confidence', 0)
+            
+            # 紧凑显示
+            st.write(f"**{i}. {title}** ({confidence:.0%})")
+            st.caption(description[:80] + "..." if len(description) > 80 else description)
+            
+            # 准备复制文本
+            point_text = f"{i}. {title}\n   {description}"
+            copyable_points.append(point_text)
+        
+        # 如果有更多卖点，显示展开选项
+        if len(selling_points) > 3:
+            with st.expander(f"查看全部 {len(selling_points)} 个卖点", expanded=False):
+                for i, point in enumerate(selling_points[3:], 4):
+                    title = point.get('title', '卖点')
+                    description = point.get('description', '暂无描述')
+                    confidence = point.get('confidence', 0)
+                    st.write(f"**{i}. {title}** ({confidence:.0%})")
+                    st.caption(description)
+                    
+                    point_text = f"{i}. {title}\n   {description}"
+                    copyable_points.append(point_text)
+        
+        # 可复制的卖点汇总 - 紧凑版
+        with st.expander("📋 复制卖点文案", expanded=False):
+            all_points_text = "\n\n".join(copyable_points)
+            st.text_area("", value=all_points_text, height=150, key=f"copyable_points_{analysis_id}", label_visibility="collapsed")
+    
+    # 营销建议 - 紧凑显示
+    if 'marketing_insights' in result:
+        st.markdown("**💼 营销建议**")
+        insights = result['marketing_insights']
+        
+        # 只显示关键信息
+        if 'target_audience' in insights:
+            st.write(f"👥 **目标用户**: {insights['target_audience'][:50]}...")
+        
+        if 'aplus_recommendations' in insights and insights['aplus_recommendations']:
+            st.write("📝 **A+页面建议**:")
+            for i, rec in enumerate(insights['aplus_recommendations'][:2], 1):
+                st.write(f"  {i}. {rec[:60]}...")
+        
+        # 完整营销建议 - 可展开
+        with st.expander("📊 完整营销分析", expanded=False):
+            if 'emotional_triggers' in insights:
+                st.write("**情感触发点**:")
+                for trigger in insights['emotional_triggers']:
+                    st.write(f"• {trigger}")
+            
+            if 'competitive_advantages' in insights:
+                st.write("**竞争优势**:")
+                for adv in insights['competitive_advantages']:
+                    st.write(f"• {adv}")
+            
+            # 可复制的营销文案
+            marketing_text = f"""目标用户: {insights.get('target_audience', '未分析')}
+
+A+页面建议:
+{chr(10).join(['• ' + rec for rec in insights.get('aplus_recommendations', [])])}
+
+情感触发点:
+{chr(10).join(['• ' + trigger for trigger in insights.get('emotional_triggers', [])])}
+
+竞争优势:
+{chr(10).join(['• ' + adv for adv in insights.get('competitive_advantages', [])])}"""
+            
+            st.text_area("营销建议文案", value=marketing_text, height=200, key=f"copyable_marketing_{analysis_id}")
+    
+    # 视觉特征 - 可展开
+    if 'visual_features' in result:
+        with st.expander("🎨 视觉特征分析", expanded=False):
+            visual = result['visual_features']
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if 'design_style' in visual:
+                    st.write(f"**设计风格**: {visual['design_style']}")
+                if 'color_scheme' in visual:
+                    st.write(f"**色彩方案**: {visual['color_scheme'][:30]}...")
+            
+            with col2:
+                if 'material_perception' in visual:
+                    st.write(f"**材质感知**: {visual['material_perception'][:30]}...")
+                if 'quality_indicators' in visual:
+                    st.write(f"**品质指标**: {', '.join(visual['quality_indicators'][:2])}")
+            
+            # 可复制的视觉特征
+            visual_text = f"""设计风格: {visual.get('design_style', '未识别')}
+色彩方案: {visual.get('color_scheme', '未分析')}
+材质感知: {visual.get('material_perception', '未识别')}
+品质指标: {', '.join(visual.get('quality_indicators', []))}"""
+            
+            st.text_area("视觉特征文案", value=visual_text, height=120, key=f"copyable_visual_{analysis_id}")
+    
+    # 操作按钮 - 紧凑布局
+    st.divider()
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("📄 完整报告", use_container_width=True):
+            st.session_state['show_full_report'] = True
+            st.rerun()
+    
+    with col2:
+        if st.button("🔄 重新分析", use_container_width=True):
+            if 'selling_points_result' in st.session_state:
+                del st.session_state['selling_points_result']
+            if 'show_full_report' in st.session_state:
+                del st.session_state['show_full_report']
+            st.rerun()
+    
+    with col3:
+        # 导出按钮
+        export_data = {
+            "analysis_timestamp": datetime.now().isoformat(),
+            "selling_points_analysis": result
+        }
+        import json
+        json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
+        st.download_button(
+            "💾 导出",
+            data=json_str,
+            file_name=f"selling_points_{datetime.now().strftime('%m%d_%H%M')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    # 显示完整报告
+    if st.session_state.get('show_full_report', False):
+        with st.expander("📄 完整分析报告", expanded=True):
+            full_report = generate_copyable_report(result)
+            st.text_area("", value=full_report, height=300, key=f"full_report_{analysis_id}", label_visibility="collapsed")
+            
+            if st.button("❌ 关闭报告"):
+                st.session_state['show_full_report'] = False
+                st.rerun()
 
 
 def render_selling_points_results(result: Dict[str, Any]):
