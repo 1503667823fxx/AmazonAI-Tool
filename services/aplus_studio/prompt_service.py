@@ -497,9 +497,9 @@ class PromptGenerationService:
         return result
     
     def generate_coherent_module_prompt(self, 
-                                      target_module: ModuleType,
-                                      analysis: AnalysisResult,
-                                      existing_results: Dict[ModuleType, GenerationResult] = None) -> ModulePrompt:
+                                      target_module,
+                                      analysis,
+                                      existing_results=None):
         """生成与现有模块连贯的提示词"""
         
         # 如果没有锁定的色调盘，先创建一个
@@ -534,7 +534,7 @@ class PromptGenerationService:
         
         return coherent_prompt
     
-    def validate_visual_consistency(self, module_results: Dict[ModuleType, GenerationResult]) -> Dict[str, Any]:
+    def validate_visual_consistency(self, module_results, visual_style=None):
         """验证模块间的视觉一致性"""
         if self._locked_palette is None:
             return {
@@ -554,7 +554,7 @@ class PromptGenerationService:
             'is_consistent': consistency_metrics.overall_coherence_score >= 0.7
         }
     
-    def detect_and_resolve_conflicts(self, module_results: Dict[ModuleType, GenerationResult]) -> List[str]:
+    def detect_and_resolve_conflicts(self, module_results):
         """检测并提供解决风格冲突的建议"""
         if self._locked_palette is None:
             return ['No visual consistency baseline established']
@@ -570,8 +570,8 @@ class PromptGenerationService:
         return self._locked_palette or {}
     
     def _apply_coherence_constraints(self, 
-                                   base_prompt: ModulePrompt, 
-                                   coherence_requirements: Dict[str, Any]) -> ModulePrompt:
+                                   base_prompt, 
+                                   coherence_requirements):
         """应用连贯性约束到提示词"""
         
         # 构建连贯性约束文本
