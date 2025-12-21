@@ -590,6 +590,9 @@ class ProductAnalysisService:
             "aplus_suitability": min(10, max(1, quality_score)),
             "improvement_suggestions": ["Consider professional lighting", "Optimize for 4:3 aspect ratio"]
         }
+    
+    async def analyze_product_images_detailed(self, images: List[Image.Image]) -> ImageAnalysis:
+        """详细分析产品图片，提取适合A+页面制作的视觉特征"""
         if not self.vision_model:
             raise ValueError("Gemini Vision API not configured")
         
