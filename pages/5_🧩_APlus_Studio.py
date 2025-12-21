@@ -5,6 +5,8 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from PIL import Image
 from datetime import datetime
+import google.generativeai as genai
+import json
 
 # 添加项目根目录到路径
 sys.path.append(os.path.abspath('.'))
@@ -210,10 +212,8 @@ def render_selling_points_analysis_tab(controller: APlusController):
                             image = Image.open(file)
                             images.append(image)
                         
-                        # 执行卖点分析
-                        selling_points_result = asyncio.run(
-                            analyze_selling_points_from_images(controller, images)
-                        )
+                        # 执行卖点分析 - 直接调用Gemini API
+                        selling_points_result = analyze_selling_points_sync(images)
                         
                         # 保存分析结果到session state
                         st.session_state['selling_points_result'] = selling_points_result
@@ -276,28 +276,43 @@ def render_selling_points_analysis_tab(controller: APlusController):
 
 
 def render_selling_points_results(result: Dict[str, Any]):
-    """渲染卖点分析结果"""
+    """渲染卖点分析结果 - 优化为方便复制粘贴的格式"""
     if not result:
         st.warning("分析结果为空")
         return
     
-    # 核心卖点
+    # 核心卖点 - 可复制格式
     if 'key_selling_points' in result:
         st.subheader("🎯 核心卖点")
         selling_points = result['key_selling_points']
         
+        # 生成可复制的卖点文本
+        copyable_points = []
         for i, point in enumerate(selling_points, 1):
+            title = point.get('title', '卖点')
+            description = point.get('description', '暂无描述')
+            confidence = point.get('confidence', 0)
+            
+            # 格式化为可复制的文本
+            point_text = f"{i}. {title}\n   {description}"
+            copyable_points.append(point_text)
+            
+            # 显示在界面上
             with st.container():
-                st.markdown(f"**{i}. {point.get('title', '卖点')}**")
-                st.write(f"📝 {point.get('description', '暂无描述')}")
+                st.markdown(f"**{i}. {title}** (置信度: {confidence:.1%})")
+                st.write(f"📝 {description}")
                 
-                if point.get('confidence'):
-                    confidence = point['confidence']
-                    st.progress(confidence, text=f"置信度: {confidence:.1%}")
+                if point.get('visual_evidence'):
+                    st.caption(f"🔍 视觉证据: {point['visual_evidence']}")
                 
                 st.divider()
+        
+        # 提供可复制的卖点汇总
+        with st.expander("📋 卖点汇总 (可复制)", expanded=False):
+            all_points_text = "\n\n".join(copyable_points)
+            st.text_area("核心卖点汇总", value=all_points_text, height=200, key="copyable_points")
     
-    # 视觉特征分析
+    # 视觉特征分析 - 可复制格式
     if 'visual_features' in result:
         st.subheader("🎨 视觉特征")
         visual = result['visual_features']
@@ -319,8 +334,17 @@ def render_selling_points_results(result: Dict[str, Any]):
                 st.write("**品质指标**:")
                 for indicator in visual['quality_indicators']:
                     st.write(f"• {indicator}")
+        
+        # 可复制的视觉特征文本
+        with st.expander("🎨 视觉特征汇总 (可复制)", expanded=False):
+            visual_text = f"""设计风格: {visual.get('design_style', '未识别')}
+色彩方案: {visual.get('color_scheme', '未分析')}
+材质感知: {visual.get('material_perception', '未识别')}
+品质指标: {', '.join(visual.get('quality_indicators', []))}
+美学吸引力: {visual.get('aesthetic_appeal', '未评估')}"""
+            st.text_area("视觉特征汇总", value=visual_text, height=150, key="copyable_visual")
     
-    # 营销建议
+    # 营销建议 - 可复制格式
     if 'marketing_insights' in result:
         st.subheader("💼 营销建议")
         insights = result['marketing_insights']
@@ -340,6 +364,46 @@ def render_selling_points_results(result: Dict[str, Any]):
             st.write("**A+页面建议**:")
             for rec in insights['aplus_recommendations']:
                 st.write(f"• {rec}")
+        
+        # 可复制的营销建议文本
+        with st.expander("💼 营销建议汇总 (可复制)", expanded=False):
+            marketing_text = f"""目标用户: {insights.get('target_audience', '未分析')}
+
+情感触发点:
+{chr(10).join(['• ' + trigger for trigger in insights.get('emotional_triggers', [])])}
+
+定位策略: {insights.get('positioning_strategy', '未提供')}
+
+A+页面建议:
+{chr(10).join(['• ' + rec for rec in insights.get('aplus_recommendations', [])])}
+
+竞争优势:
+{chr(10).join(['• ' + adv for adv in insights.get('competitive_advantages', [])])}"""
+            st.text_area("营销建议汇总", value=marketing_text, height=250, key="copyable_marketing")
+    
+    # 使用场景 - 可复制格式
+    if 'usage_scenarios' in result:
+        st.subheader("🏠 使用场景")
+        scenarios = result['usage_scenarios']
+        
+        scenario_texts = []
+        for i, scenario in enumerate(scenarios, 1):
+            scenario_desc = scenario.get('scenario', '场景描述')
+            benefits = scenario.get('benefits', '优势说明')
+            emotion = scenario.get('target_emotion', '目标情感')
+            
+            scenario_text = f"场景{i}: {scenario_desc}\n优势: {benefits}\n情感: {emotion}"
+            scenario_texts.append(scenario_text)
+            
+            st.write(f"**场景 {i}**: {scenario_desc}")
+            st.write(f"• 优势: {benefits}")
+            st.write(f"• 目标情感: {emotion}")
+            st.divider()
+        
+        # 可复制的场景文本
+        with st.expander("🏠 使用场景汇总 (可复制)", expanded=False):
+            all_scenarios_text = "\n\n".join(scenario_texts)
+            st.text_area("使用场景汇总", value=all_scenarios_text, height=200, key="copyable_scenarios")
     
     # 置信度和质量评估
     if 'analysis_quality' in result:
@@ -360,136 +424,338 @@ def render_selling_points_results(result: Dict[str, Any]):
             analysis_depth = quality.get('analysis_depth', 0.8)
             st.metric("分析深度", f"{analysis_depth:.1%}")
     
-    # 导出功能
+    # 完整分析报告 - 一键复制
     st.divider()
+    st.subheader("📄 完整分析报告")
+    
+    # 生成完整的可复制报告
+    full_report = generate_copyable_report(result)
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📥 导出分析报告", use_container_width=True):
-            # 生成导出数据
-            export_data = {
-                "analysis_timestamp": datetime.now().isoformat(),
-                "selling_points_analysis": result
-            }
-            
-            import json
-            json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
-            
-            st.download_button(
-                "下载JSON报告",
-                data=json_str,
-                file_name=f"selling_points_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json"
-            )
+        if st.button("📋 生成完整报告", use_container_width=True):
+            st.session_state['show_full_report'] = True
     
     with col2:
         if st.button("🔄 重新分析", use_container_width=True):
             if 'selling_points_result' in st.session_state:
                 del st.session_state['selling_points_result']
+            if 'show_full_report' in st.session_state:
+                del st.session_state['show_full_report']
             st.rerun()
+    
+    # 显示完整报告
+    if st.session_state.get('show_full_report', False):
+        st.text_area("完整分析报告 (可复制)", value=full_report, height=400, key="full_report")
 
 
-async def analyze_selling_points_from_images(controller: APlusController, images: List[Image.Image]) -> Dict[str, Any]:
-    """从图片中分析产品卖点"""
-    try:
-        # 使用现有的分析服务进行图片分析
-        image_analysis = await controller.analysis_service.analyze_multiple_images(images)
+def generate_copyable_report(result: Dict[str, Any]) -> str:
+    """生成完整的可复制分析报告"""
+    report_lines = []
+    report_lines.append("=" * 50)
+    report_lines.append("产品卖点分析报告")
+    report_lines.append("=" * 50)
+    report_lines.append(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report_lines.append("")
+    
+    # 核心卖点
+    if 'key_selling_points' in result:
+        report_lines.append("【核心卖点】")
+        for i, point in enumerate(result['key_selling_points'], 1):
+            title = point.get('title', '卖点')
+            description = point.get('description', '暂无描述')
+            confidence = point.get('confidence', 0)
+            report_lines.append(f"{i}. {title} (置信度: {confidence:.1%})")
+            report_lines.append(f"   {description}")
+            if point.get('visual_evidence'):
+                report_lines.append(f"   视觉证据: {point['visual_evidence']}")
+            report_lines.append("")
+    
+    # 视觉特征
+    if 'visual_features' in result:
+        visual = result['visual_features']
+        report_lines.append("【视觉特征】")
+        report_lines.append(f"设计风格: {visual.get('design_style', '未识别')}")
+        report_lines.append(f"色彩方案: {visual.get('color_scheme', '未分析')}")
+        report_lines.append(f"材质感知: {visual.get('material_perception', '未识别')}")
+        if visual.get('quality_indicators'):
+            report_lines.append(f"品质指标: {', '.join(visual['quality_indicators'])}")
+        report_lines.append("")
+    
+    # 营销建议
+    if 'marketing_insights' in result:
+        insights = result['marketing_insights']
+        report_lines.append("【营销建议】")
+        report_lines.append(f"目标用户: {insights.get('target_audience', '未分析')}")
+        report_lines.append(f"定位策略: {insights.get('positioning_strategy', '未提供')}")
         
-        # 生成专门的卖点分析提示词
-        selling_points_prompt = f"""
-        基于以下产品图片分析结果，请生成详细的产品卖点分析。请以JSON格式返回：
+        if insights.get('emotional_triggers'):
+            report_lines.append("情感触发点:")
+            for trigger in insights['emotional_triggers']:
+                report_lines.append(f"• {trigger}")
+        
+        if insights.get('aplus_recommendations'):
+            report_lines.append("A+页面建议:")
+            for rec in insights['aplus_recommendations']:
+                report_lines.append(f"• {rec}")
+        
+        if insights.get('competitive_advantages'):
+            report_lines.append("竞争优势:")
+            for adv in insights['competitive_advantages']:
+                report_lines.append(f"• {adv}")
+        report_lines.append("")
+    
+    # 使用场景
+    if 'usage_scenarios' in result:
+        report_lines.append("【使用场景】")
+        for i, scenario in enumerate(result['usage_scenarios'], 1):
+            report_lines.append(f"场景{i}: {scenario.get('scenario', '场景描述')}")
+            report_lines.append(f"优势: {scenario.get('benefits', '优势说明')}")
+            report_lines.append(f"目标情感: {scenario.get('target_emotion', '目标情感')}")
+            report_lines.append("")
+    
+    # 分析质量
+    if 'analysis_quality' in result:
+        quality = result['analysis_quality']
+        report_lines.append("【分析质量】")
+        report_lines.append(f"整体置信度: {quality.get('overall_confidence', 0.8):.1%}")
+        report_lines.append(f"图片质量评分: {quality.get('image_quality_score', 0.8):.1%}")
+        report_lines.append(f"分析深度: {quality.get('analysis_depth', 0.8):.1%}")
+        report_lines.append("")
+    
+    report_lines.append("=" * 50)
+    report_lines.append("报告结束")
+    
+    return "\n".join(report_lines)
 
-        图片分析结果：
-        - 主要颜色: {', '.join(image_analysis.dominant_colors)}
-        - 材质类型: {', '.join(image_analysis.material_types)}
-        - 设计风格: {image_analysis.design_style}
-        - 光照条件: {image_analysis.lighting_conditions}
-        - 构图元素: {', '.join(image_analysis.composition_elements)}
-        - 质量评估: {image_analysis.quality_assessment}
 
-        请提供以下JSON格式的卖点分析：
-        {{
+def analyze_selling_points_sync(images: List[Image.Image]) -> Dict[str, Any]:
+    """同步版本的产品卖点分析函数"""
+    try:
+        # 检查API配置
+        if "GOOGLE_API_KEY" not in st.secrets:
+            st.error("❌ 未找到 Google API Key")
+            return generate_fallback_selling_points()
+        
+        # 配置Gemini API
+        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+        
+        # 使用gemini-3-flash-preview模型进行图片分析
+        model = genai.GenerativeModel('models/gemini-3-flash-preview')
+        
+        # 构建分析提示词
+        selling_points_prompt = """
+        你是一个专业的产品营销分析师。请仔细分析这些产品图片，识别产品的核心卖点和营销价值。
+
+        请以JSON格式返回详细的产品卖点分析：
+
+        {
             "key_selling_points": [
-                {{
+                {
                     "title": "卖点标题",
-                    "description": "详细描述这个卖点如何吸引消费者",
+                    "description": "详细描述这个卖点如何吸引消费者，为什么重要",
                     "category": "功能性/美观性/品质感/便利性",
                     "confidence": 0.95,
-                    "visual_evidence": "从图片中观察到的支持证据"
-                }}
+                    "visual_evidence": "从图片中观察到的具体支持证据"
+                }
             ],
-            "visual_features": {{
-                "design_style": "现代简约/奢华精致/实用主义等",
-                "color_scheme": "色彩方案描述",
-                "material_perception": "材质给人的感受",
-                "quality_indicators": ["品质指标1", "品质指标2"],
-                "aesthetic_appeal": "美学吸引力评估"
-            }},
-            "marketing_insights": {{
-                "target_audience": "目标用户群体描述",
-                "emotional_triggers": ["情感触发点1", "情感触发点2"],
-                "positioning_strategy": "产品定位策略建议",
-                "aplus_recommendations": ["A+页面展示建议1", "A+页面展示建议2"],
-                "competitive_advantages": ["竞争优势1", "竞争优势2"]
-            }},
+            "visual_features": {
+                "design_style": "现代简约/奢华精致/实用主义/工业风等具体风格",
+                "color_scheme": "主要色彩搭配和视觉效果描述",
+                "material_perception": "材质给人的感受和品质印象",
+                "quality_indicators": ["从图片看出的品质指标1", "品质指标2"],
+                "aesthetic_appeal": "整体美学吸引力评估"
+            },
+            "marketing_insights": {
+                "target_audience": "基于产品特征推断的目标用户群体",
+                "emotional_triggers": ["能触发购买欲望的情感点1", "情感点2"],
+                "positioning_strategy": "建议的产品市场定位策略",
+                "aplus_recommendations": ["Amazon A+页面展示建议1", "建议2", "建议3"],
+                "competitive_advantages": ["相比同类产品的优势1", "优势2"]
+            },
             "usage_scenarios": [
-                {{
-                    "scenario": "使用场景描述",
-                    "benefits": "在此场景下的优势",
-                    "target_emotion": "目标情感"
-                }}
+                {
+                    "scenario": "具体使用场景描述",
+                    "benefits": "在此场景下的具体优势",
+                    "target_emotion": "想要激发的目标情感"
+                }
             ],
-            "analysis_quality": {{
+            "analysis_quality": {
                 "overall_confidence": 0.9,
                 "image_quality_score": 0.85,
                 "analysis_depth": 0.88,
                 "recommendations_reliability": 0.92
-            }}
-        }}
+            }
+        }
 
         分析要求：
-        1. 专注于从视觉角度识别的卖点
-        2. 考虑北美消费者的购买心理
-        3. 提供具体可执行的营销建议
-        4. 评估产品在Amazon A+页面中的展示潜力
-        5. 识别能够引起情感共鸣的视觉元素
+        1. 仔细观察产品的外观、材质、设计细节
+        2. 识别产品的独特特征和潜在卖点
+        3. 考虑北美消费者的购买心理和偏好
+        4. 提供具体可执行的营销建议
+        5. 评估产品在Amazon A+页面中的展示潜力
+        6. 分析结果要客观、具体、有说服力
 
-        只返回JSON，不要其他文字。
+        请只返回JSON格式的分析结果，不要包含其他文字。
         """
         
-        # 使用Gemini模型进行卖点分析
-        if controller.analysis_service.text_model:
-            response = await asyncio.to_thread(
-                controller.analysis_service.text_model.generate_content, 
-                selling_points_prompt
-            )
+        # 准备图片和提示词
+        content_parts = [selling_points_prompt]
+        content_parts.extend(images)
+        
+        # 调用Gemini API进行分析
+        response = model.generate_content(content_parts)
+        
+        # 解析响应
+        response_text = response.text.strip()
+        
+        # 清理响应文本，移除可能的markdown标记
+        if response_text.startswith('```json'):
+            response_text = response_text[7:]
+        if response_text.endswith('```'):
+            response_text = response_text[:-3]
+        response_text = response_text.strip()
+        
+        try:
+            selling_points_data = json.loads(response_text)
             
-            # 解析响应
-            response_text = response.text.strip()
+            # 验证返回的数据结构
+            if not isinstance(selling_points_data, dict):
+                raise ValueError("返回的数据不是有效的字典格式")
             
-            # 清理响应文本
-            if response_text.startswith('```json'):
-                response_text = response_text[7:]
-            if response_text.endswith('```'):
-                response_text = response_text[:-3]
-            response_text = response_text.strip()
+            # 确保必要的字段存在
+            required_fields = ['key_selling_points', 'visual_features', 'marketing_insights']
+            for field in required_fields:
+                if field not in selling_points_data:
+                    selling_points_data[field] = {}
             
-            try:
-                import json
-                selling_points_data = json.loads(response_text)
-                return selling_points_data
-                
-            except json.JSONDecodeError:
-                # 如果JSON解析失败，返回基于图片分析的简化结果
-                return generate_fallback_selling_points(image_analysis)
-        else:
-            # 如果没有配置AI模型，返回基于图片分析的简化结果
-            return generate_fallback_selling_points(image_analysis)
+            return selling_points_data
+            
+        except json.JSONDecodeError as e:
+            st.warning(f"JSON解析失败: {str(e)}")
+            st.text("原始响应:")
+            st.text(response_text[:500] + "..." if len(response_text) > 500 else response_text)
+            return generate_fallback_selling_points()
             
     except Exception as e:
-        # 错误处理：返回基础分析结果
-        st.warning(f"AI分析遇到问题，使用基础分析: {str(e)}")
-        return generate_fallback_selling_points(image_analysis if 'image_analysis' in locals() else None)
+        st.error(f"AI分析失败: {str(e)}")
+        return generate_fallback_selling_points()
+
+
+async def analyze_selling_points_from_images(images: List[Image.Image]) -> Dict[str, Any]:
+    """从图片中分析产品卖点 - 直接调用Gemini Vision API"""
+    try:
+        # 检查API配置
+        if "GOOGLE_API_KEY" not in st.secrets:
+            st.error("❌ 未找到 Google API Key")
+            return generate_fallback_selling_points()
+        
+        # 配置Gemini API
+        import google.generativeai as genai
+        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+        
+        # 使用gemini-3-flash-preview模型进行图片分析
+        model = genai.GenerativeModel('models/gemini-3-flash-preview')
+        
+        # 构建分析提示词
+        selling_points_prompt = """
+        你是一个专业的产品营销分析师。请仔细分析这些产品图片，识别产品的核心卖点和营销价值。
+
+        请以JSON格式返回详细的产品卖点分析：
+
+        {
+            "key_selling_points": [
+                {
+                    "title": "卖点标题",
+                    "description": "详细描述这个卖点如何吸引消费者，为什么重要",
+                    "category": "功能性/美观性/品质感/便利性",
+                    "confidence": 0.95,
+                    "visual_evidence": "从图片中观察到的具体支持证据"
+                }
+            ],
+            "visual_features": {
+                "design_style": "现代简约/奢华精致/实用主义/工业风等具体风格",
+                "color_scheme": "主要色彩搭配和视觉效果描述",
+                "material_perception": "材质给人的感受和品质印象",
+                "quality_indicators": ["从图片看出的品质指标1", "品质指标2"],
+                "aesthetic_appeal": "整体美学吸引力评估"
+            },
+            "marketing_insights": {
+                "target_audience": "基于产品特征推断的目标用户群体",
+                "emotional_triggers": ["能触发购买欲望的情感点1", "情感点2"],
+                "positioning_strategy": "建议的产品市场定位策略",
+                "aplus_recommendations": ["Amazon A+页面展示建议1", "建议2", "建议3"],
+                "competitive_advantages": ["相比同类产品的优势1", "优势2"]
+            },
+            "usage_scenarios": [
+                {
+                    "scenario": "具体使用场景描述",
+                    "benefits": "在此场景下的具体优势",
+                    "target_emotion": "想要激发的目标情感"
+                }
+            ],
+            "analysis_quality": {
+                "overall_confidence": 0.9,
+                "image_quality_score": 0.85,
+                "analysis_depth": 0.88,
+                "recommendations_reliability": 0.92
+            }
+        }
+
+        分析要求：
+        1. 仔细观察产品的外观、材质、设计细节
+        2. 识别产品的独特特征和潜在卖点
+        3. 考虑北美消费者的购买心理和偏好
+        4. 提供具体可执行的营销建议
+        5. 评估产品在Amazon A+页面中的展示潜力
+        6. 分析结果要客观、具体、有说服力
+
+        请只返回JSON格式的分析结果，不要包含其他文字。
+        """
+        
+        # 准备图片和提示词
+        content_parts = [selling_points_prompt]
+        content_parts.extend(images)
+        
+        # 调用Gemini API进行分析
+        response = model.generate_content(content_parts)
+        
+        # 解析响应
+        response_text = response.text.strip()
+        
+        # 清理响应文本，移除可能的markdown标记
+        if response_text.startswith('```json'):
+            response_text = response_text[7:]
+        if response_text.endswith('```'):
+            response_text = response_text[:-3]
+        response_text = response_text.strip()
+        
+        try:
+            import json
+            selling_points_data = json.loads(response_text)
+            
+            # 验证返回的数据结构
+            if not isinstance(selling_points_data, dict):
+                raise ValueError("返回的数据不是有效的字典格式")
+            
+            # 确保必要的字段存在
+            required_fields = ['key_selling_points', 'visual_features', 'marketing_insights']
+            for field in required_fields:
+                if field not in selling_points_data:
+                    selling_points_data[field] = {}
+            
+            return selling_points_data
+            
+        except json.JSONDecodeError as e:
+            st.warning(f"JSON解析失败: {str(e)}")
+            st.text("原始响应:")
+            st.text(response_text[:500] + "..." if len(response_text) > 500 else response_text)
+            return generate_fallback_selling_points()
+            
+    except Exception as e:
+        st.error(f"AI分析失败: {str(e)}")
+        return generate_fallback_selling_points()
 
 
 def generate_fallback_selling_points(image_analysis: Optional[Any] = None) -> Dict[str, Any]:
