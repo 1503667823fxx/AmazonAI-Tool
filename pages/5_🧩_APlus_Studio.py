@@ -275,35 +275,28 @@ def render_selling_points_results_compact(result: Dict[str, Any]):
         st.markdown("**🎯 核心卖点**")
         selling_points = result['key_selling_points']
         
-        # 只显示前3个卖点，避免界面过长
-        display_points = selling_points[:3]
-        copyable_points = []
-        
-        for i, point in enumerate(display_points, 1):
+        # 显示所有卖点，但用视觉层次区分重要性
+        for i, point in enumerate(selling_points, 1):
             title = point.get('title', '卖点')
             description = point.get('description', '暂无描述')
             confidence = point.get('confidence', 0)
             
-            # 紧凑显示
-            st.write(f"**{i}. {title}** ({confidence:.0%})")
-            st.caption(description[:80] + "..." if len(description) > 80 else description)
+            # 前3个用粗体，后面的用普通字体
+            if i <= 3:
+                st.write(f"**{i}. {title}** ({confidence:.0%})")
+                st.caption(description[:80] + "..." if len(description) > 80 else description)
+            else:
+                # 后面的卖点用较小的字体和较淡的颜色
+                st.write(f"{i}. {title} ({confidence:.0%})")
+                st.caption(description[:60] + "..." if len(description) > 60 else description)
             
             # 准备复制文本
             point_text = f"{i}. {title}\n   {description}"
             copyable_points.append(point_text)
-        
-        # 如果有更多卖点，显示展开选项
-        if len(selling_points) > 3:
-            with st.expander(f"查看全部 {len(selling_points)} 个卖点", expanded=False):
-                for i, point in enumerate(selling_points[3:], 4):
-                    title = point.get('title', '卖点')
-                    description = point.get('description', '暂无描述')
-                    confidence = point.get('confidence', 0)
-                    st.write(f"**{i}. {title}** ({confidence:.0%})")
-                    st.caption(description)
-                    
-                    point_text = f"{i}. {title}\n   {description}"
-                    copyable_points.append(point_text)
+            
+            # 前3个后面加个小分隔
+            if i == 3 and len(selling_points) > 3:
+                st.markdown("---")
         
         # 可复制的卖点汇总 - 紧凑版
         with st.expander("📋 复制卖点文案", expanded=False):
