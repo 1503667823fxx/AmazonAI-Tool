@@ -278,28 +278,19 @@ def render_selling_points_results_compact(result: Dict[str, Any]):
         # 初始化复制文本列表
         copyable_points = []
         
-        # 显示所有卖点，但用视觉层次区分重要性
+        # 显示所有卖点，统一样式
         for i, point in enumerate(selling_points, 1):
             title = point.get('title', '卖点')
             description = point.get('description', '暂无描述')
             confidence = point.get('confidence', 0)
             
-            # 前3个用粗体，后面的用普通字体
-            if i <= 3:
-                st.write(f"**{i}. {title}** ({confidence:.0%})")
-                st.caption(description[:80] + "..." if len(description) > 80 else description)
-            else:
-                # 后面的卖点用较小的字体和较淡的颜色
-                st.write(f"{i}. {title} ({confidence:.0%})")
-                st.caption(description[:60] + "..." if len(description) > 60 else description)
+            # 统一显示样式，不做区分
+            st.write(f"**{i}. {title}** ({confidence:.0%})")
+            st.caption(description[:80] + "..." if len(description) > 80 else description)
             
             # 准备复制文本
             point_text = f"{i}. {title}\n   {description}"
             copyable_points.append(point_text)
-            
-            # 前3个后面加个小分隔
-            if i == 3 and len(selling_points) > 3:
-                st.markdown("---")
         
         # 可复制的卖点汇总 - 紧凑版
         if copyable_points:  # 只有当有卖点时才显示
