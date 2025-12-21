@@ -654,12 +654,12 @@ with col2:
     st.markdown(f'''
     <div class="feature-card" style="border: 2px solid #f59e0b;">
         <h4>🧩 A+ Studio</h4>
-        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">A+ 页面创意工场 (测试阶段)</p>
-        <span class="status-badge badge-beta">测试中</span>
+        <p style="color: #666; font-size: 0.9rem; margin: 8px 0;">A+ 页面创意工场 (重构中)</p>
+        <span class="status-badge badge-beta">重构中</span>
     </div>
     ''', unsafe_allow_html=True)
-    st.page_link("pages/5_🧩_APlus_Studio.py", label="🧪 体验测试版", icon="🧩", use_container_width=True)
-    st.caption("⚠️ 测试功能，模板系统开发中")
+    st.page_link("pages/5_🧩_APlus_Studio.py", label="🚧 查看重构进度", icon="🧩", use_container_width=True)
+    st.caption("🔄 正在重新设计更简洁的架构")
 
 # --- 9. 底部信息 ---
 st.markdown("<br><br>", unsafe_allow_html=True)
