@@ -275,6 +275,9 @@ def render_selling_points_results_compact(result: Dict[str, Any]):
         st.markdown("**🎯 核心卖点**")
         selling_points = result['key_selling_points']
         
+        # 初始化复制文本列表
+        copyable_points = []
+        
         # 显示所有卖点，但用视觉层次区分重要性
         for i, point in enumerate(selling_points, 1):
             title = point.get('title', '卖点')
@@ -299,9 +302,12 @@ def render_selling_points_results_compact(result: Dict[str, Any]):
                 st.markdown("---")
         
         # 可复制的卖点汇总 - 紧凑版
-        with st.expander("📋 复制卖点文案", expanded=False):
-            all_points_text = "\n\n".join(copyable_points)
-            st.text_area("", value=all_points_text, height=150, key=f"copyable_points_{analysis_id}", label_visibility="collapsed")
+        if copyable_points:  # 只有当有卖点时才显示
+            with st.expander("📋 复制卖点文案", expanded=False):
+                all_points_text = "\n\n".join(copyable_points)
+                st.text_area("", value=all_points_text, height=150, key=f"copyable_points_{analysis_id}", label_visibility="collapsed")
+    else:
+        copyable_points = []  # 确保变量存在
     
     # 营销建议 - 紧凑显示
     if 'marketing_insights' in result:
