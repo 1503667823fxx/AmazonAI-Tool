@@ -8,7 +8,8 @@ product analysis results and visual consistency requirements.
 from typing import List, Dict
 from .models import (
     AnalysisResult, ModuleType, ModulePrompt, ExtensionPrompts, 
-    CarouselSlide, PROFESSIONAL_NAVIGATION_TERMS, GenerationResult
+    CarouselSlide, PROFESSIONAL_NAVIGATION_TERMS, GenerationResult,
+    VisualStyle
 )
 from .config import MODULE_CONFIGS
 from .visual_sop_processor import VisualSOPProcessor
