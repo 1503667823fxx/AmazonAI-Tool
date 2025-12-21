@@ -448,7 +448,7 @@ def render_regeneration_tab(controller: APlusController, regeneration_panel: Reg
     module_results = controller.get_module_results()
     
     if not module_results:
-        st.info("还没有已生成的模块，请先在"模块生成"标签页生成模块")
+        st.info("还没有已生成的模块，请先在模块生成标签页生成模块")
         if st.button("🎨 前往模块生成", type="primary"):
             st.session_state["active_tab"] = "module_generation"
         return
