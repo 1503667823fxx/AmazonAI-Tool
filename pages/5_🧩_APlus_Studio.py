@@ -65,14 +65,14 @@ def main():
     
     # 主界面标签页
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📝 产品分析", "💡 卖点分析", "🎨 模块生成", "🖼️ 图片预览", "🔄 重新生成", "📊 数据导出"
+        "� 卖点分析析", "� 产分品分析", "🎨 模块生成", "🖼️ 图片预览", "🔄 重新生成", "📊 数据导出"
     ])
     
     with tab1:
-        render_product_analysis_tab(controller, input_panel)
+        render_selling_points_analysis_tab(controller)
     
     with tab2:
-        render_selling_points_analysis_tab(controller)
+        render_product_analysis_tab(controller, input_panel)
     
     with tab3:
         render_module_generation_tab(controller, generation_panel)
@@ -215,6 +215,11 @@ def render_selling_points_analysis_tab(controller: APlusController):
                         # 执行卖点分析 - 直接调用Gemini API
                         selling_points_result = analyze_selling_points_sync(images)
                         
+                        # 为这次分析生成唯一ID
+                        import time
+                        analysis_id = str(int(time.time()))
+                        selling_points_result['analysis_id'] = analysis_id
+                        
                         # 保存分析结果到session state
                         st.session_state['selling_points_result'] = selling_points_result
                         st.success("✅ 卖点分析完成！")
@@ -281,6 +286,9 @@ def render_selling_points_results(result: Dict[str, Any]):
         st.warning("分析结果为空")
         return
     
+    # 获取分析ID，用于生成唯一的key
+    analysis_id = result.get('analysis_id', 'default')
+    
     # 核心卖点 - 可复制格式
     if 'key_selling_points' in result:
         st.subheader("🎯 核心卖点")
@@ -310,7 +318,7 @@ def render_selling_points_results(result: Dict[str, Any]):
         # 提供可复制的卖点汇总
         with st.expander("📋 卖点汇总 (可复制)", expanded=False):
             all_points_text = "\n\n".join(copyable_points)
-            st.text_area("核心卖点汇总", value=all_points_text, height=200, key="copyable_points")
+            st.text_area("核心卖点汇总", value=all_points_text, height=200, key=f"copyable_points_{analysis_id}")
     
     # 视觉特征分析 - 可复制格式
     if 'visual_features' in result:
@@ -342,7 +350,7 @@ def render_selling_points_results(result: Dict[str, Any]):
 材质感知: {visual.get('material_perception', '未识别')}
 品质指标: {', '.join(visual.get('quality_indicators', []))}
 美学吸引力: {visual.get('aesthetic_appeal', '未评估')}"""
-            st.text_area("视觉特征汇总", value=visual_text, height=150, key="copyable_visual")
+            st.text_area("视觉特征汇总", value=visual_text, height=150, key=f"copyable_visual_{analysis_id}")
     
     # 营销建议 - 可复制格式
     if 'marketing_insights' in result:
@@ -379,7 +387,7 @@ A+页面建议:
 
 竞争优势:
 {chr(10).join(['• ' + adv for adv in insights.get('competitive_advantages', [])])}"""
-            st.text_area("营销建议汇总", value=marketing_text, height=250, key="copyable_marketing")
+            st.text_area("营销建议汇总", value=marketing_text, height=250, key=f"copyable_marketing_{analysis_id}")
     
     # 使用场景 - 可复制格式
     if 'usage_scenarios' in result:
@@ -403,7 +411,7 @@ A+页面建议:
         # 可复制的场景文本
         with st.expander("🏠 使用场景汇总 (可复制)", expanded=False):
             all_scenarios_text = "\n\n".join(scenario_texts)
-            st.text_area("使用场景汇总", value=all_scenarios_text, height=200, key="copyable_scenarios")
+            st.text_area("使用场景汇总", value=all_scenarios_text, height=200, key=f"copyable_scenarios_{analysis_id}")
     
     # 置信度和质量评估
     if 'analysis_quality' in result:
@@ -447,7 +455,7 @@ A+页面建议:
     
     # 显示完整报告
     if st.session_state.get('show_full_report', False):
-        st.text_area("完整分析报告 (可复制)", value=full_report, height=400, key="full_report")
+        st.text_area("完整分析报告 (可复制)", value=full_report, height=400, key=f"full_report_{analysis_id}")
 
 
 def generate_copyable_report(result: Dict[str, Any]) -> str:
@@ -968,8 +976,7 @@ def render_module_generation_tab(controller: APlusController, generation_panel: 
     session = controller.state_manager.get_current_session()
     if not session or not session.analysis_result:
         st.warning("⚠️ 请先完成产品分析")
-        if st.button("📝 前往产品分析", type="primary"):
-            st.session_state["active_tab"] = "product_analysis"
+        st.info("� 提示：你可前以先使用「卖点分析」功能快速分析产品图片，或者使用「产品分析」进行完整的产品信息分析")
         return
     
     # 渲染生成控制面板
