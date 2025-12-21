@@ -5,7 +5,7 @@ This service generates customized prompts for each A+ module based on
 product analysis results and visual consistency requirements.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Any
 from .models import (
     AnalysisResult, ModuleType, ModulePrompt, ExtensionPrompts, 
     CarouselSlide, PROFESSIONAL_NAVIGATION_TERMS, GenerationResult,
@@ -23,7 +23,7 @@ class PromptGenerationService:
         self.visual_sop_processor = VisualSOPProcessor()
         self._locked_palette = None
     
-    def generate_identity_prompt(self, analysis: AnalysisResult) -> ModulePrompt:
+    def generate_identity_prompt(self, analysis):
         """生成身份代入模块提示词 - 强调北美中产使用产品的生活场景"""
         listing = analysis.listing_analysis
         visual = analysis.visual_style
@@ -86,7 +86,7 @@ class PromptGenerationService:
             ]
         )
     
-    def generate_sensory_prompt(self, analysis: AnalysisResult) -> ModulePrompt:
+    def generate_sensory_prompt(self, analysis):
         """生成感官解构模块提示词 - 突出3/4视角和材质细节"""
         listing = analysis.listing_analysis
         image_analysis = analysis.image_analysis
@@ -154,7 +154,7 @@ class PromptGenerationService:
             ]
         )
     
-    def generate_extension_prompts(self, analysis: AnalysisResult) -> ExtensionPrompts:
+    def generate_extension_prompts(self, analysis):
         """生成多维延展模块的四维度轮播内容"""
         listing = analysis.listing_analysis
         
@@ -272,7 +272,7 @@ class PromptGenerationService:
             inside_out_slide=inside_out_slide
         )
     
-    def generate_trust_prompt(self, analysis: AnalysisResult) -> ModulePrompt:
+    def generate_trust_prompt(self, analysis):
         """生成信任转化模块提示词 - 优化信息密度和CTA引导"""
         listing = analysis.listing_analysis
         
@@ -360,7 +360,7 @@ class PromptGenerationService:
             ]
         )
     
-    def apply_visual_consistency(self, prompts: List[ModulePrompt], visual_style: VisualStyle) -> List[ModulePrompt]:
+    def apply_visual_consistency(self, prompts, visual_style):
         """应用视觉连贯性到所有提示词 - 确保模块间视觉风格统一"""
         
         # 构建详细的视觉连贯性指导
@@ -425,7 +425,7 @@ class PromptGenerationService:
         
         return enhanced_prompts
     
-    def _get_module_specific_consistency(self, module_type: ModuleType) -> str:
+    def _get_module_specific_consistency(self, module_type):
         """获取模块特定的一致性要求"""
         consistency_map = {
             ModuleType.IDENTITY: """
@@ -463,7 +463,7 @@ class PromptGenerationService:
         
         return consistency_map.get(module_type, "")
     
-    def generate_all_module_prompts(self, analysis: AnalysisResult) -> Dict[ModuleType, ModulePrompt]:
+    def generate_all_module_prompts(self, analysis):
         """生成所有模块的提示词"""
         prompts = {}
         
@@ -565,7 +565,7 @@ class PromptGenerationService:
         
         return conflicts
     
-    def get_locked_palette_info(self) -> Dict[str, Any]:
+    def get_locked_palette_info(self):
         """获取当前锁定的色调盘信息"""
         return self._locked_palette or {}
     
