@@ -1,969 +1,663 @@
 import streamlit as st
-from PIL import Image, ImageSequence
-import io
 import sys
 import os
-import zipfile
-import json
-import traceback
-from typing import Dict, Any, Optional
+import asyncio
+from typing import List, Dict, Any
+from PIL import Image
 
-# 导入模板管理服务
+# 添加项目根目录到路径
 sys.path.append(os.path.abspath('.'))
 
-# 导入用户体验组件
-try:
-    from app_utils.aplus_studio.ui_components.feedback_system import (
-        FeedbackSystem, PerformanceOptimizer, ResponsiveLayoutManager
-    )
-except ImportError:
-    # 如果导入失败，创建简化版本
-    class FeedbackSystem:
-        def show_success_feedback(self, message, next_steps=None, auto_clear=True):
-            st.success(f"✅ {message}")
-            if next_steps:
-                for i, step in enumerate(next_steps, 1):
-                    st.info(f"{i}. {step}")
-        
-        def show_error_feedback(self, message, solutions=None, retry_action=None):
-            st.error(f"❌ {message}")
-            if solutions:
-                for solution in solutions:
-                    st.warning(f"💡 {solution}")
-        
-        def show_warning_feedback(self, message, actions=None):
-            st.warning(f"⚠️ {message}")
-            if actions:
-                for action in actions:
-                    if isinstance(action, dict) and "label" in action:
-                        if st.button(action["label"]):
-                            if "callback" in action:
-                                action["callback"]()
-        
-        def show_tips_and_hints(self, tips):
-            with st.expander("💡 使用提示", expanded=False):
-                for tip in tips:
-                    st.info(f"• {tip}")
-        
-        def show_step_guidance(self, current_step, total_steps, step_name, step_desc, completion_criteria=None):
-            st.info(f"📍 步骤 {current_step}/{total_steps}: {step_name}")
-            st.write(step_desc)
-            if completion_criteria:
-                with st.expander("完成标准", expanded=False):
-                    for criteria in completion_criteria:
-                        st.write(f"• {criteria}")
-            return None
-        
-        def show_keyboard_shortcuts(self, shortcuts):
-            with st.expander("⌨️ 键盘快捷键", expanded=False):
-                for key, desc in shortcuts.items():
-                    st.write(f"**{key}**: {desc}")
-    
-    class PerformanceOptimizer:
-        def __init__(self): 
-            self.metrics = {}
-        
-        def measure_operation_time(self, name): 
-            def decorator(func): 
-                return func
-            return decorator
-        
-        def show_performance_metrics(self):
-            if self.metrics:
-                st.info("📊 性能指标: " + ", ".join([f"{k}: {v}" for k, v in self.metrics.items()]))
-            else:
-                st.info("📊 性能监控已启用")
-    
-    class ResponsiveLayoutManager:
-        def __init__(self): pass
-        
-        def optimize_mobile_layout(self): 
-            pass
-        
-        def create_responsive_columns(self, desktop_ratios=None, mobile_ratios=None):
-            # 简化版本，直接返回标准列布局
-            if desktop_ratios:
-                return st.columns(desktop_ratios)
-            else:
-                return st.columns([1, 1, 1])
-
-# 全局状态管理类
-class APlusStudioState:
-    """A+Studio应用状态管理器"""
-    
-    def __init__(self):
-        self.initialize_session_state()
-    
-    def initialize_session_state(self):
-        """初始化会话状态"""
-        # 应用模式状态
-        if 'aplus_interface_mode' not in st.session_state:
-            st.session_state.aplus_interface_mode = "工作流模式"
-        
-        # 工作流状态
-        if 'aplus_workflow_session_id' not in st.session_state:
-            st.session_state.aplus_workflow_session_id = None
-        
-        if 'aplus_current_step' not in st.session_state:
-            st.session_state.aplus_current_step = 0
-        
-        # 模板选择状态
-        if 'aplus_selected_template_id' not in st.session_state:
-            st.session_state.aplus_selected_template_id = None
-        
-        # 产品数据状态
-        if 'aplus_product_data' not in st.session_state:
-            st.session_state.aplus_product_data = None
-        
-        # AI处理状态
-        if 'aplus_ai_processing' not in st.session_state:
-            st.session_state.aplus_ai_processing = False
-        
-        # 错误状态
-        if 'aplus_last_error' not in st.session_state:
-            st.session_state.aplus_last_error = None
-        
-        # 成功消息状态
-        if 'aplus_success_message' not in st.session_state:
-            st.session_state.aplus_success_message = None
-        
-        # 用户体验优化状态
-        if 'aplus_feedback_system' not in st.session_state:
-            st.session_state.aplus_feedback_system = FeedbackSystem()
-        
-        if 'aplus_performance_optimizer' not in st.session_state:
-            st.session_state.aplus_performance_optimizer = PerformanceOptimizer()
-        
-        if 'aplus_layout_manager' not in st.session_state:
-            st.session_state.aplus_layout_manager = ResponsiveLayoutManager()
-        
-        # 操作历史
-        if 'aplus_operation_history' not in st.session_state:
-            st.session_state.aplus_operation_history = []
-    
-    def reset_workflow(self):
-        """重置工作流状态"""
-        st.session_state.aplus_workflow_session_id = None
-        st.session_state.aplus_current_step = 0
-        st.session_state.aplus_selected_template_id = None
-        st.session_state.aplus_product_data = None
-        st.session_state.aplus_ai_processing = False
-        st.session_state.aplus_last_error = None
-        st.session_state.aplus_success_message = None
-    
-    def set_error(self, error_message: str, solutions: list = None):
-        """设置错误消息"""
-        st.session_state.aplus_last_error = error_message
-        st.session_state.aplus_success_message = None
-        
-        # 使用反馈系统显示错误
-        feedback_system = st.session_state.get('aplus_feedback_system')
-        if feedback_system:
-            feedback_system.show_error_feedback(error_message, solutions)
-    
-    def set_success(self, success_message: str, next_steps: list = None):
-        """设置成功消息"""
-        st.session_state.aplus_success_message = success_message
-        st.session_state.aplus_last_error = None
-        
-        # 使用反馈系统显示成功消息
-        feedback_system = st.session_state.get('aplus_feedback_system')
-        if feedback_system:
-            feedback_system.show_success_feedback(success_message, next_steps)
-    
-    def clear_messages(self):
-        """清除所有消息"""
-        st.session_state.aplus_last_error = None
-        st.session_state.aplus_success_message = None
-    
-    def add_operation_to_history(self, operation: str, result: str, timestamp: str = None):
-        """添加操作到历史记录"""
-        if timestamp is None:
-            from datetime import datetime
-            timestamp = datetime.now().isoformat()
-        
-        history_entry = {
-            "operation": operation,
-            "result": result,
-            "timestamp": timestamp
-        }
-        
-        st.session_state.aplus_operation_history.append(history_entry)
-        
-        # 限制历史记录数量
-        if len(st.session_state.aplus_operation_history) > 50:
-            st.session_state.aplus_operation_history = st.session_state.aplus_operation_history[-50:]
-
-# 组件管理器
-class ComponentManager:
-    """组件管理器，负责初始化和管理所有系统组件"""
-    
-    def __init__(self):
-        self.components = {}
-        self.ui_components = {}
-        self.initialized = False
-        self.initialization_error = None
-    
-    def initialize_components(self):
-        """初始化所有系统组件"""
-        if self.initialized:
-            return True
-        
-        try:
-            # 导入核心组件
-            from services.aplus_studio import (
-                TemplateService, CategoryService, SearchService,
-                WorkflowService, StepProcessorService,
-                GeminiService, ImageCompositorService, FileService
-            )
-            
-            # 导入UI组件
-            from app_utils.aplus_studio.ui_components.template_library_ui import TemplateLibraryUI
-            from app_utils.aplus_studio.ui_components.product_input_ui import ProductInputUI
-            from app_utils.aplus_studio.ui_components.workflow_ui import WorkflowUI
-            from app_utils.aplus_studio.ui_components.ai_status_ui import AIStatusUI
-            
-            # 初始化核心组件
-            self.components['template_service'] = TemplateService()
-            self.components['category_service'] = CategoryService()
-            self.components['search_service'] = SearchService(
-                self.components['template_service'], 
-                self.components['category_service']
-            )
-            self.components['workflow_service'] = WorkflowService()
-            self.components['step_processor_service'] = StepProcessorService()
-            self.components['file_service'] = FileService()
-            self.components['gemini_service'] = GeminiService()
-            self.components['image_compositor_service'] = ImageCompositorService()
-            
-            # 初始化UI组件
-            self.ui_components['template_ui'] = TemplateLibraryUI(
-                self.components['template_service'], 
-                self.components['search_service'], 
-                self.components['category_service']
-            )
-            self.ui_components['product_ui'] = ProductInputUI(
-                self.components['file_service']
-            )
-            self.ui_components['workflow_ui'] = WorkflowUI(
-                self.components['workflow_service'], 
-                self.components['step_processor_service']
-            )
-            self.ui_components['ai_status_ui'] = AIStatusUI(
-                self.components['gemini_service'], 
-                self.components['image_compositor_service']
-            )
-            
-            self.initialized = True
-            return True
-            
-        except ImportError as e:
-            self.initialization_error = f"组件导入失败: {e}"
-            return False
-        except Exception as e:
-            self.initialization_error = f"组件初始化失败: {e}"
-            return False
-    
-    def get_component(self, name: str):
-        """获取核心组件"""
-        return self.components.get(name)
-    
-    def get_ui_component(self, name: str):
-        """获取UI组件"""
-        return self.ui_components.get(name)
-    
-    def is_ready(self) -> bool:
-        """检查组件是否准备就绪"""
-        return self.initialized and self.initialization_error is None
-
-# 路由管理器
-class RouteManager:
-    """路由管理器，负责处理不同界面模式的路由"""
-    
-    def __init__(self, component_manager: ComponentManager, state_manager: APlusStudioState):
-        self.component_manager = component_manager
-        self.state_manager = state_manager
-    
-    def render_workflow_mode(self):
-        """渲染工作流模式界面"""
-        # 使用容器确保内容只渲染一次
-        with st.container():
-            # 显示进度指示和帮助提示
-            self._show_workflow_guidance()
-            
-            workflow_ui = self.component_manager.get_ui_component('workflow_ui')
-            if not workflow_ui:
-                self.state_manager.set_error(
-                    "工作流UI组件未初始化", 
-                    ["检查组件导入", "重新加载页面", "联系技术支持"]
-                )
-                return
-            
-            # 使用性能优化器测量渲染时间
-            performance_optimizer = st.session_state.get('aplus_performance_optimizer')
-            
-            if performance_optimizer:
-                @performance_optimizer.measure_operation_time("workflow_render")
-                def render_workflow():
-                    return workflow_ui.render()
-            else:
-                def render_workflow():
-                    return workflow_ui.render()
-            
-            # 渲染工作流界面
-            with st.spinner("正在加载工作流界面..."):
-                workflow_result = render_workflow()
-            
-            # 暂时注释掉工作流UI渲染，测试标题重复问题
-            # st.info("🔧 工作流UI已暂时禁用，正在调试标题重复问题")
-            # workflow_result = None
-            
-            # 处理工作流结果
-            if workflow_result:
-                self._handle_workflow_result(workflow_result)
-            
-            # 显示性能指标（开发模式）
-            if st.session_state.get('aplus_debug_mode', False) and performance_optimizer:
-                performance_optimizer.show_performance_metrics()
-    
-    def render_classic_mode(self):
-        """渲染经典三列布局模式"""
-        st.subheader("🎨 AI 驱动的模板定制工作流")
-        
-        # 显示使用提示
-        feedback_system = st.session_state.get('aplus_feedback_system')
-        if feedback_system:
-            feedback_system.show_tips_and_hints([
-                "选择与您产品风格匹配的模板",
-                "填写详细的产品信息以获得更好的AI生成效果",
-                "可以随时修改产品信息重新生成",
-                "生成完成后可下载多种格式的文件"
-            ])
-        
-        # 优化移动端布局
-        layout_manager = st.session_state.get('aplus_layout_manager')
-        if layout_manager:
-            layout_manager.optimize_mobile_layout()
-        
-        # 使用响应式列布局
-        if layout_manager:
-            col_template, col_product, col_result = layout_manager.create_responsive_columns(
-                desktop_ratios=[1, 1, 1.2],
-                mobile_ratios=[1]  # 移动端单列布局
-            )
-        else:
-            col_template, col_product, col_result = st.columns([1, 1, 1.2], gap="medium")
-        
-        with col_template:
-            st.markdown("### 1️⃣ 智能模板选择")
-            self._render_template_selection()
-        
-        with col_product:
-            st.markdown("### 2️⃣ 产品信息")
-            self._render_product_input()
-        
-        with col_result:
-            st.markdown("### 3️⃣ 生成结果")
-            self._render_generation_result()
-    
-
-    
-    def _handle_workflow_result(self, workflow_result: Dict[str, Any]):
-        """处理工作流结果"""
-        current_step = workflow_result.get("current_step", 0)
-        session_id = workflow_result.get("session_id")
-        
-        # 更新会话状态
-        if session_id:
-            st.session_state.aplus_workflow_session_id = session_id
-        st.session_state.aplus_current_step = current_step
-        
-        # 根据当前步骤显示相应的UI组件
-        if current_step == 0:
-            # 模板选择步骤
-            template_ui = self.component_manager.get_ui_component('template_ui')
-            if template_ui:
-                selected_template_id = template_ui.render()
-                if selected_template_id:
-                    st.session_state.aplus_selected_template_id = selected_template_id
-        
-        elif current_step == 1:
-            # 产品信息步骤
-            product_ui = self.component_manager.get_ui_component('product_ui')
-            if product_ui:
-                product_data = product_ui.render()
-                if product_data:
-                    st.session_state.aplus_product_data = product_data
-                    # 更新工作流会话中的产品数据
-                    self._update_workflow_session_data(session_id, product_data)
-        
-        elif current_step == 3:
-            # AI处理步骤
-            self._render_ai_processing_step(session_id)
-    
-    def _render_generation_result(self):
-        """渲染生成结果区域"""
-        if st.button("🚀 生成 A+ 页面", type="primary", use_container_width=True):
-            selected_template_id = st.session_state.get('aplus_selected_template_id')
-            product_data = st.session_state.get('aplus_product_data')
-            
-            if not selected_template_id or not product_data:
-                self.state_manager.set_error("请先选择模板并完善产品信息")
-            else:
-                self._process_generation_request(selected_template_id, product_data)
-    
-    def _render_ai_processing_step(self, session_id: str):
-        """渲染AI处理步骤"""
-        workflow_service = self.component_manager.get_component('workflow_service')
-        template_service = self.component_manager.get_component('template_service')
-        ai_status_ui = self.component_manager.get_ui_component('ai_status_ui')
-        
-        if not all([workflow_service, template_service, ai_status_ui]):
-            st.error("必要组件未初始化")
-            return
-        
-        session = workflow_service.get_session(session_id)
-        if session and session.product_data:
-            template = template_service.load_template(session.template_id)
-            if template:
-                ai_result = ai_status_ui.render(
-                    template, 
-                    session.product_data, 
-                    session.customization_options
-                )
-                
-                if ai_result and ai_result.get("is_completed"):
-                    self.state_manager.set_success("✅ A+ 页面生成完成！")
-    
-    def _process_generation_request(self, template_id: str, product_data: Any):
-        """处理生成请求"""
-        with st.spinner("AI 正在生成定制化 A+ 页面..."):
-            try:
-                template_service = self.component_manager.get_component('template_service')
-                ai_status_ui = self.component_manager.get_ui_component('ai_status_ui')
-                
-                if not template_service or not ai_status_ui:
-                    raise Exception("必要组件未初始化")
-                
-                # 加载模板
-                template = template_service.load_template(template_id)
-                if not template:
-                    raise Exception("模板加载失败")
-                
-                # 使用AI状态UI处理生成
-                customization_options = {
-                    "color_scheme": "品牌色调",
-                    "layout_style": "标准布局",
-                    "ai_enhance_text": True,
-                    "ai_enhance_layout": True,
-                    "ai_background_gen": False
-                }
-                
-                ai_result = ai_status_ui.render_compact(
-                    template, 
-                    product_data, 
-                    customization_options
-                )
-                
-                if ai_result and ai_result.get("is_completed"):
-                    self.state_manager.set_success("✅ A+ 页面生成完成！")
-                    self._render_download_options()
-                else:
-                    self.state_manager.set_error("AI处理未完成，请稍后重试")
-                    
-            except Exception as e:
-                self.state_manager.set_error(f"生成失败: {e}")
-                st.info("💡 这是演示版本，完整功能需要配置AI服务和模板文件")
-    
-    def _render_download_options(self):
-        """渲染下载选项"""
-        st.markdown("### 📥 下载选项")
-        col_download1, col_download2, col_download3 = st.columns(3)
-        
-        with col_download1:
-            st.download_button("📥 下载图片包", 
-                             data=b"mock_zip_data", 
-                             file_name="aplus_images.zip", 
-                             mime="application/zip")
-        
-        with col_download2:
-            st.download_button("📄 下载HTML代码", 
-                             data="<html>Mock HTML</html>", 
-                             file_name="aplus_page.html", 
-                             mime="text/html")
-        
-        with col_download3:
-            st.download_button("⚙️ 下载配置文件", 
-                             data='{"config": "mock"}', 
-                             file_name="aplus_config.json", 
-                             mime="application/json")
-    
-    def _update_workflow_session_data(self, session_id: str, product_data: Any):
-        """更新工作流会话数据"""
-        if not session_id:
-            return
-        
-        workflow_service = self.component_manager.get_component('workflow_service')
-        if workflow_service:
-            session = workflow_service.get_session(session_id)
-            if session:
-                session.product_data = product_data
-                workflow_service.update_session(session)
-    
-    def _show_workflow_guidance(self):
-        """显示工作流指引"""
-        feedback_system = st.session_state.get('aplus_feedback_system')
-        if feedback_system:
-            # 显示当前步骤指引
-            current_step = st.session_state.get('aplus_current_step', 0)
-            
-            step_info = {
-                0: ("模板选择", "从模板库中选择适合您产品的A+页面模板"),
-                1: ("产品信息", "上传产品图片并填写详细的产品信息"),
-                2: ("自定义设置", "调整模板样式和AI生成选项"),
-                3: ("AI处理", "AI正在智能合成您的A+页面"),
-                4: ("完成下载", "查看生成结果并下载所需文件")
-            }
-            
-            if current_step in step_info:
-                step_name, step_desc = step_info[current_step]
-                guidance_result = feedback_system.show_step_guidance(
-                    current_step + 1, 5, step_name, step_desc,
-                    completion_criteria=[
-                        "确保所有必填信息已完成",
-                        "检查预览效果是否满意",
-                        "点击下一步继续流程"
-                    ]
-                )
-                
-                if guidance_result:
-                    self._handle_step_navigation(guidance_result)
-    
-    def _handle_step_navigation(self, navigation_action: str):
-        """处理步骤导航"""
-        current_step = st.session_state.get('aplus_current_step', 0)
-        
-        if navigation_action == "next" and current_step < 4:
-            st.session_state.aplus_current_step = current_step + 1
-            st.rerun()
-        elif navigation_action == "previous" and current_step > 0:
-            st.session_state.aplus_current_step = current_step - 1
-            st.rerun()
-        elif navigation_action == "finish":
-            self.state_manager.set_success(
-                "工作流已完成！", 
-                ["下载生成的文件", "开始新的项目", "分享您的作品"]
-            )
-    
-    def _render_template_selection(self):
-        """渲染模板选择区域"""
-        template_ui = self.component_manager.get_ui_component('template_ui')
-        if template_ui:
-            with st.spinner("正在加载模板库..."):
-                selected_template_id = template_ui.render_compact()
-                
-                if selected_template_id:
-                    st.session_state.aplus_selected_template_id = selected_template_id
-                    
-                    # 显示选择成功反馈
-                    feedback_system = st.session_state.get('aplus_feedback_system')
-                    if feedback_system:
-                        feedback_system.show_success_feedback(
-                            "模板选择成功！",
-                            ["现在可以填写产品信息", "预览模板效果", "开始AI生成"]
-                        )
-                    
-                    # 记录操作历史
-                    self.state_manager.add_operation_to_history(
-                        "模板选择", f"选择了模板: {selected_template_id}"
-                    )
-        else:
-            self.state_manager.set_error(
-                "模板UI组件未初始化",
-                ["刷新页面重试", "检查网络连接", "联系技术支持"]
-            )
-    
-    def _render_product_input(self):
-        """渲染产品信息输入区域"""
-        product_ui = self.component_manager.get_ui_component('product_ui')
-        if product_ui:
-            product_data = product_ui.render_compact()
-            
-            if product_data:
-                st.session_state.aplus_product_data = product_data
-                
-                # 显示数据验证反馈
-                validation_result = self._validate_product_data(product_data)
-                feedback_system = st.session_state.get('aplus_feedback_system')
-                
-                if validation_result["valid"]:
-                    if feedback_system:
-                        feedback_system.show_success_feedback(
-                            "产品信息完整！",
-                            ["可以开始生成A+页面", "检查模板选择", "调整生成选项"]
-                        )
-                else:
-                    if feedback_system:
-                        feedback_system.show_warning_feedback(
-                            "产品信息不完整",
-                            [
-                                {
-                                    "label": "查看缺失项",
-                                    "callback": lambda: st.info(f"缺失: {', '.join(validation_result['missing_fields'])}")
-                                }
-                            ]
-                        )
-                
-                # 记录操作历史
-                self.state_manager.add_operation_to_history(
-                    "产品信息输入", "产品信息已更新"
-                )
-        else:
-            self.state_manager.set_error(
-                "产品输入UI组件未初始化",
-                ["刷新页面重试", "检查组件状态"]
-            )
-    
-    def _validate_product_data(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
-        """验证产品数据完整性"""
-        required_fields = ["product_name", "product_category", "features"]
-        missing_fields = []
-        
-        for field in required_fields:
-            if not product_data.get(field):
-                missing_fields.append(field)
-        
-        return {
-            "valid": len(missing_fields) == 0,
-            "missing_fields": missing_fields,
-            "completeness": (len(required_fields) - len(missing_fields)) / len(required_fields)
-        }
-
-# 初始化全局管理器
-@st.cache_resource
-def get_component_manager():
-    """获取组件管理器单例"""
-    return ComponentManager()
-
-@st.cache_resource  
-def get_state_manager():
-    """获取状态管理器单例"""
-    return APlusStudioState()
-
-# --- 基础设置 ---
+# 身份验证
 try:
     import auth
+    if not auth.check_password():
+        st.stop()
 except ImportError:
-    pass 
+    pass
 
-st.set_page_config(page_title="A+ Studio", page_icon="🧩", layout="wide")
+# 导入A+工作流组件
+try:
+    from app_utils.aplus_studio.controller import APlusController
+    from app_utils.aplus_studio.input_panel import ProductInputPanel
+    from app_utils.aplus_studio.generation_panel import ModuleGenerationPanel
+    from app_utils.aplus_studio.preview_gallery import ImagePreviewGallery
+    from app_utils.aplus_studio.regeneration_panel import RegenerationPanel
+    from services.aplus_studio.models import ModuleType, GenerationStatus
+    APLUS_AVAILABLE = True
+except ImportError as e:
+    APLUS_AVAILABLE = False
+    st.error(f"A+ Studio组件导入失败: {e}")
 
-# 主应用入口
+# 页面配置
+st.set_page_config(
+    page_title="A+ Studio", 
+    page_icon="🧩", 
+    layout="wide"
+)
+
 def main():
-    """主应用入口函数"""
-    # 身份验证
-    if 'auth' in sys.modules:
-        if not auth.check_password():
-            st.stop()
-
-    # 应用标题
-    st.title("🧩 A+ 创意工场 (APlus Studio)")
-    st.caption("AI 驱动的亚马逊 A+ 页面智能生成工具")
-
-    # 获取管理器实例
-    component_manager = get_component_manager()
-    state_manager = get_state_manager()
+    """主应用入口"""
+    st.title("🧩 A+ 图片制作流 (APlus Studio)")
+    st.caption("AI 驱动的亚马逊 A+ 页面智能图片生成工具")
     
-    # 显示系统状态消息
-    _display_system_messages(state_manager)
-    
-    # 初始化组件
-    if not component_manager.initialize_components():
-        _render_fallback_interface(component_manager.initialization_error)
+    if not APLUS_AVAILABLE:
+        st.error("A+ Studio系统组件未正确加载，请检查系统配置")
         return
     
-    # 创建路由管理器
-    route_manager = RouteManager(component_manager, state_manager)
+    # 初始化控制器和组件
+    if 'aplus_controller' not in st.session_state:
+        st.session_state.aplus_controller = APlusController()
     
-    # 界面模式选择
-    interface_mode = st.radio(
-        "选择界面模式",
-        ["工作流模式", "经典模式"],
-        index=0,
-        horizontal=True,
-        help="工作流模式：分步引导式界面；经典模式：传统的三列布局",
-        key="aplus_interface_mode"
-    )
+    controller = st.session_state.aplus_controller
     
-    # 添加系统控制按钮
-    _render_system_controls(state_manager)
+    # 初始化UI组件
+    input_panel = ProductInputPanel()
+    generation_panel = ModuleGenerationPanel(controller)
+    preview_gallery = ImagePreviewGallery(controller)
+    regeneration_panel = RegenerationPanel(controller)
     
-    # 根据选择的模式渲染界面
-    try:
-        if interface_mode == "工作流模式":
-            route_manager.render_workflow_mode()
-        elif interface_mode == "经典模式":
-            route_manager.render_classic_mode()
-    except Exception as e:
-        st.error(f"界面渲染失败: {e}")
-        st.error(f"错误详情: {traceback.format_exc()}")
-        state_manager.set_error(f"界面渲染失败: {e}")
-
-def _display_system_messages(state_manager: APlusStudioState):
-    """显示系统状态消息"""
-    # 显示错误消息
-    if st.session_state.get('aplus_last_error'):
-        st.error(st.session_state.aplus_last_error)
-        if st.button("清除错误", key="clear_error"):
-            state_manager.clear_messages()
-            st.rerun()
+    # 侧边栏 - 会话管理和系统状态
+    render_sidebar(controller)
     
-    # 显示成功消息
-    if st.session_state.get('aplus_success_message'):
-        st.success(st.session_state.aplus_success_message)
-        if st.button("清除消息", key="clear_success"):
-            state_manager.clear_messages()
-            st.rerun()
-
-def _render_system_controls(state_manager: APlusStudioState):
-    """渲染系统控制按钮"""
-    with st.expander("🔧 系统控制", expanded=False):
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            if st.button("🔄 重置工作流", help="重置所有工作流状态"):
-                state_manager.reset_workflow()
-                feedback_system = st.session_state.get('aplus_feedback_system')
-                if feedback_system:
-                    feedback_system.show_success_feedback(
-                        "工作流已重置",
-                        ["可以开始新的项目", "选择新的模板", "重新输入产品信息"]
-                    )
-                st.rerun()
-        
-        with col2:
-            if st.button("🧹 清除缓存", help="清除应用缓存"):
-                st.cache_resource.clear()
-                feedback_system = st.session_state.get('aplus_feedback_system')
-                if feedback_system:
-                    feedback_system.show_success_feedback(
-                        "缓存已清除",
-                        ["页面性能已优化", "组件将重新加载", "可能需要重新登录"]
-                    )
-                st.rerun()
-        
-        with col3:
-            if st.button("📊 系统状态", help="显示系统状态信息"):
-                _show_system_status()
-        
-        with col4:
-            if st.button("📈 操作历史", help="查看操作历史记录"):
-                _show_operation_history(state_manager)
-        
-        with col5:
-            if st.button("❓ 帮助", help="显示使用帮助"):
-                _show_help_info()
-        
-        # 调试模式开关
-        debug_mode = st.checkbox("🐛 调试模式", 
-                               value=st.session_state.get('aplus_debug_mode', False),
-                               help="启用调试模式显示详细信息")
-        st.session_state.aplus_debug_mode = debug_mode
-
-def _show_system_status():
-    """显示系统状态信息"""
-    component_manager = get_component_manager()
-    
-    st.info("### 📊 系统状态")
-    
-    # 组件状态
-    st.write("**组件状态:**")
-    if component_manager.is_ready():
-        st.success("✅ 所有组件已就绪")
-        
-        # 显示组件列表
-        st.write("**已加载的核心组件:**")
-        for name in component_manager.components.keys():
-            st.write(f"- {name}")
-        
-        st.write("**已加载的UI组件:**")
-        for name in component_manager.ui_components.keys():
-            st.write(f"- {name}")
-    else:
-        st.error(f"❌ 组件初始化失败: {component_manager.initialization_error}")
-    
-    # 会话状态
-    st.write("**会话状态:**")
-    st.write(f"- 当前模式: {st.session_state.get('aplus_interface_mode', 'N/A')}")
-    st.write(f"- 工作流会话ID: {st.session_state.get('aplus_workflow_session_id', 'N/A')}")
-    st.write(f"- 当前步骤: {st.session_state.get('aplus_current_step', 'N/A')}")
-    st.write(f"- 选中模板: {st.session_state.get('aplus_selected_template_id', 'N/A')}")
-    st.write(f"- 产品数据: {'已设置' if st.session_state.get('aplus_product_data') else '未设置'}")
-
-def _show_operation_history(state_manager: APlusStudioState):
-    """显示操作历史"""
-    st.info("### 📈 操作历史")
-    
-    history = st.session_state.get('aplus_operation_history', [])
-    
-    if history:
-        # 显示最近的10条记录
-        recent_history = history[-10:]
-        
-        for i, entry in enumerate(reversed(recent_history)):
-            with st.expander(f"{entry['operation']} - {entry['timestamp'][:19]}"):
-                st.write(f"**操作:** {entry['operation']}")
-                st.write(f"**结果:** {entry['result']}")
-                st.write(f"**时间:** {entry['timestamp']}")
-        
-        # 清除历史按钮
-        if st.button("🗑️ 清除历史记录"):
-            st.session_state.aplus_operation_history = []
-            st.success("操作历史已清除")
-            st.rerun()
-    else:
-        st.write("暂无操作历史记录")
-
-def _show_help_info():
-    """显示帮助信息"""
-    st.info("### ❓ 使用帮助")
-    
-    # 使用标签页组织帮助内容
-    tab1, tab2, tab3 = st.tabs(["🔄 工作流模式", "🎨 经典模式", "⚡ 快捷操作"])
+    # 主界面标签页
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📝 产品分析", "🎨 模块生成", "🖼️ 图片预览", "🔄 重新生成", "📊 数据导出"
+    ])
     
     with tab1:
-        st.markdown("""
-        **工作流模式使用指南:**
-        1. **模板选择** - 从模板库中选择适合的A+页面模板
-        2. **产品信息** - 上传产品图片并填写详细信息
-        3. **自定义设置** - 调整模板样式和AI生成选项
-        4. **AI处理** - 等待AI智能合成您的A+页面
-        5. **完成下载** - 查看生成结果并下载所需文件
-        
-        **提示:**
-        - 每个步骤都有完成标准指引
-        - 可以随时返回上一步修改
-        - 系统会自动保存您的进度
-        """)
+        render_product_analysis_tab(controller, input_panel)
     
     with tab2:
-        st.markdown("""
-        **经典模式使用指南:**
-        - **左列：智能模板选择**
-          - 使用搜索功能快速找到合适模板
-          - 支持按类别和节日筛选
-          - 查看模板预览和详细信息
-        
-        - **中列：产品信息输入**
-          - 填写产品名称和类别
-          - 上传产品图片（支持多张）
-          - 输入产品卖点和品牌信息
-        
-        - **右列：生成和下载**
-          - 一键生成A+页面
-          - 预览生成结果
-          - 下载多种格式文件
-        """)
+        render_module_generation_tab(controller, generation_panel)
     
     with tab3:
-        st.markdown("""
-        **快捷操作:**
-        - **Ctrl + R** - 刷新页面
-        - **Ctrl + Shift + R** - 强制刷新缓存
-        - **ESC** - 取消当前操作
-        
-        **系统控制:**
-        - **重置工作流** - 清除所有进度，重新开始
-        - **清除缓存** - 解决组件加载问题
-        - **系统状态** - 查看当前系统运行状态
-        - **操作历史** - 查看最近的操作记录
-        - **调试模式** - 显示详细的系统信息
-        """)
+        render_preview_gallery_tab(controller, preview_gallery)
     
-    # 显示键盘快捷键
-    feedback_system = st.session_state.get('aplus_feedback_system')
-    if feedback_system:
-        feedback_system.show_keyboard_shortcuts({
-            "Ctrl + R": "刷新页面",
-            "Ctrl + Shift + R": "强制刷新缓存",
-            "ESC": "取消当前操作",
-            "F1": "显示帮助信息"
-        })
+    with tab4:
+        render_regeneration_tab(controller, regeneration_panel)
+    
+    with tab5:
+        render_export_tab(controller)
 
-def _render_fallback_interface(error_message: str):
-    """渲染备用界面"""
-    st.error(f"系统组件初始化失败: {error_message}")
-    st.info("💡 正在使用备用界面模式")
-    
-    # 显示基础的备用界面
-    st.subheader("🎨 基础模板工作流")
-    
-    col_template, col_product, col_result = st.columns([1, 1, 1.2], gap="medium")
-    
-    with col_template:
-        st.markdown("### 1️⃣ 模板选择")
-        template_options = {
-            "科技现代风格": "tech_modern",
-            "美妆优雅风格": "beauty_elegant", 
-            "家居温馨风格": "home_cozy",
-            "运动活力风格": "sports_dynamic"
-        }
-        selected_template = st.selectbox("选择模板", list(template_options.keys()))
+
+def render_sidebar(controller: APlusController):
+    """渲染侧边栏"""
+    with st.sidebar:
+        st.header("🎛️ 控制面板")
         
-        # 显示模板预览
-        color_map = {
-            "tech_modern": "2196F3",
-            "beauty_elegant": "E91E63",
-            "home_cozy": "FF9800", 
-            "sports_dynamic": "4CAF50"
-        }
-        template_id = template_options[selected_template]
-        color = color_map.get(template_id, "4CAF50")
-        preview_url = f"https://via.placeholder.com/300x200/{color}/white?text={selected_template.replace(' ', '+')}"
-        st.image(preview_url, caption=f"模板预览: {selected_template}")
+        # 会话信息
+        session_info = controller.get_session_info()
+        if session_info:
+            st.success(f"会话ID: {session_info['session_id'][:8]}...")
+            
+            # 会话统计
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("已完成", session_info['completed_modules'])
+            with col2:
+                st.metric("总模块", session_info['total_modules'])
+            
+            # 会话操作
+            if st.button("🔄 重置会话", use_container_width=True):
+                controller.reset_session()
+                st.rerun()
+        else:
+            st.info("没有活跃会话")
+        
+        st.divider()
+        
+        # 模块状态概览
+        st.subheader("📊 模块状态")
+        progress = controller.get_generation_progress()
+        
+        for module_type in ModuleType:
+            status = progress.get(module_type, GenerationStatus.NOT_STARTED)
+            status_icon = {
+                GenerationStatus.NOT_STARTED: "⚪",
+                GenerationStatus.IN_PROGRESS: "🟡", 
+                GenerationStatus.COMPLETED: "🟢",
+                GenerationStatus.FAILED: "🔴"
+            }.get(status, "⚪")
+            
+            module_names = {
+                ModuleType.IDENTITY: "身份代入",
+                ModuleType.SENSORY: "感官解构",
+                ModuleType.EXTENSION: "多维延展",
+                ModuleType.TRUST: "信任转化"
+            }
+            
+            st.write(f"{status_icon} {module_names.get(module_type, module_type.value)}")
+        
+        st.divider()
+        
+        # 系统健康状态
+        st.subheader("🔧 系统状态")
+        health_status = controller.get_system_health_status()
+        
+        if health_status.get("overall_status") == "healthy":
+            st.success("✅ 系统正常")
+        elif health_status.get("overall_status") == "degraded":
+            st.warning("⚠️ 系统降级")
+        else:
+            st.error("❌ 系统异常")
+        
+        # 快速操作
+        st.subheader("⚡ 快速操作")
+        
+        if st.button("🔍 系统诊断", use_container_width=True):
+            with st.expander("系统诊断结果", expanded=True):
+                st.json(health_status)
+        
+        if st.button("🧹 清理缓存", use_container_width=True):
+            controller.cleanup_old_versions()
+            st.success("缓存已清理")
+
+
+def render_product_analysis_tab(controller: APlusController, input_panel: ProductInputPanel):
+    """渲染产品分析标签页"""
+    st.header("📝 产品信息分析")
     
-    with col_product:
-        st.markdown("### 2️⃣ 产品信息")
-        product_name = st.text_input("产品名称", placeholder="例: 无线蓝牙耳机")
-        product_category = st.selectbox("产品类别", ["电子产品", "美妆护肤", "家居用品", "运动户外"])
-        
-        # 产品特点
-        features = []
-        for i in range(3):
-            feature = st.text_input(f"产品特点 {i+1}", key=f"fallback_feature_{i}")
-            if feature.strip():
-                features.append(feature)
-        
-        brand_name = st.text_input("品牌名称", placeholder="例: TechPro")
+    # 检查当前会话状态
+    session = controller.state_manager.get_current_session()
     
-    with col_result:
-        st.markdown("### 3️⃣ 生成结果")
+    # 如果已有分析结果，显示摘要
+    if session and session.analysis_result:
+        render_analysis_summary(session.analysis_result)
         
-        if st.button("🚀 生成 A+ 页面", type="primary", use_container_width=True):
-            if not product_name or not features:
-                st.error("请填写产品名称和至少一个特点")
-            else:
-                with st.spinner("正在生成..."):
-                    import time
-                    time.sleep(2)
-                    
-                    st.success("✅ 生成完成！")
-                    
-                    # 显示模拟结果
-                    result_url = f"https://via.placeholder.com/600x400/{color}/white?text=Generated+APlus+Page"
-                    st.image(result_url, caption="生成的A+页面预览")
-                    
-                    # 下载按钮
-                    st.download_button(
-                        "📥 下载结果",
-                        data="Mock generated content",
-                        file_name=f"aplus_{product_name.replace(' ', '_')}.html",
-                        mime="text/html"
+        # 提供重新分析选项
+        if st.button("🔄 重新分析产品", type="secondary"):
+            controller.state_manager.update_analysis_result(None)
+            st.rerun()
+        
+        return
+    
+    # 产品输入界面
+    product_info, validation_result = input_panel.render_input_panel()
+    
+    if product_info and validation_result.is_valid:
+        # 显示输入预览
+        input_panel.render_input_preview(product_info)
+        
+        # 执行分析
+        with st.spinner("🔍 正在分析产品信息..."):
+            try:
+                analysis_result = asyncio.run(
+                    controller.process_product_input(
+                        product_info.description, 
+                        product_info.uploaded_images
                     )
+                )
+                
+                if analysis_result:
+                    st.success("✅ 产品分析完成！")
+                    render_analysis_summary(analysis_result)
+                else:
+                    st.error("❌ 产品分析失败")
+                    
+            except Exception as e:
+                st.error(f"❌ 分析过程中出现错误: {str(e)}")
 
-# 运行主应用
+
+def render_analysis_summary(analysis_result):
+    """渲染分析结果摘要"""
+    st.subheader("📊 分析结果摘要")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("**📋 产品特征**")
+        if hasattr(analysis_result, 'listing_analysis') and analysis_result.listing_analysis:
+            listing = analysis_result.listing_analysis
+            st.write(f"• **产品类别**: {listing.product_category}")
+            st.write(f"• **目标用户**: {listing.target_demographics}")
+            
+            if listing.key_selling_points:
+                st.write("• **核心卖点**:")
+                for point in listing.key_selling_points[:3]:
+                    st.write(f"  - {point}")
+    
+    with col2:
+        st.write("**🎨 视觉特征**")
+        if hasattr(analysis_result, 'image_analysis') and analysis_result.image_analysis:
+            image_analysis = analysis_result.image_analysis
+            if image_analysis.dominant_colors:
+                st.write(f"• **主色调**: {', '.join(image_analysis.dominant_colors[:3])}")
+            if image_analysis.material_types:
+                st.write(f"• **材质类型**: {', '.join(image_analysis.material_types[:3])}")
+            if image_analysis.design_style:
+                st.write(f"• **设计风格**: {image_analysis.design_style}")
+    
+    # 视觉连贯性信息
+    if hasattr(analysis_result, 'visual_style') and analysis_result.visual_style:
+        with st.expander("🎨 视觉风格设定", expanded=False):
+            visual_style = analysis_result.visual_style
+            if visual_style.color_palette:
+                st.write(f"**色调盘**: {', '.join(visual_style.color_palette)}")
+            if visual_style.aesthetic_direction:
+                st.write(f"**美学方向**: {visual_style.aesthetic_direction}")
+
+
+def render_module_generation_tab(controller: APlusController, generation_panel: ModuleGenerationPanel):
+    """渲染模块生成标签页"""
+    st.header("🎨 模块图片生成")
+    
+    # 检查前置条件
+    session = controller.state_manager.get_current_session()
+    if not session or not session.analysis_result:
+        st.warning("⚠️ 请先完成产品分析")
+        if st.button("📝 前往产品分析", type="primary"):
+            st.session_state["active_tab"] = "product_analysis"
+        return
+    
+    # 渲染生成控制面板
+    generation_action = generation_panel.render_generation_panel()
+    
+    # 处理生成动作
+    if generation_action and generation_action.get("action"):
+        handle_generation_action(controller, generation_panel, generation_action)
+    
+    # 显示生成摘要
+    generation_panel.render_generation_summary()
+
+
+def handle_generation_action(controller: APlusController, generation_panel: ModuleGenerationPanel, action: Dict[str, Any]):
+    """处理生成动作"""
+    action_type = action.get("action")
+    
+    if action_type == "generate_individual":
+        # 单个模块生成
+        module_type = action.get("module_type")
+        custom_params = action.get("module_params", {})
+        
+        generation_panel.start_generation_tracking(module_type)
+        
+        try:
+            with st.spinner(f"正在生成 {module_type.value} 模块..."):
+                result = asyncio.run(controller.generate_module_image(module_type, custom_params))
+                
+                generation_panel.complete_generation(module_type, True)
+                st.success(f"✅ {module_type.value} 模块生成完成！")
+                
+                # 显示结果预览
+                if result.image_data:
+                    st.image(result.image_data, caption=f"{module_type.value} 模块结果")
+                    st.write(f"质量分数: {result.quality_score:.2f}")
+                
+        except Exception as e:
+            generation_panel.complete_generation(module_type, False)
+            st.error(f"❌ {module_type.value} 模块生成失败: {str(e)}")
+    
+    elif action_type in ["generate_batch", "generate_parallel"]:
+        # 批量或并行生成
+        selected_modules = action.get("selected_modules", [])
+        module_params = action.get("module_params", {})
+        
+        if action_type == "generate_batch":
+            handle_batch_generation(controller, generation_panel, selected_modules, module_params)
+        else:
+            handle_parallel_generation(controller, generation_panel, selected_modules, module_params)
+    
+    elif action_type == "stop_all":
+        # 停止所有生成
+        for module_type in generation_panel.get_active_generations():
+            generation_panel._stop_generation(module_type)
+        st.info("已停止所有生成任务")
+    
+    elif action_type == "reset_progress":
+        # 重置进度
+        generation_panel.reset_progress()
+        st.info("已重置生成进度")
+
+
+def handle_batch_generation(controller: APlusController, generation_panel: ModuleGenerationPanel, 
+                          selected_modules: List[ModuleType], module_params: Dict[ModuleType, Dict]):
+    """处理批量生成"""
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i, module_type in enumerate(selected_modules):
+        status_text.text(f"正在生成 {module_type.value} 模块... ({i+1}/{len(selected_modules)})")
+        progress_bar.progress(i / len(selected_modules))
+        
+        generation_panel.start_generation_tracking(module_type)
+        
+        try:
+            custom_params = module_params.get(module_type, {})
+            result = asyncio.run(controller.generate_module_image(module_type, custom_params))
+            
+            generation_panel.complete_generation(module_type, True)
+            st.success(f"✅ {module_type.value} 模块生成完成")
+            
+        except Exception as e:
+            generation_panel.complete_generation(module_type, False)
+            st.error(f"❌ {module_type.value} 模块生成失败: {str(e)}")
+    
+    progress_bar.progress(1.0)
+    status_text.text("✅ 批量生成完成！")
+
+
+def handle_parallel_generation(controller: APlusController, generation_panel: ModuleGenerationPanel,
+                             selected_modules: List[ModuleType], module_params: Dict[ModuleType, Dict]):
+    """处理并行生成"""
+    st.info("🚀 开始并行生成...")
+    
+    # 启动所有模块的生成跟踪
+    for module_type in selected_modules:
+        generation_panel.start_generation_tracking(module_type)
+    
+    # 并行生成（简化实现，实际应该使用真正的并行处理）
+    results = {}
+    for module_type in selected_modules:
+        try:
+            custom_params = module_params.get(module_type, {})
+            result = asyncio.run(controller.generate_module_image(module_type, custom_params))
+            results[module_type] = result
+            generation_panel.complete_generation(module_type, True)
+            
+        except Exception as e:
+            generation_panel.complete_generation(module_type, False)
+            st.error(f"❌ {module_type.value} 模块生成失败: {str(e)}")
+    
+    st.success(f"✅ 并行生成完成！成功生成 {len(results)} 个模块")
+
+
+def render_preview_gallery_tab(controller: APlusController, preview_gallery: ImagePreviewGallery):
+    """渲染图片预览标签页"""
+    st.header("🖼️ 图片预览画廊")
+    
+    # 渲染预览画廊
+    gallery_action = preview_gallery.render_preview_gallery()
+    
+    # 处理画廊动作
+    if gallery_action and gallery_action.get("action"):
+        handle_gallery_action(controller, preview_gallery, gallery_action)
+    
+    # 批量操作
+    module_results = controller.get_module_results()
+    if module_results:
+        st.divider()
+        batch_action = preview_gallery.render_batch_operations(module_results)
+        
+        if batch_action and batch_action.get("action"):
+            handle_batch_action(controller, batch_action)
+
+
+def handle_gallery_action(controller: APlusController, preview_gallery: ImagePreviewGallery, action: Dict[str, Any]):
+    """处理画廊动作"""
+    action_type = action.get("action")
+    
+    if action_type == "export_selected":
+        modules = action.get("modules", [])
+        st.success(f"已选择导出 {len(modules)} 个模块的图片")
+    
+    elif action_type == "refresh":
+        st.rerun()
+
+
+def handle_batch_action(controller: APlusController, action: Dict[str, Any]):
+    """处理批量操作"""
+    action_type = action.get("action")
+    modules = action.get("modules", [])
+    
+    if action_type == "batch_download":
+        st.success(f"正在准备下载 {len(modules)} 个模块的图片...")
+        # 实际实现中会创建ZIP文件供下载
+    
+    elif action_type == "batch_regenerate":
+        st.info(f"将重新生成 {len(modules)} 个模块...")
+        # 跳转到重新生成标签页
+    
+    elif action_type == "quality_analysis":
+        module_results = controller.get_module_results()
+        filtered_results = {m: r for m, r in module_results.items() if m in modules}
+        
+        # 显示质量分析
+        with st.expander("📊 质量分析结果", expanded=True):
+            render_quality_analysis(filtered_results)
+
+
+def render_quality_analysis(module_results: Dict[ModuleType, Any]):
+    """渲染质量分析"""
+    if not module_results:
+        st.info("没有可分析的数据")
+        return
+    
+    quality_scores = [result.quality_score for result in module_results.values()]
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        avg_quality = sum(quality_scores) / len(quality_scores)
+        st.metric("平均质量", f"{avg_quality:.2f}")
+    
+    with col2:
+        max_quality = max(quality_scores)
+        st.metric("最高质量", f"{max_quality:.2f}")
+    
+    with col3:
+        min_quality = min(quality_scores)
+        st.metric("最低质量", f"{min_quality:.2f}")
+
+
+def render_regeneration_tab(controller: APlusController, regeneration_panel: RegenerationPanel):
+    """渲染重新生成标签页"""
+    st.header("🔄 单模块重新生成")
+    
+    # 检查已生成的模块
+    module_results = controller.get_module_results()
+    
+    if not module_results:
+        st.info("还没有已生成的模块，请先在"模块生成"标签页生成模块")
+        if st.button("🎨 前往模块生成", type="primary"):
+            st.session_state["active_tab"] = "module_generation"
+        return
+    
+    # 模块选择
+    available_modules = list(module_results.keys())
+    
+    module_names = {
+        ModuleType.IDENTITY: "🎭 身份代入",
+        ModuleType.SENSORY: "👁️ 感官解构",
+        ModuleType.EXTENSION: "🔄 多维延展",
+        ModuleType.TRUST: "🤝 信任转化"
+    }
+    
+    selected_module = st.selectbox(
+        "选择要重新生成的模块",
+        available_modules,
+        format_func=lambda x: module_names.get(x, x.value)
+    )
+    
+    if selected_module:
+        # 显示当前模块结果
+        current_result = module_results[selected_module]
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.subheader("当前结果")
+            if current_result.image_data:
+                st.image(current_result.image_data, caption="当前版本")
+            st.write(f"**质量分数**: {current_result.quality_score:.2f}")
+            st.write(f"**生成时间**: {current_result.generation_time:.1f}s")
+            st.write(f"**验证状态**: {current_result.validation_status.value}")
+        
+        with col2:
+            # 重新生成控制面板
+            regen_action = regeneration_panel.render_regeneration_controls(selected_module)
+            
+            if regen_action.get("action") == "regenerate":
+                with st.spinner("🔄 正在重新生成..."):
+                    try:
+                        new_result = asyncio.run(
+                            controller.regenerate_image(
+                                selected_module, 
+                                regen_action.get("custom_params")
+                            )
+                        )
+                        
+                        st.success("✅ 重新生成完成！")
+                        
+                        # 显示新结果对比
+                        if new_result.image_data:
+                            st.subheader("新版本")
+                            st.image(new_result.image_data, caption="新版本")
+                            st.write(f"**新质量分数**: {new_result.quality_score:.2f}")
+                            
+                            # 质量对比
+                            quality_diff = new_result.quality_score - current_result.quality_score
+                            if quality_diff > 0:
+                                st.success(f"质量提升: +{quality_diff:.2f}")
+                            elif quality_diff < 0:
+                                st.warning(f"质量下降: {quality_diff:.2f}")
+                            else:
+                                st.info("质量无变化")
+                        
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ 重新生成失败: {str(e)}")
+        
+        # 版本历史
+        st.divider()
+        
+        tab1, tab2 = st.tabs(["📚 版本历史", "📊 版本对比"])
+        
+        with tab1:
+            regeneration_panel.render_version_history_panel(selected_module)
+        
+        with tab2:
+            regeneration_panel.render_version_comparison(selected_module)
+
+
+def render_export_tab(controller: APlusController):
+    """渲染结果导出标签页"""
+    st.header("📊 数据导出")
+    
+    module_results = controller.get_module_results()
+    
+    if not module_results:
+        st.info("还没有可导出的结果")
+        return
+    
+    # 导出选项
+    st.subheader("📥 导出选项")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # 模块选择
+        module_names = {
+            ModuleType.IDENTITY: "🎭 身份代入",
+            ModuleType.SENSORY: "👁️ 感官解构",
+            ModuleType.EXTENSION: "🔄 多维延展",
+            ModuleType.TRUST: "🤝 信任转化"
+        }
+        
+        export_modules = st.multiselect(
+            "选择要导出的模块",
+            list(module_results.keys()),
+            default=list(module_results.keys()),
+            format_func=lambda x: module_names.get(x, x.value)
+        )
+        
+        export_format = st.selectbox(
+            "导出格式",
+            ["PNG (推荐)", "JPG", "PDF报告", "ZIP压缩包"]
+        )
+    
+    with col2:
+        # 导出设置
+        include_metadata = st.checkbox("包含元数据", value=True)
+        include_prompts = st.checkbox("包含提示词", value=False)
+        include_analysis = st.checkbox("包含分析报告", value=True)
+        
+        quality_level = st.selectbox(
+            "图片质量",
+            ["原始质量", "高质量", "压缩版本"],
+            index=0
+        )
+    
+    # 导出预览
+    if export_modules:
+        st.subheader("📋 导出预览")
+        
+        total_size = 0
+        for module_type in export_modules:
+            result = module_results[module_type]
+            if result.image_data:
+                size_mb = len(result.image_data) / (1024 * 1024)
+                total_size += size_mb
+                st.write(f"• {module_names.get(module_type, module_type.value)}: {size_mb:.1f} MB")
+        
+        st.write(f"**总大小**: {total_size:.1f} MB")
+    
+    # 导出按钮
+    if st.button("📥 开始导出", type="primary", disabled=not export_modules):
+        if export_modules:
+            with st.spinner("📦 正在准备导出文件..."):
+                # 模拟导出过程
+                import time
+                time.sleep(2)
+                
+                st.success("✅ 导出完成！")
+                
+                # 显示导出摘要
+                st.subheader("📊 导出摘要")
+                for module_type in export_modules:
+                    result = module_results[module_type]
+                    st.write(f"• {module_names.get(module_type, module_type.value)}: 质量分数 {result.quality_score:.2f}")
+                
+                # 创建下载按钮
+                export_data = controller.export_results()
+                if export_data:
+                    import json
+                    json_str = json.dumps(export_data, indent=2, ensure_ascii=False)
+                    
+                    st.download_button(
+                        "📥 下载导出文件",
+                        data=json_str,
+                        file_name=f"aplus_export_{len(export_modules)}_modules.json",
+                        mime="application/json"
+                    )
+        else:
+            st.warning("请选择要导出的模块")
+    
+    # 导出历史
+    st.divider()
+    st.subheader("📚 导出历史")
+    
+    # 显示会话摘要
+    session_summary = controller.state_manager.get_session_summary()
+    if session_summary.get("has_session"):
+        with st.expander("📊 当前会话统计", expanded=False):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("会话健康度", f"{session_summary['health_score']:.0f}%")
+            
+            with col2:
+                st.metric("已完成模块", session_summary['completed_modules'])
+            
+            with col3:
+                st.metric("会话时长", f"{session_summary['session_age_hours']:.1f}h")
+    
+    # 视觉连贯性报告
+    consistency_report = controller.get_visual_consistency_report()
+    if consistency_report and "error" not in consistency_report:
+        with st.expander("🎨 视觉连贯性报告", expanded=False):
+            if consistency_report.get("is_consistent"):
+                st.success(f"✅ 视觉连贯性良好 (评分: {consistency_report.get('overall_score', 0):.2f})")
+            else:
+                st.warning("⚠️ 检测到视觉风格不一致")
+                
+                conflicts = consistency_report.get("conflicts", [])
+                if conflicts:
+                    st.write("**风格冲突:**")
+                    for conflict in conflicts[:3]:
+                        st.write(f"• {conflict}")
+
+
 if __name__ == "__main__":
     main()
-else:
-    main()
-
