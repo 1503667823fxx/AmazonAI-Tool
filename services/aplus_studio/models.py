@@ -99,6 +99,7 @@ class AnalysisResult:
     listing_analysis: ListingAnalysis
     image_analysis: ImageAnalysis
     visual_style: VisualStyle
+    product_info: Optional[ProductInfo] = None  # 添加产品信息字段
     analysis_timestamp: datetime = field(default_factory=datetime.now)
 
 
