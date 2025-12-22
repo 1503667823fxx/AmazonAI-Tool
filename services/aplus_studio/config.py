@@ -26,8 +26,8 @@ class APlusConfig:
         if api_key:
             self._gemini_config = GeminiConfig(
                 api_key=api_key,
-                text_model=os.getenv("GEMINI_TEXT_MODEL", "gemini-1.5-pro"),
-                image_model=os.getenv("GEMINI_IMAGE_MODEL", "gemini-1.5-pro-vision-latest"),
+                text_model=os.getenv("GEMINI_TEXT_MODEL", "models/gemini-3-pro-preview"),
+                image_model=os.getenv("GEMINI_IMAGE_MODEL", "models/gemini-3-pro-image-preview"),
                 max_tokens=int(os.getenv("GEMINI_MAX_TOKENS", "4096")),
                 temperature=float(os.getenv("GEMINI_TEMPERATURE", "0.7")),
                 timeout=int(os.getenv("GEMINI_TIMEOUT", "30"))
@@ -77,7 +77,7 @@ class APlusConfig:
     def get_image_generation_params(self) -> dict:
         """获取图片生成参数"""
         return {
-            "model": self._gemini_config.image_model if self._gemini_config else "gemini-1.5-pro-vision-latest",
+            "model": self._gemini_config.image_model if self._gemini_config else "models/gemini-3-pro-image-preview",
             "max_tokens": self._gemini_config.max_tokens if self._gemini_config else 4096,
             "temperature": self._gemini_config.temperature if self._gemini_config else 0.7,
             "timeout": self._gemini_config.timeout if self._gemini_config else 30
@@ -86,7 +86,7 @@ class APlusConfig:
     def get_text_analysis_params(self) -> dict:
         """获取文本分析参数"""
         return {
-            "model": self._gemini_config.text_model if self._gemini_config else "gemini-1.5-pro",
+            "model": self._gemini_config.text_model if self._gemini_config else "models/gemini-3-pro-preview",
             "max_tokens": self._gemini_config.max_tokens if self._gemini_config else 4096,
             "temperature": self._gemini_config.temperature if self._gemini_config else 0.7,
             "timeout": self._gemini_config.timeout if self._gemini_config else 30
