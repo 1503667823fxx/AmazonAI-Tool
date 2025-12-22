@@ -113,30 +113,65 @@ class IdentityModuleGenerator:
         """生成身份代入模块图片 - Full Image全屏视效"""
         
         try:
+            # 添加详细的调试信息
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("Starting identity module generation")
+            
+            # 验证输入参数
+            if not analysis:
+                raise ValueError("Analysis result is None")
+            
+            if not analysis.listing_analysis:
+                raise ValueError("Listing analysis is missing from analysis result")
+            
+            logger.info(f"Analysis result valid, product category: {analysis.listing_analysis.product_category}")
+            
             # 1. 分析产品特征，构建场景元素
+            logger.info("Building scene elements...")
             scene_elements = self._build_scene_elements(analysis)
+            logger.info(f"Scene elements built: {scene_elements.lifestyle_setting}")
             
             # 2. 选择合适的北美中产生活场景
+            logger.info("Selecting lifestyle scene...")
             lifestyle_scene = self._select_lifestyle_scene(analysis, scene_elements)
+            logger.info(f"Lifestyle scene selected: {lifestyle_scene}")
             
             # 3. 构建完整的身份代入提示词
+            logger.info("Building identity prompt...")
             identity_prompt = self._build_identity_prompt(
                 analysis, scene_elements, lifestyle_scene, custom_params
             )
+            logger.info(f"Identity prompt built, length: {len(str(identity_prompt))}")
             
             # 4. 生成图片
+            logger.info("Calling image service for generation...")
             generation_result = await self.image_service.generate_aplus_image(
                 identity_prompt,
                 reference_images=self._get_reference_images(analysis)
             )
+            logger.info(f"Image generation completed, result: {generation_result.validation_status}")
             
             # 5. 后处理和优化
             if generation_result.image_data:
+                logger.info("Starting post-processing...")
                 generation_result = await self._post_process_identity_image(generation_result)
+                logger.info("Post-processing completed")
             
+            logger.info("Identity module generation completed successfully")
             return generation_result
             
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Identity module generation failed with error: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
+            
+            # 确保错误信息不包含ModuleType对象
+            error_message = str(e)
+            if "ModuleType" in error_message:
+                error_message = f"Identity module generation failed: {error_message}"
+            
             return GenerationResult(
                 module_type=ModuleType.IDENTITY,
                 image_data=None,
@@ -145,7 +180,7 @@ class IdentityModuleGenerator:
                 generation_time=0.0,
                 quality_score=0.0,
                 validation_status=ValidationStatus.FAILED,
-                metadata={"error": f"Identity module generation failed: {str(e)}"}
+                metadata={"error": error_message, "original_error": str(e)}
             )
     
     def _build_scene_elements(self, analysis: AnalysisResult) -> IdentitySceneElements:
