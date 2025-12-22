@@ -146,9 +146,12 @@ class IdentityModuleGenerator:
             
             # 4. 生成图片
             logger.info("Calling image service for generation...")
+            reference_images = self._get_reference_images(analysis)
+            logger.info(f"Reference images found: {len(reference_images) if reference_images else 0}")
+            
             generation_result = await self.image_service.generate_aplus_image(
                 identity_prompt,
-                reference_images=self._get_reference_images(analysis)
+                reference_images=reference_images
             )
             logger.info(f"Image generation completed, result: {generation_result.validation_status}")
             
@@ -502,9 +505,15 @@ class IdentityModuleGenerator:
     
     def _get_reference_images(self, analysis: AnalysisResult) -> Optional[List[Image.Image]]:
         """获取参考图片"""
-        # 这里应该从分析结果中提取产品图片作为参考
-        # 暂时返回None，实际实现中需要处理图片数据
-        return None
+        reference_images = []
+        
+        # 从分析结果中获取产品图片
+        if analysis.product_info and analysis.product_info.uploaded_images:
+            for img in analysis.product_info.uploaded_images:
+                if isinstance(img, Image.Image):
+                    reference_images.append(img)
+        
+        return reference_images if reference_images else None
     
     async def _post_process_identity_image(self, generation_result: GenerationResult) -> GenerationResult:
         """后处理身份代入图片"""
