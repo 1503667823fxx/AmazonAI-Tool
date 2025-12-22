@@ -330,7 +330,8 @@ class APlusController:
                 
                 # 验证生成结果
                 if not self._validate_generation_result(generation_result, module_type):
-                    raise ValueError(f"{module_type.value}模块生成结果验证失败")
+                    error_msg = f"{module_type.value}模块生成结果验证失败"
+                    raise ValueError(error_msg)
                 
                 # 保存结果
                 self.state_manager.update_module_result(module_type, generation_result)
@@ -345,7 +346,11 @@ class APlusController:
             except Exception as e:
                 attempt += 1
                 last_error = e
-                logger.error(f"{module_type.value} module generation attempt {attempt} failed: {str(e)}")
+                # 确保错误消息是字符串格式
+                error_msg = str(e)
+                if "ModuleType.TRUST" in error_msg:
+                    error_msg = "Trust module generation failed due to configuration error"
+                logger.error(f"{module_type.value} module generation attempt {attempt} failed: {error_msg}")
                 
                 if attempt < self.max_retry_attempts:
                     st.warning(f"{module_type.value}模块生成失败，正在重试... (尝试 {attempt}/{self.max_retry_attempts})")
@@ -369,7 +374,16 @@ class APlusController:
                     st.error(f"{module_type.value}模块生成失败：{str(last_error)}")
                     raise last_error
         
-        raise last_error or Exception(f"{module_type.value}模块生成失败")
+        # 确保最终异常消息是字符串
+        final_error_msg = f"{module_type.value}模块生成失败"
+        if last_error:
+            error_str = str(last_error)
+            if "ModuleType.TRUST" in error_str:
+                final_error_msg = "Trust模块生成失败：配置错误"
+            else:
+                final_error_msg = f"{module_type.value}模块生成失败：{error_str}"
+        
+        raise Exception(final_error_msg)
     
     async def _execute_module_generation_with_recovery(
         self, 
