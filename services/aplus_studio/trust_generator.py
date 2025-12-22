@@ -448,29 +448,53 @@ class TrustModuleGenerator:
         text_config = None
         generated_text = None
         text_prompt_enhancement = ""
-        use_english = True  # 默认使用英语
+        use_english = True  # 默认使用英文（与前端保持一致）
         
-        if custom_params and custom_params.get("include_text", True):
-            # 构建文字配置
+        # 检测用户选择的语言
+        if custom_params:
+            # 首先构建文字配置（无论是否启用文字都需要用于语言检测）
             text_config = self._build_text_configuration(custom_params)
-            use_english = text_config.language != TextLanguage.CHINESE
             
-            # 生成多语言文案
-            product_info = {
-                "product_category": listing.product_category,
-                "key_selling_points": listing.key_selling_points,
-                "competitive_advantages": listing.competitive_advantages,
-                "target_demographics": listing.target_demographics
-            }
+            # 检查明确的语言设置
+            text_language = custom_params.get("text_language", "English (英语)")
+            if "中文" in text_language or "Chinese" in text_language:
+                use_english = False  # 明确选择中文时使用中文
             
-            generated_text = self.text_service.generate_multilingual_text(
-                product_info, text_config, "trust"
+            # 检查文字配置中的语言设置
+            if text_config and text_config.language == TextLanguage.CHINESE:
+                use_english = False
+            
+            # 如果启用文字，生成多语言文案
+            if custom_params.get("include_text", True):
+                # 生成多语言文案
+                product_info = {
+                    "product_category": listing.product_category,
+                    "key_selling_points": listing.key_selling_points,
+                    "competitive_advantages": listing.competitive_advantages,
+                    "target_demographics": listing.target_demographics
+                }
+                
+                generated_text = self.text_service.generate_multilingual_text(
+                    product_info, text_config, "trust"
+                )
+                
+                # 构建文字增强提示词
+                text_prompt_enhancement = self.text_service.build_text_prompt_enhancement(
+                    generated_text, text_config
+                )
             )
-            
-            # 构建文字增强提示词
-            text_prompt_enhancement = self.text_service.build_text_prompt_enhancement(
-                generated_text, text_config
-            )
+        
+        # 添加详细的调试日志
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("=== TRUST GENERATOR LANGUAGE DETECTION ===")
+        logger.info(f"Custom params received: {custom_params}")
+        if custom_params:
+            logger.info(f"text_language param: {custom_params.get('text_language', 'not_set')}")
+            logger.info(f"include_text param: {custom_params.get('include_text', 'not_set')}")
+        logger.info(f"Final use_english decision: {use_english}")
+        logger.info(f"Text config language: {text_config.language.value if text_config else 'no_config'}")
+        logger.info("=" * 50)
         
         # 根据语言设置构建提示词
         if use_english:
@@ -810,9 +834,9 @@ class TrustModuleGenerator:
         """从自定义参数构建文字配置"""
         
         try:
-            # 解析语言
+            # 解析语言 - 默认英文（与前端保持一致）
             language_str = custom_params.get("text_language", "English (英语)")
-            language = TextLanguage.ENGLISH  # 默认
+            language = TextLanguage.ENGLISH  # 默认英文
             for lang in TextLanguage:
                 if lang.value == language_str:
                     language = lang
@@ -861,7 +885,7 @@ class TrustModuleGenerator:
             logger.warning(f"Text configuration failed, using defaults: {str(e)}")
             
             return TextConfiguration(
-                language=TextLanguage.ENGLISH,
+                language=TextLanguage.ENGLISH,  # 默认英文（与前端保持一致）
                 font_style=FontStyle.MODERN_SANS,
                 font_weight="Medium (中等)",
                 color_scheme=ColorScheme.CLASSIC_BLACK,
