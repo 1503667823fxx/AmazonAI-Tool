@@ -690,8 +690,8 @@ def analyze_selling_points_sync(images: List[Image.Image]) -> Dict[str, Any]:
         # 配置Gemini API
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
         
-        # 使用gemini-3-flash-preview模型进行图片分析
-        model = genai.GenerativeModel('models/gemini-3-flash-preview')
+        # 使用gemini-3-pro-image-preview模型进行图片分析
+        model = genai.GenerativeModel('models/gemini-3-pro-image-preview')
         
         # 构建分析提示词
         selling_points_prompt = """
@@ -804,8 +804,8 @@ async def analyze_selling_points_from_images(images: List[Image.Image]) -> Dict[
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
         
-        # 使用gemini-3-flash-preview模型进行图片分析
-        model = genai.GenerativeModel('models/gemini-3-flash-preview')
+        # 使用gemini-3-pro-image-preview模型进行图片分析
+        model = genai.GenerativeModel('models/gemini-3-pro-image-preview')
         
         # 构建分析提示词
         selling_points_prompt = """
