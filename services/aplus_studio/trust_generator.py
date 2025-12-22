@@ -621,9 +621,15 @@ class TrustModuleGenerator:
     
     def _get_reference_images(self, analysis: AnalysisResult) -> Optional[List[Image.Image]]:
         """获取参考图片"""
-        # 这里应该从分析结果中提取产品图片作为参考
-        # 暂时返回None，实际实现中需要处理图片数据
-        return None
+        reference_images = []
+        
+        # 从分析结果中获取产品图片
+        if analysis.product_info and analysis.product_info.uploaded_images:
+            for img in analysis.product_info.uploaded_images:
+                if isinstance(img, Image.Image):
+                    reference_images.append(img)
+        
+        return reference_images if reference_images else None
     
     async def _post_process_trust_image(self, generation_result: GenerationResult) -> GenerationResult:
         """后处理信任转化图片"""
