@@ -144,8 +144,8 @@ class APlusSession:
 class GeminiConfig:
     """Gemini API配置"""
     api_key: str
-    text_model: str = "gemini-1.5-pro"
-    image_model: str = "gemini-1.5-pro-vision-latest"
+    text_model: str = "models/gemini-3-pro-preview"
+    image_model: str = "models/gemini-3-pro-image-preview"
     max_tokens: int = 4096
     temperature: float = 0.7
     timeout: int = 30
