@@ -14,7 +14,7 @@ import asyncio
 
 from .models import (
     AnalysisResult, ModulePrompt, GenerationResult, ModuleType,
-    ValidationStatus, APLUS_IMAGE_SPECS
+    ValidationStatus, APLUS_IMAGE_SPECS, ListingAnalysis
 )
 from .image_service import APlusImageService
 from .prompt_service import PromptGenerationService
@@ -221,38 +221,65 @@ class TrustModuleGenerator:
     ) -> GenerationResult:
         """生成信任转化模块图片 - Premium Image with Text布局"""
         
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("=== TRUST IMAGE GENERATION START ===")
+        logger.info(f"Custom params: {custom_params}")
+        
         try:
             # 1. 选择黄金比例布局
+            logger.info("Step 1: Selecting golden ratio layout...")
             layout_config = self._select_golden_ratio_layout(analysis, custom_params)
+            logger.info(f"Layout selected: {layout_config.ratio_type}")
             
             # 2. 构建信息内容结构
+            logger.info("Step 2: Building content structure...")
             content_structure = self._build_content_structure(analysis)
+            logger.info(f"Content structure built with {len(content_structure)} sections")
             
             # 3. 设计视觉区域内容
+            logger.info("Step 3: Designing visual content...")
             visual_content = self._design_visual_content(analysis, layout_config)
+            logger.info(f"Visual content designed: {visual_content.get('visual_type', 'unknown')}")
             
             # 4. 优化信息密度
+            logger.info("Step 4: Optimizing information density...")
             density_optimization = self._optimize_information_density(content_structure)
+            logger.info(f"Density level: {density_optimization.get('density_level', 'unknown')}")
             
             # 5. 构建信任转化提示词
+            logger.info("Step 5: Building trust prompt...")
             trust_prompt = self._build_trust_prompt(
                 analysis, layout_config, content_structure, 
                 visual_content, density_optimization, custom_params
             )
+            logger.info(f"Trust prompt built, length: {len(trust_prompt.base_prompt)}")
             
             # 6. 生成图片
+            logger.info("Step 6: Generating image...")
             generation_result = await self.image_service.generate_aplus_image(
                 trust_prompt,
                 reference_images=self._get_reference_images(analysis)
             )
+            logger.info(f"Image generation result: {generation_result.validation_status}")
             
             # 7. 后处理和优化
             if generation_result.image_data:
+                logger.info("Step 7: Post-processing image...")
                 generation_result = await self._post_process_trust_image(generation_result)
+                logger.info("Post-processing completed")
+            else:
+                logger.warning("No image data returned from generation")
             
+            logger.info("=== TRUST IMAGE GENERATION END ===")
             return generation_result
             
         except Exception as e:
+            logger.error(f"Trust image generation failed: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
             return GenerationResult(
                 module_type=ModuleType.TRUST,
                 image_data=None,
@@ -261,7 +288,7 @@ class TrustModuleGenerator:
                 generation_time=0.0,
                 quality_score=0.0,
                 validation_status=ValidationStatus.FAILED,
-                metadata={"error": f"Trust module generation failed: {str(e)}"}
+                metadata={"error": f"Trust module generation failed: {str(e)}", "error_type": type(e).__name__}
             )
     
     def _select_golden_ratio_layout(
@@ -841,65 +868,75 @@ class TrustModuleGenerator:
     def _translate_product_data(self, analysis: AnalysisResult, target_language: str) -> AnalysisResult:
         """将产品分析数据翻译成目标语言"""
         
-        # 如果目标语言是中文，直接返回原数据
-        if "中文" in target_language or "Chinese" in target_language:
-            return analysis
-        
-        # 创建翻译后的分析结果副本
-        translated_analysis = AnalysisResult(
-            listing_analysis=analysis.listing_analysis,
-            visual_style=analysis.visual_style,
-            product_info=analysis.product_info
-        )
-        
-        # 翻译映射表 - 基于target_language选择翻译
-        translations = self._get_translation_mappings(target_language)
-        
-        # 翻译产品类别
-        original_category = analysis.listing_analysis.product_category
-        translated_category = translations.get("categories", {}).get(original_category, original_category)
-        
-        # 翻译卖点
-        translated_selling_points = []
-        for point in analysis.listing_analysis.key_selling_points:
-            translated_point = translations.get("selling_points", {}).get(point, point)
-            translated_selling_points.append(translated_point)
-        
-        # 翻译竞争优势
-        translated_advantages = []
-        for advantage in analysis.listing_analysis.competitive_advantages:
-            translated_advantage = translations.get("advantages", {}).get(advantage, advantage)
-            translated_advantages.append(translated_advantage)
-        
-        # 翻译目标用户
-        original_demographics = analysis.listing_analysis.target_demographics
-        translated_demographics = translations.get("demographics", {}).get(original_demographics, original_demographics)
-        
-        # 翻译技术规格的键名
-        translated_specs = {}
-        for key, value in analysis.listing_analysis.technical_specifications.items():
-            translated_key = translations.get("spec_keys", {}).get(key, key)
-            translated_specs[translated_key] = value
-        
-        # 创建翻译后的listing_analysis
-        from .models import ListingAnalysis
-        translated_listing = ListingAnalysis(
-            product_category=translated_category,
-            key_selling_points=translated_selling_points,
-            target_demographics=translated_demographics,
-            competitive_advantages=translated_advantages,
-            technical_specifications=translated_specs
-        )
-        
-        translated_analysis.listing_analysis = translated_listing
-        
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"Product data translated to {target_language}")
-        logger.info(f"Original category: {original_category} → Translated: {translated_category}")
-        logger.info(f"Translated {len(translated_selling_points)} selling points")
+        logger.info(f"Translating product data to: {target_language}")
         
-        return translated_analysis
+        try:
+            # 如果目标语言是中文，直接返回原数据
+            if "中文" in target_language or "Chinese" in target_language:
+                logger.info("Target language is Chinese, returning original data")
+                return analysis
+            
+            # 创建翻译后的分析结果副本
+            translated_analysis = AnalysisResult(
+                listing_analysis=analysis.listing_analysis,
+                visual_style=analysis.visual_style,
+                product_info=analysis.product_info
+            )
+            
+            # 翻译映射表 - 基于target_language选择翻译
+            translations = self._get_translation_mappings(target_language)
+            logger.info(f"Translation mappings loaded for {target_language}")
+            
+            # 翻译产品类别
+            original_category = analysis.listing_analysis.product_category
+            translated_category = translations.get("categories", {}).get(original_category, original_category)
+            
+            # 翻译卖点
+            translated_selling_points = []
+            for point in analysis.listing_analysis.key_selling_points:
+                translated_point = translations.get("selling_points", {}).get(point, point)
+                translated_selling_points.append(translated_point)
+            
+            # 翻译竞争优势
+            translated_advantages = []
+            for advantage in analysis.listing_analysis.competitive_advantages:
+                translated_advantage = translations.get("advantages", {}).get(advantage, advantage)
+                translated_advantages.append(translated_advantage)
+            
+            # 翻译目标用户
+            original_demographics = analysis.listing_analysis.target_demographics
+            translated_demographics = translations.get("demographics", {}).get(original_demographics, original_demographics)
+            
+            # 翻译技术规格的键名
+            translated_specs = {}
+            for key, value in analysis.listing_analysis.technical_specifications.items():
+                translated_key = translations.get("spec_keys", {}).get(key, key)
+                translated_specs[translated_key] = value
+            
+            # 创建翻译后的listing_analysis
+            translated_listing = ListingAnalysis(
+                product_category=translated_category,
+                key_selling_points=translated_selling_points,
+                target_demographics=translated_demographics,
+                competitive_advantages=translated_advantages,
+                technical_specifications=translated_specs
+            )
+            
+            translated_analysis.listing_analysis = translated_listing
+            
+            logger.info(f"Product data translated successfully")
+            logger.info(f"Original category: {original_category} → Translated: {translated_category}")
+            logger.info(f"Translated {len(translated_selling_points)} selling points")
+            
+            return translated_analysis
+            
+        except Exception as e:
+            logger.error(f"Translation failed: {str(e)}")
+            logger.error(f"Returning original analysis data")
+            # 如果翻译失败，返回原始数据
+            return analysis
     
     def _get_translation_mappings(self, target_language: str) -> Dict[str, Dict[str, str]]:
         """获取翻译映射表"""
