@@ -56,9 +56,14 @@ class APlusImageService(StudioVisionService):
             full_prompt = self._build_aplus_generation_prompt(prompt)
             
             # 使用父类的图片生成功能，添加A+特定的宽高比提示
+            # 优先使用配置的模型，如果配置不可用则使用默认模型
+            model_name = "models/gemini-3-pro-image-preview"  # 默认模型
+            if self.config.is_configured and self.config.gemini_config.image_model:
+                model_name = self.config.gemini_config.image_model
+            
             result = self.generate_image_with_progress(
                 prompt=full_prompt,
-                model_name=self.config.gemini_config.image_model if self.config.is_configured else "models/gemini-3-pro-image-preview",
+                model_name=model_name,
                 ref_images=reference_images,
                 aspect_ratio_prompt=self.aplus_aspect_ratio,
                 progress_callback=None
