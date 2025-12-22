@@ -254,7 +254,7 @@ class ImagePreviewGallery:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🔄 重新生成", key=f"regen_{module_type.value}", use_container_width=True):
+            if st.button("🔄 重新生成", key=f"preview_regen_{module_type.value}", use_container_width=True):
                 st.session_state[f"regenerate_{module_type.value}"] = True
         
         with col2:
