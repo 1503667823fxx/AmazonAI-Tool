@@ -489,7 +489,6 @@ class TrustModuleGenerator:
                 text_prompt_enhancement = self.text_service.build_text_prompt_enhancement(
                     generated_text, text_config
                 )
-            )
         
         # 添加详细的调试日志
         import logging
