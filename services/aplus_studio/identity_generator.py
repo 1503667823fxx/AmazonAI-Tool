@@ -18,6 +18,7 @@ from .models import (
 )
 from .image_service import APlusImageService
 from .prompt_service import PromptGenerationService
+from .text_service import APlusTextService, TextConfiguration, TextLanguage, FontStyle, ColorScheme, TextEffect
 
 
 @dataclass
@@ -46,6 +47,7 @@ class IdentityModuleGenerator:
     def __init__(self, image_service: APlusImageService, prompt_service: PromptGenerationService):
         self.image_service = image_service
         self.prompt_service = prompt_service
+        self.text_service = APlusTextService()  # 添加文案服务
         
         # 北美中产审美标准配置
         self.north_american_aesthetic = NorthAmericanAesthetic(
@@ -372,6 +374,32 @@ class IdentityModuleGenerator:
         listing = analysis.listing_analysis
         visual = analysis.visual_style
         
+        # 处理文案配置
+        text_config = None
+        generated_text = None
+        text_prompt_enhancement = ""
+        
+        if custom_params and custom_params.get("include_text", True):
+            # 构建文字配置
+            text_config = self._build_text_configuration(custom_params)
+            
+            # 生成多语言文案
+            product_info = {
+                "product_category": listing.product_category,
+                "key_selling_points": listing.key_selling_points,
+                "competitive_advantages": listing.competitive_advantages,
+                "target_demographics": listing.target_demographics
+            }
+            
+            generated_text = self.text_service.generate_multilingual_text(
+                product_info, text_config, "identity"
+            )
+            
+            # 构建文字增强提示词
+            text_prompt_enhancement = self.text_service.build_text_prompt_enhancement(
+                generated_text, text_config
+            )
+        
         # 构建详细的场景描述
         scene_description = f"""
         环境设置：{lifestyle_scene['environment']}
@@ -384,18 +412,30 @@ class IdentityModuleGenerator:
         产品互动：{lifestyle_scene['interaction']}
         """
         
-        # 构建文字要素集成
-        text_elements = f"""
-        价值观Slogan："{scene_elements.value_slogan}"
-        信任背书："{scene_elements.trust_endorsement}"
-        
-        文字集成要求：
-        - Slogan位置：图片上方或中心显眼位置，字体优雅现代
-        - 背书位置：图片下方或角落，字体较小但清晰可读
-        - 文字颜色：与整体色调协调，确保可读性
-        - 文字效果：轻微阴影或描边，增强视觉层次
-        - 整体融合：文字与场景自然融合，不突兀不抢夺视觉焦点
-        """
+        # 构建文字要素集成（如果启用文字）
+        if generated_text and text_config:
+            text_elements = f"""
+            多语言文案内容：
+            - 主标语："{generated_text.primary_slogan}"
+            - 次要文案："{generated_text.secondary_text}"
+            - 信任背书："{generated_text.trust_endorsement}"
+            - 语言：{text_config.language.value}
+            
+            {text_prompt_enhancement}
+            """
+        else:
+            # 使用原有的中文文案逻辑作为后备
+            text_elements = f"""
+            价值观Slogan："{scene_elements.value_slogan}"
+            信任背书："{scene_elements.trust_endorsement}"
+            
+            文字集成要求：
+            - Slogan位置：图片上方或中心显眼位置，字体优雅现代
+            - 背书位置：图片下方或角落，字体较小但清晰可读
+            - 文字颜色：与整体色调协调，确保可读性
+            - 文字效果：轻微阴影或描边，增强视觉层次
+            - 整体融合：文字与场景自然融合，不突兀不抢夺视觉焦点
+            """
         
         # 构建北美审美要求
         aesthetic_requirements = f"""
@@ -481,7 +521,8 @@ class IdentityModuleGenerator:
                 "emotional_resonance",
                 "lifestyle_integration",
                 "text_overlay_support",
-                "brand_storytelling"
+                "brand_storytelling",
+                "multilingual_text_support"  # 新增多语言支持
             ],
             technical_requirements=[
                 "600x450_pixels",
@@ -491,7 +532,8 @@ class IdentityModuleGenerator:
                 "high_quality_rendering",
                 "lifestyle_authenticity",
                 "emotional_engagement",
-                "social_status_indicators"
+                "social_status_indicators",
+                "multilingual_text_rendering"  # 新增多语言文字渲染
             ],
             aspect_ratio="600x450",
             quality_settings={
@@ -499,8 +541,59 @@ class IdentityModuleGenerator:
                 "color_depth": "24bit",
                 "compression": "lossless",
                 "text_rendering": "crisp",
-                "lighting_quality": "professional"
+                "lighting_quality": "professional",
+                "text_language": generated_text.language_code if generated_text else "en",
+                "font_style": text_config.font_style.value if text_config else "modern",
+                "text_effects_enabled": text_config is not None
             }
+        )
+    
+    def _build_text_configuration(self, custom_params: Dict[str, Any]) -> TextConfiguration:
+        """从自定义参数构建文字配置"""
+        
+        # 解析语言
+        language_str = custom_params.get("text_language", "English (英语)")
+        language = TextLanguage.ENGLISH  # 默认
+        for lang in TextLanguage:
+            if lang.value == language_str:
+                language = lang
+                break
+        
+        # 解析字体样式
+        font_style_str = custom_params.get("font_style", "Modern Sans (现代无衬线)")
+        font_style = FontStyle.MODERN_SANS  # 默认
+        for style in FontStyle:
+            if style.value == font_style_str:
+                font_style = style
+                break
+        
+        # 解析颜色方案
+        color_scheme_str = custom_params.get("text_color_scheme", "Classic Black (经典黑色)")
+        color_scheme = ColorScheme.CLASSIC_BLACK  # 默认
+        for color in ColorScheme:
+            if color.value == color_scheme_str:
+                color_scheme = color
+                break
+        
+        # 解析文字效果
+        text_effect_str = custom_params.get("text_effect", "Drop Shadow (投影)")
+        text_effect = TextEffect.DROP_SHADOW  # 默认
+        for effect in TextEffect:
+            if effect.value == text_effect_str:
+                text_effect = effect
+                break
+        
+        return TextConfiguration(
+            language=language,
+            font_style=font_style,
+            font_weight=custom_params.get("font_weight", "Medium (中等)"),
+            color_scheme=color_scheme,
+            text_effect=text_effect,
+            opacity=custom_params.get("text_opacity", 0.9),
+            position=custom_params.get("text_position", "Auto (自动)"),
+            size=custom_params.get("text_size", "Auto (自动)"),
+            include_background=custom_params.get("text_background", False),
+            background_color=custom_params.get("background_color", "Black (黑色)") if custom_params.get("text_background") else None
         )
     
     def _get_reference_images(self, analysis: AnalysisResult) -> Optional[List[Image.Image]]:
