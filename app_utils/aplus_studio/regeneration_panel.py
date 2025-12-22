@@ -39,7 +39,7 @@ class RegenerationPanel:
             custom_params = self._render_parameter_customization(module_type)
             
             # 重新生成按钮
-            if st.button(f"重新生成 {module_type.value} 模块", key=f"regen_{module_type.value}"):
+            if st.button(f"重新生成 {module_type.value} 模块", key=f"regen_panel_{module_type.value}"):
                 return {
                     "action": "regenerate",
                     "module_type": module_type,
