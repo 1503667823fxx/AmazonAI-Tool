@@ -208,6 +208,141 @@ class ModuleGenerationPanel:
         
         with st.expander(f"⚙️ {self.module_configs[module_type]['name']} 参数", expanded=False):
             
+            # 通用文案语言和字体选项 - 所有模块都支持
+            st.subheader("📝 文案设置")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                params["text_language"] = st.selectbox(
+                    "文案语言",
+                    ["English (英语)", "中文 (Chinese)", "Español (西班牙语)", "Français (法语)", 
+                     "Deutsch (德语)", "日本語 (日语)", "한국어 (韩语)", "Português (葡萄牙语)",
+                     "Italiano (意大利语)", "Русский (俄语)"],
+                    index=0,  # 默认英语
+                    help="选择图片上文案的语言版本",
+                    key=f"{module_type.value}_text_language"
+                )
+            
+            with col2:
+                params["include_text"] = st.checkbox(
+                    "包含文字要素",
+                    value=True,
+                    help="是否在图片中包含文案内容",
+                    key=f"{module_type.value}_include_text"
+                )
+            
+            if params["include_text"]:
+                st.subheader("🎨 字体样式")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    params["font_style"] = st.selectbox(
+                        "艺术字体样式",
+                        [
+                            "Modern Sans (现代无衬线)", "Classic Serif (经典衬线)", "Bold Impact (粗体冲击)",
+                            "Elegant Script (优雅手写)", "Tech Futura (科技未来)", "Luxury Didot (奢华迪多)",
+                            "Friendly Rounded (友好圆润)", "Corporate Clean (企业简洁)", "Creative Brush (创意笔刷)",
+                            "Vintage Retro (复古怀旧)", "Minimalist Thin (极简细体)", "Handwritten Casual (手写休闲)",
+                            "Gothic Bold (哥特粗体)", "Art Deco (装饰艺术)", "Calligraphy (书法体)",
+                            "Stencil Military (模板军用)", "Neon Glow (霓虹发光)", "3D Embossed (3D浮雕)"
+                        ],
+                        index=0,
+                        help="选择文字的艺术字体风格",
+                        key=f"{module_type.value}_font_style"
+                    )
+                
+                with col2:
+                    params["font_weight"] = st.selectbox(
+                        "字体粗细",
+                        ["Light (细体)", "Regular (常规)", "Medium (中等)", "Bold (粗体)", "Extra Bold (超粗)"],
+                        index=2,
+                        key=f"{module_type.value}_font_weight"
+                    )
+                
+                st.subheader("🌈 文字颜色")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    params["text_color_scheme"] = st.selectbox(
+                        "颜色方案",
+                        [
+                            "Classic Black (经典黑色)", "Pure White (纯白色)", "Elegant Gold (优雅金色)",
+                            "Royal Blue (皇家蓝)", "Deep Red (深红色)", "Forest Green (森林绿)",
+                            "Sunset Orange (夕阳橙)", "Purple Luxury (奢华紫)", "Silver Metallic (银色金属)",
+                            "Rose Gold (玫瑰金)", "Copper Bronze (铜色青铜)", "Ocean Blue (海洋蓝)",
+                            "Emerald Green (翡翠绿)", "Ruby Red (红宝石)", "Sapphire Blue (蓝宝石)",
+                            "Gradient Rainbow (彩虹渐变)", "Sunset Gradient (夕阳渐变)", "Ocean Gradient (海洋渐变)"
+                        ],
+                        index=0,
+                        help="选择文字的主要颜色方案",
+                        key=f"{module_type.value}_text_color"
+                    )
+                
+                with col2:
+                    params["text_effect"] = st.selectbox(
+                        "文字效果",
+                        [
+                            "None (无效果)", "Drop Shadow (投影)", "Outline (描边)", "Glow (发光)",
+                            "Emboss (浮雕)", "Engrave (雕刻)", "Neon (霓虹)", "3D Extrude (3D挤出)",
+                            "Gradient Fill (渐变填充)", "Pattern Fill (图案填充)", "Metallic (金属质感)",
+                            "Glass (玻璃效果)", "Fire (火焰效果)", "Ice (冰霜效果)"
+                        ],
+                        index=1,  # 默认投影
+                        help="选择文字的视觉效果",
+                        key=f"{module_type.value}_text_effect"
+                    )
+                
+                with col3:
+                    params["text_opacity"] = st.slider(
+                        "文字透明度",
+                        min_value=0.3,
+                        max_value=1.0,
+                        value=0.9,
+                        step=0.1,
+                        help="调整文字的透明度",
+                        key=f"{module_type.value}_text_opacity"
+                    )
+                
+                # 高级文字选项
+                with st.expander("🔧 高级文字选项", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        params["text_position"] = st.selectbox(
+                            "文字位置",
+                            ["Auto (自动)", "Top Center (顶部居中)", "Bottom Center (底部居中)", 
+                             "Top Left (左上)", "Top Right (右上)", "Bottom Left (左下)", "Bottom Right (右下)",
+                             "Center (居中)", "Left Center (左中)", "Right Center (右中)"],
+                            index=0,
+                            key=f"{module_type.value}_text_position"
+                        )
+                    
+                    with col2:
+                        params["text_size"] = st.selectbox(
+                            "文字大小",
+                            ["Small (小)", "Medium (中)", "Large (大)", "Extra Large (超大)", "Auto (自动)"],
+                            index=4,  # 默认自动
+                            key=f"{module_type.value}_text_size"
+                        )
+                    
+                    params["text_background"] = st.checkbox(
+                        "添加文字背景",
+                        value=False,
+                        help="为文字添加半透明背景以提高可读性",
+                        key=f"{module_type.value}_text_background"
+                    )
+                    
+                    if params["text_background"]:
+                        params["background_color"] = st.selectbox(
+                            "背景颜色",
+                            ["Black (黑色)", "White (白色)", "Gray (灰色)", "Match Image (匹配图片)"],
+                            index=0,
+                            key=f"{module_type.value}_background_color"
+                        )
+            
+            # 模块特定参数
+            st.divider()
+            st.subheader("🎯 模块专属设置")
+            
             if module_type == ModuleType.IDENTITY:
                 # Identity module specific parameters
                 params["scene_style"] = st.selectbox(
@@ -218,15 +353,8 @@ class ModuleGenerationPanel:
                 
                 params["lighting"] = st.selectbox(
                     "光线效果",
-                    ["黄金时段", "自然采光", "温暖室内", "明亮清晰"],
+                    ["黄金时段", "自然采光", "温馨室内", "明亮清晰"],
                     key=f"identity_lighting"
-                )
-                
-                params["include_text"] = st.checkbox(
-                    "包含文字要素",
-                    value=True,
-                    help="包含价值观Slogan和信任背书",
-                    key=f"identity_text"
                 )
             
             elif module_type == ModuleType.SENSORY:
