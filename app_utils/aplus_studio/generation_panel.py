@@ -304,6 +304,19 @@ class ModuleGenerationPanel:
     def _render_generation_options(self, selected_modules: List[ModuleType]) -> Dict[str, Any]:
         """Render global generation options"""
         
+        # 防护措施：确保selected_modules不为空
+        if not selected_modules:
+            st.warning("请先选择要生成的模块")
+            return {
+                "quality_level": "标准质量",
+                "visual_consistency": True,
+                "auto_retry": True,
+                "save_intermediate": False,
+                "seed_value": None,
+                "batch_size": 1,
+                "timeout_seconds": 120
+            }
+        
         st.write("**生成选项**")
         
         col1, col2 = st.columns(2)
@@ -345,13 +358,27 @@ class ModuleGenerationPanel:
                 help="设置固定种子可以获得可重现的结果，0表示随机"
             )
             
-            batch_size = st.slider(
-                "批处理大小",
-                min_value=1,
-                max_value=len(selected_modules),
-                value=min(2, len(selected_modules)),
-                help="并行生成时的批处理大小"
-            )
+            # 批处理大小配置 - 处理只有一个模块的情况
+            # 调试信息
+            st.write(f"调试: 选中模块数量 = {len(selected_modules)}")
+            
+            if len(selected_modules) <= 1:
+                batch_size = st.number_input(
+                    "批处理大小",
+                    min_value=1,
+                    max_value=1,
+                    value=1,
+                    disabled=True,
+                    help="只有一个模块时，批处理大小固定为1"
+                )
+            else:
+                batch_size = st.slider(
+                    "批处理大小",
+                    min_value=1,
+                    max_value=len(selected_modules),
+                    value=min(2, len(selected_modules)),
+                    help="并行生成时的批处理大小"
+                )
             
             timeout_seconds = st.number_input(
                 "超时时间 (秒)",
