@@ -39,10 +39,19 @@ class APlusConfig:
         api_key = os.getenv("GEMINI_API_KEY")
         
         if not api_key:
+            # 尝试从环境变量获取GOOGLE_API_KEY（兼容性）
+            api_key = os.getenv("GOOGLE_API_KEY")
+        
+        if not api_key:
             # 尝试从Streamlit secrets获取
             try:
-                if hasattr(st, 'secrets') and 'GEMINI_API_KEY' in st.secrets:
-                    api_key = st.secrets["GEMINI_API_KEY"]
+                if hasattr(st, 'secrets'):
+                    # 优先尝试GEMINI_API_KEY
+                    if 'GEMINI_API_KEY' in st.secrets:
+                        api_key = st.secrets["GEMINI_API_KEY"]
+                    # 兼容GOOGLE_API_KEY
+                    elif 'GOOGLE_API_KEY' in st.secrets:
+                        api_key = st.secrets["GOOGLE_API_KEY"]
             except Exception:
                 pass
         
