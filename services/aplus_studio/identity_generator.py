@@ -405,17 +405,31 @@ class IdentityModuleGenerator:
                 generated_text, text_config
             )
         
-        # 构建详细的场景描述
-        scene_description = f"""
-        环境设置：{lifestyle_scene['environment']}
-        光照效果：{lifestyle_scene['lighting']}
-        氛围营造：{lifestyle_scene['atmosphere']}
-        人物设定：{lifestyle_scene['people']}
-        场景道具：{lifestyle_scene['props']}
-        整体情绪：{lifestyle_scene['mood']}
-        活动内容：{lifestyle_scene['activity']}
-        产品互动：{lifestyle_scene['interaction']}
-        """
+        # 构建详细的场景描述 - 根据语言设置调整
+        if generated_text and text_config and text_config.language != TextLanguage.CHINESE:
+            # 英文场景描述
+            scene_description = f"""
+            Environment Setting: {lifestyle_scene['environment']}
+            Lighting Effect: {lifestyle_scene['lighting']}
+            Atmosphere: Warm, comfortable, quality family environment
+            People Setting: North American middle-class family members naturally using the product
+            Scene Props: {', '.join(scene_elements.social_indicators)}
+            Overall Mood: Relaxed and pleasant, reflecting quality of life and family harmony
+            Activity Content: Daily lifestyle leisure scene
+            Product Interaction: Natural integration of product into daily life
+            """
+        else:
+            # 中文场景描述（原有逻辑）
+            scene_description = f"""
+            环境设置：{lifestyle_scene['environment']}
+            光照效果：{lifestyle_scene['lighting']}
+            氛围营造：{lifestyle_scene['atmosphere']}
+            人物设定：{lifestyle_scene['people']}
+            场景道具：{lifestyle_scene['props']}
+            整体情绪：{lifestyle_scene['mood']}
+            活动内容：{lifestyle_scene['activity']}
+            产品互动：{lifestyle_scene['interaction']}
+            """
         
         # 构建文字要素集成（如果启用文字）
         if generated_text and text_config:
@@ -442,21 +456,39 @@ class IdentityModuleGenerator:
             - 整体融合：文字与场景自然融合，不突兀不抢夺视觉焦点
             """
         
-        # 构建北美审美要求
-        aesthetic_requirements = f"""
-        北美中产审美标准：
-        - 空间设计：开放式布局，简约现代风格
-        - 色彩搭配：中性色调为主，温暖色彩点缀
-        - 材质选择：天然材料与现代材料结合
-        - 装饰风格：简洁大方，注重功能性
-        - 生活方式：体现品质、便利、舒适的生活理念
-        
-        社会地位指标：
-        {chr(10).join([f"- {indicator}" for indicator in scene_elements.social_indicators])}
-        
-        情感共鸣要素：
-        {chr(10).join([f"- {trigger}" for trigger in scene_elements.emotional_triggers])}
-        """
+        # 构建北美审美要求 - 根据语言设置调整
+        if generated_text and text_config and text_config.language != TextLanguage.CHINESE:
+            # 英文审美要求
+            aesthetic_requirements = f"""
+            North American Middle-Class Aesthetic Standards:
+            - Space Design: Open layout, modern minimalist style
+            - Color Coordination: Neutral tones as main colors, warm color accents
+            - Material Selection: Combination of natural and modern materials
+            - Decorative Style: Simple and elegant, focusing on functionality
+            - Lifestyle: Reflecting quality, convenience, and comfortable living concepts
+            
+            Social Status Indicators:
+            {chr(10).join([f"- {indicator}" for indicator in scene_elements.social_indicators])}
+            
+            Emotional Resonance Elements:
+            {chr(10).join([f"- {trigger}" for trigger in scene_elements.emotional_triggers])}
+            """
+        else:
+            # 中文审美要求（原有逻辑）
+            aesthetic_requirements = f"""
+            北美中产审美标准：
+            - 空间设计：开放式布局，简约现代风格
+            - 色彩搭配：中性色调为主，温暖色彩点缀
+            - 材质选择：天然材料与现代材料结合
+            - 装饰风格：简洁大方，注重功能性
+            - 生活方式：体现品质、便利、舒适的生活理念
+            
+            社会地位指标：
+            {chr(10).join([f"- {indicator}" for indicator in scene_elements.social_indicators])}
+            
+            情感共鸣要素：
+            {chr(10).join([f"- {trigger}" for trigger in scene_elements.emotional_triggers])}
+            """
         
         # 应用自定义参数
         custom_adjustments = ""
@@ -468,51 +500,101 @@ class IdentityModuleGenerator:
             if "emotional_emphasis" in custom_params:
                 custom_adjustments += f"\n情感强调：{custom_params['emotional_emphasis']}"
         
-        # 构建完整提示词
-        full_prompt = f"""
-        创建一个600x450像素的Full Image全屏视效图片，展现北美中产家庭使用{listing.product_category}的理想生活场景。
+        # 构建完整提示词 - 根据语言设置调整
+        if generated_text and text_config and text_config.language != TextLanguage.CHINESE:
+            # 英文提示词
+            full_prompt = f"""
+            Create a 600x450 pixel Full Image full-screen visual effect image showcasing the ideal lifestyle scene of North American middle-class families using {listing.product_category}.
 
-        === 产品信息 ===
-        产品类别：{listing.product_category}
-        核心卖点：{', '.join(listing.key_selling_points)}
-        目标用户：{listing.target_demographics}
-        竞争优势：{', '.join(listing.competitive_advantages)}
+            === Product Information ===
+            Product Category: {listing.product_category}
+            Key Selling Points: {', '.join(listing.key_selling_points)}
+            Target Users: {listing.target_demographics}
+            Competitive Advantages: {', '.join(listing.competitive_advantages)}
 
-        === 场景构建 ===
-        {scene_description}
+            === Scene Construction ===
+            {scene_description}
 
-        === 视觉风格 ===
-        色调盘：{', '.join(visual.color_palette)}
-        光照风格：{visual.lighting_style}
-        构图规则：{', '.join(visual.composition_rules)}
-        美学方向：{visual.aesthetic_direction}
+            === Visual Style ===
+            Color Palette: {', '.join(visual.color_palette)}
+            Lighting Style: {visual.lighting_style}
+            Composition Rules: {', '.join(visual.composition_rules)}
+            Aesthetic Direction: {visual.aesthetic_direction}
 
-        === 北美中产审美 ===
-        {aesthetic_requirements}
+            === North American Middle-Class Aesthetics ===
+            {aesthetic_requirements}
 
-        === 文字要素集成 ===
-        {text_elements}
+            === Text Elements Integration ===
+            {text_elements}
 
-        === 技术规格 ===
-        - 尺寸：600x450像素（4:3宽高比）
-        - 格式：高质量PNG，适合电商展示
-        - 色彩空间：sRGB
-        - 分辨率：最低72 DPI
-        - 文件大小：5MB以内
+            === Technical Specifications ===
+            - Dimensions: 600x450 pixels (4:3 aspect ratio)
+            - Format: High-quality PNG suitable for e-commerce display
+            - Color Space: sRGB
+            - Resolution: Minimum 72 DPI
+            - File Size: Under 5MB
 
-        === 质量标准 ===
-        - 专业电商级别的视觉质量
-        - 清晰的产品可见性和吸引力
-        - 适合在线零售环境展示
-        - 优化客户转化效果
-        - 简洁不杂乱的构图
-        - 高视觉冲击力的产品营销效果
+            === Quality Standards ===
+            - Professional e-commerce level visual quality
+            - Clear product visibility and appeal
+            - Suitable for online retail environment display
+            - Optimized for customer conversion effectiveness
+            - Clean, uncluttered composition
+            - High visual impact for product marketing effectiveness
 
-        === 核心目标 ===
-        让消费者产生"这就是我想要的生活"的强烈认同感和向往，通过阶级场景代入而非单纯结果导向，建立情感连接和购买欲望。
+            === Core Objective ===
+            Make consumers feel a strong sense of identification and aspiration for "this is the life I want", establishing emotional connection and purchase desire through class scene immersion rather than simple result orientation.
 
-        {custom_adjustments}
-        """
+            IMPORTANT: ALL TEXT IN THE IMAGE MUST BE IN ENGLISH ONLY. Do not include any Chinese characters or text.
+
+            {custom_adjustments}
+            """
+        else:
+            # 中文提示词（原有逻辑）
+            full_prompt = f"""
+            创建一个600x450像素的Full Image全屏视效图片，展现北美中产家庭使用{listing.product_category}的理想生活场景。
+
+            === 产品信息 ===
+            产品类别：{listing.product_category}
+            核心卖点：{', '.join(listing.key_selling_points)}
+            目标用户：{listing.target_demographics}
+            竞争优势：{', '.join(listing.competitive_advantages)}
+
+            === 场景构建 ===
+            {scene_description}
+
+            === 视觉风格 ===
+            色调盘：{', '.join(visual.color_palette)}
+            光照风格：{visual.lighting_style}
+            构图规则：{', '.join(visual.composition_rules)}
+            美学方向：{visual.aesthetic_direction}
+
+            === 北美中产审美 ===
+            {aesthetic_requirements}
+
+            === 文字要素集成 ===
+            {text_elements}
+
+            === 技术规格 ===
+            - 尺寸：600x450像素（4:3宽高比）
+            - 格式：高质量PNG，适合电商展示
+            - 色彩空间：sRGB
+            - 分辨率：最低72 DPI
+            - 文件大小：5MB以内
+
+            === 质量标准 ===
+            - 专业电商级别的视觉质量
+            - 清晰的产品可见性和吸引力
+            - 适合在线零售环境展示
+            - 优化客户转化效果
+            - 简洁不杂乱的构图
+            - 高视觉冲击力的产品营销效果
+
+            === 核心目标 ===
+            让消费者产生"这就是我想要的生活"的强烈认同感和向往，通过阶级场景代入而非单纯结果导向，建立情感连接和购买欲望。
+
+            {custom_adjustments}
+            """
         
         return ModulePrompt(
             module_type=ModuleType.IDENTITY,
