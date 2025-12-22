@@ -441,8 +441,15 @@ class TrustModuleGenerator:
     ) -> ModulePrompt:
         """构建完整的信任转化提示词"""
         
-        listing = analysis.listing_analysis
-        visual_style = analysis.visual_style
+        # 检测目标语言并翻译产品数据
+        target_language = "English (英语)"  # 默认英语
+        if custom_params:
+            target_language = custom_params.get("text_language", "English (英语)")
+        
+        # 翻译产品分析数据到目标语言
+        translated_analysis = self._translate_product_data(analysis, target_language)
+        listing = translated_analysis.listing_analysis
+        visual_style = translated_analysis.visual_style
         
         # 处理文案配置和多语言支持
         text_config = None
@@ -488,12 +495,14 @@ class TrustModuleGenerator:
         import logging
         logger = logging.getLogger(__name__)
         logger.info("=== TRUST GENERATOR LANGUAGE DETECTION ===")
+        logger.info(f"Target language: {target_language}")
         logger.info(f"Custom params received: {custom_params}")
         if custom_params:
             logger.info(f"text_language param: {custom_params.get('text_language', 'not_set')}")
             logger.info(f"include_text param: {custom_params.get('include_text', 'not_set')}")
         logger.info(f"Final use_english decision: {use_english}")
         logger.info(f"Text config language: {text_config.language.value if text_config else 'no_config'}")
+        logger.info(f"Product category after translation: {listing.product_category}")
         logger.info("=" * 50)
         
         # 根据语言设置构建提示词
@@ -829,6 +838,157 @@ class TrustModuleGenerator:
                 "text_effects_enabled": text_config is not None
             }
         )
+    
+    def _translate_product_data(self, analysis: AnalysisResult, target_language: str) -> AnalysisResult:
+        """将产品分析数据翻译成目标语言"""
+        
+        # 如果目标语言是中文，直接返回原数据
+        if "中文" in target_language or "Chinese" in target_language:
+            return analysis
+        
+        # 创建翻译后的分析结果副本
+        translated_analysis = AnalysisResult(
+            listing_analysis=analysis.listing_analysis,
+            visual_style=analysis.visual_style,
+            product_info=analysis.product_info
+        )
+        
+        # 翻译映射表 - 基于target_language选择翻译
+        translations = self._get_translation_mappings(target_language)
+        
+        # 翻译产品类别
+        original_category = analysis.listing_analysis.product_category
+        translated_category = translations.get("categories", {}).get(original_category, original_category)
+        
+        # 翻译卖点
+        translated_selling_points = []
+        for point in analysis.listing_analysis.key_selling_points:
+            translated_point = translations.get("selling_points", {}).get(point, point)
+            translated_selling_points.append(translated_point)
+        
+        # 翻译竞争优势
+        translated_advantages = []
+        for advantage in analysis.listing_analysis.competitive_advantages:
+            translated_advantage = translations.get("advantages", {}).get(advantage, advantage)
+            translated_advantages.append(translated_advantage)
+        
+        # 翻译目标用户
+        original_demographics = analysis.listing_analysis.target_demographics
+        translated_demographics = translations.get("demographics", {}).get(original_demographics, original_demographics)
+        
+        # 翻译技术规格的键名
+        translated_specs = {}
+        for key, value in analysis.listing_analysis.technical_specifications.items():
+            translated_key = translations.get("spec_keys", {}).get(key, key)
+            translated_specs[translated_key] = value
+        
+        # 创建翻译后的listing_analysis
+        from .models import ListingAnalysis
+        translated_listing = ListingAnalysis(
+            product_category=translated_category,
+            key_selling_points=translated_selling_points,
+            target_demographics=translated_demographics,
+            competitive_advantages=translated_advantages,
+            technical_specifications=translated_specs
+        )
+        
+        translated_analysis.listing_analysis = translated_listing
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Product data translated to {target_language}")
+        logger.info(f"Original category: {original_category} → Translated: {translated_category}")
+        logger.info(f"Translated {len(translated_selling_points)} selling points")
+        
+        return translated_analysis
+    
+    def _get_translation_mappings(self, target_language: str) -> Dict[str, Dict[str, str]]:
+        """获取翻译映射表"""
+        
+        # 根据目标语言返回相应的翻译映射
+        if "English" in target_language or "英语" in target_language:
+            return {
+                "categories": {
+                    "电子产品": "Electronics",
+                    "家居用品": "Home & Garden",
+                    "厨房用具": "Kitchen & Dining",
+                    "办公用品": "Office Products",
+                    "运动户外": "Sports & Outdoors",
+                    "美容护理": "Beauty & Personal Care",
+                    "服装配饰": "Clothing & Accessories",
+                    "汽车用品": "Automotive",
+                    "宠物用品": "Pet Supplies",
+                    "玩具游戏": "Toys & Games"
+                },
+                "selling_points": {
+                    "高品质": "High Quality",
+                    "耐用性强": "Durable",
+                    "易于使用": "Easy to Use",
+                    "性价比高": "Great Value",
+                    "节能环保": "Energy Efficient",
+                    "安全可靠": "Safe & Reliable",
+                    "多功能": "Multi-functional",
+                    "便携式": "Portable",
+                    "防水防尘": "Waterproof & Dustproof",
+                    "智能控制": "Smart Control"
+                },
+                "advantages": {
+                    "品质保证": "Quality Guarantee",
+                    "专业服务": "Professional Service",
+                    "快速发货": "Fast Shipping",
+                    "售后保障": "After-sales Support",
+                    "用户好评": "Positive Reviews",
+                    "行业领先": "Industry Leading",
+                    "技术先进": "Advanced Technology",
+                    "价格优势": "Competitive Price"
+                },
+                "demographics": {
+                    "专业用户": "Professional Users",
+                    "家庭用户": "Home Users",
+                    "年轻人": "Young Adults",
+                    "中年人": "Middle-aged Adults",
+                    "老年人": "Senior Users",
+                    "学生": "Students",
+                    "办公人员": "Office Workers"
+                },
+                "spec_keys": {
+                    "功率": "Power",
+                    "尺寸": "Dimensions",
+                    "重量": "Weight",
+                    "材质": "Material",
+                    "颜色": "Color",
+                    "容量": "Capacity",
+                    "电压": "Voltage",
+                    "频率": "Frequency",
+                    "温度": "Temperature",
+                    "湿度": "Humidity"
+                }
+            }
+        
+        # 可以扩展其他语言的翻译映射
+        elif "Español" in target_language:
+            return {
+                "categories": {
+                    "电子产品": "Electrónicos",
+                    "家居用品": "Hogar y Jardín",
+                    "厨房用具": "Cocina y Comedor"
+                },
+                "selling_points": {
+                    "高品质": "Alta Calidad",
+                    "耐用性强": "Duradero",
+                    "易于使用": "Fácil de Usar"
+                },
+                # ... 可以继续添加
+            }
+        
+        # 默认返回空映射（保持原文）
+        return {
+            "categories": {},
+            "selling_points": {},
+            "advantages": {},
+            "demographics": {},
+            "spec_keys": {}
+        }
     
     def _build_text_configuration(self, custom_params: Dict[str, Any]) -> TextConfiguration:
         """从自定义参数构建文字配置"""
