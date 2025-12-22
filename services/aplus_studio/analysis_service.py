@@ -36,11 +36,13 @@ class ProductAnalysisService:
         else:
             self.text_model = None
             self.vision_model = None
+            # 记录配置问题，但不抛出异常
+            print("Warning: Gemini API not configured properly")
     
     async def analyze_listing(self, text: str) -> ListingAnalysis:
         """分析产品listing文本"""
         if not self.text_model:
-            raise ValueError("Gemini API not configured")
+            raise ValueError("Gemini API配置未找到。请检查API密钥配置。")
         
         prompt = f"""
         请分析以下产品listing，提取关键信息用于Amazon A+页面制作。请以JSON格式返回分析结果：
@@ -281,7 +283,7 @@ class ProductAnalysisService:
     async def analyze_product_images(self, images: List[Image.Image]) -> ImageAnalysis:
         """分析产品图片，提取颜色、材质、设计风格等视觉特征"""
         if not self.vision_model:
-            raise ValueError("Gemini Vision API not configured")
+            raise ValueError("Gemini Vision API配置未找到。请检查API密钥配置。")
         
         if not images:
             raise ValueError("No images provided for analysis")
