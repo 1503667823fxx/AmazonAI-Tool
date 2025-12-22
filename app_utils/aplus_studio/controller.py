@@ -12,10 +12,10 @@ from PIL import Image
 import streamlit as st
 from datetime import datetime, timedelta
 
-from services.aplus_studio import (
-    ProductAnalysisService, PromptGenerationService, 
-    APlusImageService, ValidationService
-)
+from services.aplus_studio.analysis_service import ProductAnalysisService
+from services.aplus_studio.prompt_service import PromptGenerationService
+from services.aplus_studio.image_service import APlusImageService
+from services.aplus_studio.validation_service import ValidationService
 from services.aplus_studio.visual_sop_processor import VisualSOPProcessor
 from services.aplus_studio.identity_generator import IdentityModuleGenerator
 from services.aplus_studio.sensory_generator import SensoryModuleGenerator
@@ -50,8 +50,40 @@ class APlusController:
             except Exception:
                 pass
             
+            # 调试：检查ProductAnalysisService的签名
+            import inspect
+            try:
+                sig = inspect.signature(ProductAnalysisService.__init__)
+                logger.info(f"ProductAnalysisService.__init__ signature: {sig}")
+            except Exception as e:
+                logger.warning(f"Could not inspect ProductAnalysisService signature: {e}")
+            
             # 传递API密钥给分析服务和图片服务
-            self.analysis_service = ProductAnalysisService(api_key)
+            # 使用try-catch处理可能的参数不匹配问题
+            try:
+                self.analysis_service = ProductAnalysisService(api_key)
+                logger.info("ProductAnalysisService initialized with API key")
+            except TypeError as e:
+                logger.warning(f"ProductAnalysisService does not accept api_key parameter: {e}")
+                # 回退到无参数初始化
+                try:
+                    self.analysis_service = ProductAnalysisService()
+                    logger.info("ProductAnalysisService initialized without parameters")
+                    # 尝试手动设置API密钥
+                    if hasattr(self.analysis_service, 'api_key'):
+                        self.analysis_service.api_key = api_key
+                        logger.info("API key set manually on ProductAnalysisService")
+                    elif hasattr(self.analysis_service, '_setup_gemini'):
+                        # 如果有_setup_gemini方法，尝试重新设置
+                        self.analysis_service.api_key = api_key
+                        self.analysis_service._setup_gemini()
+                        logger.info("API key set and Gemini re-configured")
+                    else:
+                        logger.warning("ProductAnalysisService does not have api_key attribute or _setup_gemini method")
+                except Exception as fallback_error:
+                    logger.error(f"Failed to initialize ProductAnalysisService even without parameters: {fallback_error}")
+                    raise Exception(f"ProductAnalysisService initialization failed: {fallback_error}")
+            
             self.prompt_service = PromptGenerationService()
             self.image_service = APlusImageService(api_key)
             self.validation_service = ValidationService()
