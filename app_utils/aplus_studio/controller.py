@@ -41,7 +41,18 @@ class APlusController:
             self.state_manager = APlusStateManager()
             self.analysis_service = ProductAnalysisService()
             self.prompt_service = PromptGenerationService()
-            self.image_service = APlusImageService()
+            
+            # 获取API密钥并传递给image_service
+            api_key = None
+            try:
+                if hasattr(st, 'secrets') and 'GOOGLE_API_KEY' in st.secrets:
+                    api_key = st.secrets["GOOGLE_API_KEY"]
+                elif hasattr(st, 'secrets') and 'GEMINI_API_KEY' in st.secrets:
+                    api_key = st.secrets["GEMINI_API_KEY"]
+            except Exception:
+                pass
+            
+            self.image_service = APlusImageService(api_key)
             self.validation_service = ValidationService()
             self.visual_sop_processor = VisualSOPProcessor()
             self.regeneration_service = RegenerationService()
