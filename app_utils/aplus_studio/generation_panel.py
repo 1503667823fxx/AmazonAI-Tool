@@ -604,7 +604,7 @@ class ModuleGenerationPanel:
                         f"🚀 生成 {config['name']}",
                         key=f"gen_individual_{module_type.value}",
                         type="primary" if len(selected_modules) == 1 else "secondary",
-                        use_container_width=True
+                        width="stretch"
                     ):
                         return {
                             "action": "generate_individual",
@@ -620,7 +620,7 @@ class ModuleGenerationPanel:
                 if st.button(
                     action_text,
                     type="primary",
-                    use_container_width=True,
+                    width="stretch",
                     disabled=len(self.active_generations) > 0
                 ):
                     return {
@@ -635,7 +635,7 @@ class ModuleGenerationPanel:
             if self.active_generations and st.button(
                 "⏹️ 停止全部",
                 type="secondary",
-                use_container_width=True
+                width="stretch"
             ):
                 return {"action": "stop_all"}
         
@@ -644,7 +644,7 @@ class ModuleGenerationPanel:
             if self.generation_progress and st.button(
                 "🔄 重置",
                 type="secondary", 
-                use_container_width=True
+                width="stretch"
             ):
                 return {"action": "reset_progress"}
         
