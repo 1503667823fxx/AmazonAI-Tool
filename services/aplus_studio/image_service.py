@@ -48,18 +48,30 @@ class APlusImageService(StudioVisionService):
         reference_images: Optional[List[Image.Image]] = None
     ) -> GenerationResult:
         """生成A+规范的图片"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"APlusImageService.generate_aplus_image called")
+        logger.info(f"API key configured: {bool(self.api_key)}")
+        
         if not self.api_key:
+            logger.error("API key not configured for A+ image generation")
             raise ValueError("API key not configured for A+ image generation")
         
         try:
             # 构建A+专用的完整提示词
+            logger.info("Building A+ generation prompt...")
             full_prompt = self._build_aplus_generation_prompt(prompt)
+            logger.info(f"Full prompt built, length: {len(full_prompt)}")
             
             # 使用父类的图片生成功能，添加A+特定的宽高比提示
             # 优先使用配置的模型，如果配置不可用则使用默认模型
             model_name = "models/gemini-3-pro-image-preview"  # 默认模型
             if self.config.is_configured and self.config.gemini_config.image_model:
                 model_name = self.config.gemini_config.image_model
+            
+            logger.info(f"Using model: {model_name}")
+            logger.info(f"Reference images count: {len(reference_images) if reference_images else 0}")
             
             result = self.generate_image_with_progress(
                 prompt=full_prompt,
@@ -68,6 +80,8 @@ class APlusImageService(StudioVisionService):
                 aspect_ratio_prompt=self.aplus_aspect_ratio,
                 progress_callback=None
             )
+            
+            logger.info(f"Image generation result: success={result.success}, error={result.error}")
             
             # 转换为A+特定的GenerationResult格式
             aplus_result = GenerationResult(
@@ -90,13 +104,16 @@ class APlusImageService(StudioVisionService):
             
             # 如果生成成功，进行A+规范验证
             if result.success and result.image_data:
+                logger.info("Image generation successful, validating A+ requirements...")
                 validation_result = self.validate_aplus_requirements(result.image_data)
                 aplus_result.validation_status = (
                     ValidationStatus.PASSED if validation_result["is_valid"] 
                     else ValidationStatus.NEEDS_REVIEW
                 )
                 aplus_result.metadata.update(validation_result)
+                logger.info(f"Validation result: {validation_result['is_valid']}")
             else:
+                logger.warning(f"Image generation failed: {result.error}")
                 aplus_result.validation_status = ValidationStatus.FAILED
             
             return aplus_result
