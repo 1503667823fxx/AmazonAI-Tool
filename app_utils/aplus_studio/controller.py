@@ -39,10 +39,8 @@ class APlusController:
     def __init__(self):
         try:
             self.state_manager = APlusStateManager()
-            self.analysis_service = ProductAnalysisService()
-            self.prompt_service = PromptGenerationService()
             
-            # 获取API密钥并传递给image_service
+            # 获取API密钥并传递给所有需要的服务
             api_key = None
             try:
                 if hasattr(st, 'secrets') and 'GOOGLE_API_KEY' in st.secrets:
@@ -52,6 +50,9 @@ class APlusController:
             except Exception:
                 pass
             
+            # 传递API密钥给分析服务和图片服务
+            self.analysis_service = ProductAnalysisService(api_key)
+            self.prompt_service = PromptGenerationService()
             self.image_service = APlusImageService(api_key)
             self.validation_service = ValidationService()
             self.visual_sop_processor = VisualSOPProcessor()
