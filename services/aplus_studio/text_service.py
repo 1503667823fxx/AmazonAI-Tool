@@ -724,12 +724,20 @@ class APlusTextService:
         - Language: {generated_text.language_code}
         - Cultural Notes: {generated_text.cultural_context}
         
+        LANGUAGE REQUIREMENTS:
+        - ALL TEXT MUST BE IN {generated_text.language_code.upper()} ONLY
+        - Do not mix languages in the same image
+        - Ensure all text elements follow the specified language
+        - No Chinese characters if language is not Chinese
+        - No English text if language is not English
+        
         INTEGRATION REQUIREMENTS:
         - Text should be clearly readable and well-integrated with the image
         - Maintain visual hierarchy with primary text most prominent
         - Ensure text complements the overall design aesthetic
         - Text should enhance rather than distract from the product
         - Consider cultural appropriateness for the target language
+        - STRICT LANGUAGE CONSISTENCY: Use only the specified language throughout
         """
         
         return text_prompt.strip()
