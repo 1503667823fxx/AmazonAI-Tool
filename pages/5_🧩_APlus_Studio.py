@@ -1046,6 +1046,7 @@ def render_product_analysis_tab(controller: APlusController, input_panel: Produc
     # 产品输入界面
     product_info, validation_result = input_panel.render_input_panel()
     
+    # 只有当用户提交了有效的产品信息时才执行分析
     if product_info and validation_result.is_valid:
         # 显示输入预览
         input_panel.render_input_preview(product_info)
@@ -1063,6 +1064,14 @@ def render_product_analysis_tab(controller: APlusController, input_panel: Produc
                 if analysis_result:
                     st.success("✅ 产品分析完成！")
                     render_analysis_summary(analysis_result)
+                    
+                    # 确保分析结果已保存到session中
+                    session = controller.state_manager.get_current_session()
+                    if session and session.analysis_result:
+                        st.success("✅ 分析结果已保存，现在可以进行模块生成了！")
+                        st.info("💡 请切换到「模块生成」标签页开始生成图片")
+                    else:
+                        st.warning("⚠️ 分析结果保存可能有问题")
                 else:
                     st.error("❌ 产品分析失败")
                     
@@ -1073,6 +1082,15 @@ def render_product_analysis_tab(controller: APlusController, input_panel: Produc
                     st.info("💡 请检查云端后台的API密钥配置是否正确")
                 else:
                     st.error(f"❌ 分析过程中出现错误: {error_msg}")
+                
+                # 确保失败时清理session状态
+                controller.state_manager.update_analysis_result(None)
+    else:
+        # 显示输入提示
+        if not product_info:
+            st.info("👆 请填写产品信息并点击「开始产品分析」按钮")
+        elif not validation_result.is_valid:
+            st.error("❌ 请修正输入信息中的错误")
 
 
 def render_analysis_summary(analysis_result):
@@ -1120,9 +1138,28 @@ def render_module_generation_tab(controller: APlusController, generation_panel: 
     
     # 检查前置条件
     session = controller.state_manager.get_current_session()
+    
+    # 添加调试信息
+    st.write("**调试信息**:")
+    st.write(f"- 会话存在: {session is not None}")
+    if session:
+        st.write(f"- 会话ID: {session.session_id}")
+        st.write(f"- 分析结果存在: {session.analysis_result is not None}")
+        if session.analysis_result:
+            st.write(f"- 产品类别: {session.analysis_result.listing_analysis.product_category if session.analysis_result.listing_analysis else '未知'}")
+    
     if not session or not session.analysis_result:
         st.warning("⚠️ 请先完成产品分析")
-        st.info("💡 提示：你可以先使用「卖点分析」功能快速分析产品图片，或者使用「产品分析」进行完整的产品信息分析")
+        st.info("💡 提示：请使用「产品分析」标签页进行完整的产品信息分析")
+        
+        # 提供快速检查按钮
+        if st.button("🔍 检查分析状态"):
+            session = controller.state_manager.get_current_session()
+            if session and session.analysis_result:
+                st.success("✅ 发现分析结果，请刷新页面")
+                st.rerun()
+            else:
+                st.error("❌ 仍未找到分析结果")
         return
     
     # 渲染生成控制面板
