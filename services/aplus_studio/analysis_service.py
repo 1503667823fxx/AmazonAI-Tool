@@ -23,16 +23,40 @@ from .config import aplus_config
 class ProductAnalysisService:
     """产品分析服务 - 使用Gemini模型分析产品listing和图片"""
     
-    def __init__(self):
+    def __init__(self, api_key: Optional[str] = None):
         self.config = aplus_config
+        self.api_key = api_key  # 保存传入的API密钥
         self._setup_gemini()
     
     def _setup_gemini(self):
         """设置Gemini API"""
-        if self.config.is_configured:
-            genai.configure(api_key=self.config.gemini_config.api_key)
-            self.text_model = genai.GenerativeModel(self.config.gemini_config.text_model)
-            self.vision_model = genai.GenerativeModel(self.config.gemini_config.image_model)
+        # 优先使用传入的API密钥，然后使用配置的API密钥
+        effective_api_key = self.api_key
+        
+        if not effective_api_key and self.config.is_configured:
+            effective_api_key = self.config.gemini_config.api_key
+        
+        # 如果还是没有API密钥，尝试直接从secrets获取
+        if not effective_api_key:
+            try:
+                import streamlit as st
+                if hasattr(st, 'secrets'):
+                    effective_api_key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+            except Exception:
+                pass
+        
+        if effective_api_key:
+            genai.configure(api_key=effective_api_key)
+            # 使用配置的模型或默认模型
+            text_model_name = (self.config.gemini_config.text_model 
+                             if self.config.is_configured 
+                             else "models/gemini-3-pro-preview")
+            image_model_name = (self.config.gemini_config.image_model 
+                              if self.config.is_configured 
+                              else "models/gemini-3-pro-image-preview")
+            
+            self.text_model = genai.GenerativeModel(text_model_name)
+            self.vision_model = genai.GenerativeModel(image_model_name)
         else:
             self.text_model = None
             self.vision_model = None
@@ -855,7 +879,8 @@ class ProductAnalysisService:
         return AnalysisResult(
             listing_analysis=listing_analysis,
             image_analysis=image_analysis,
-            visual_style=visual_style
+            visual_style=visual_style,
+            product_info=product_info  # 添加产品信息
         )
     
     async def analyze_product_simplified(self, product_info: ProductInfo) -> AnalysisResult:
@@ -897,7 +922,8 @@ class ProductAnalysisService:
             analysis_result = AnalysisResult(
                 listing_analysis=simplified_listing_analysis,
                 image_analysis=simplified_image_analysis,
-                visual_style=simplified_visual_style
+                visual_style=simplified_visual_style,
+                product_info=product_info  # 添加产品信息
             )
             
             return analysis_result
