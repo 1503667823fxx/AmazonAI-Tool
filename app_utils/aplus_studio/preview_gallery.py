@@ -210,7 +210,7 @@ class ImagePreviewGallery:
             if result.image_data:
                 st.image(
                     result.image_data,
-                    use_container_width=True,
+                    width="stretch",
                     caption=f"生成时间: {result.generation_time:.1f}s"
                 )
             else:
@@ -254,15 +254,15 @@ class ImagePreviewGallery:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🔄 重新生成", key=f"preview_regen_{module_type.value}", use_container_width=True):
+            if st.button("🔄 重新生成", key=f"preview_regen_{module_type.value}", width="stretch"):
                 st.session_state[f"regenerate_{module_type.value}"] = True
         
         with col2:
-            if st.button("📥 下载", key=f"download_{module_type.value}", use_container_width=True):
+            if st.button("📥 下载", key=f"download_{module_type.value}", width="stretch"):
                 self._download_image(module_type, result)
         
         with col3:
-            if st.button("📋 复制", key=f"copy_{module_type.value}", use_container_width=True):
+            if st.button("📋 复制", key=f"copy_{module_type.value}", width="stretch"):
                 self._copy_image_info(module_type, result)
     
     def _render_list_view(self, module_results: Dict[ModuleType, GenerationResult]) -> None:
