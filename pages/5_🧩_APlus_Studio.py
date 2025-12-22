@@ -48,6 +48,17 @@ def main():
         st.error("A+ Studio系统组件未正确加载，请检查系统配置")
         return
     
+    # 检查API配置状态
+    try:
+        from services.aplus_studio.config import aplus_config
+        if not aplus_config.is_configured:
+            st.error("❌ Gemini API未配置")
+            st.info("💡 请在云端后台配置GOOGLE_API_KEY或GEMINI_API_KEY")
+            st.info("🔧 配置完成后请刷新页面")
+            return
+    except Exception as e:
+        st.warning(f"⚠️ API配置检查失败: {str(e)}")
+    
     # 初始化控制器和组件
     if 'aplus_controller' not in st.session_state:
         st.session_state.aplus_controller = APlusController()
@@ -1056,7 +1067,12 @@ def render_product_analysis_tab(controller: APlusController, input_panel: Produc
                     st.error("❌ 产品分析失败")
                     
             except Exception as e:
-                st.error(f"❌ 分析过程中出现错误: {str(e)}")
+                error_msg = str(e)
+                if "API配置未找到" in error_msg or "not configured" in error_msg:
+                    st.error("❌ 产品分析失败：Gemini API未正确配置")
+                    st.info("💡 请检查云端后台的API密钥配置是否正确")
+                else:
+                    st.error(f"❌ 分析过程中出现错误: {error_msg}")
 
 
 def render_analysis_summary(analysis_result):
