@@ -18,6 +18,7 @@ from .models import (
 )
 from .image_service import APlusImageService
 from .prompt_service import PromptGenerationService
+from .text_service import APlusTextService, TextConfiguration, TextLanguage, FontStyle, ColorScheme, TextEffect
 
 
 @dataclass
@@ -63,6 +64,7 @@ class TrustModuleGenerator:
     def __init__(self, image_service: APlusImageService, prompt_service: PromptGenerationService):
         self.image_service = image_service
         self.prompt_service = prompt_service
+        self.text_service = APlusTextService()  # 添加文案服务
         
         # 黄金比例布局配置
         self.golden_ratio_layouts = {
@@ -442,146 +444,326 @@ class TrustModuleGenerator:
         listing = analysis.listing_analysis
         visual_style = analysis.visual_style
         
-        # 构建黄金比例布局描述
-        layout_description = f"""
-        黄金比例布局设计 - {layout_config.ratio_type}：
-        - 左侧区域（{layout_config.visual_weight['image']*100:.0f}%）：{layout_config.left_section}
-        - 右侧区域（{layout_config.visual_weight['text']*100:.0f}%）：{layout_config.right_section}
+        # 处理文案配置和多语言支持
+        text_config = None
+        generated_text = None
+        text_prompt_enhancement = ""
+        use_english = True  # 默认使用英语
         
-        布局原则：
-        - 视觉平衡：图文比例符合黄金分割美学
-        - 信息层次：重要信息优先级明确
-        - 阅读流程：从视觉吸引到信息获取再到行动引导
-        - 空间利用：最大化信息密度同时保持可读性
-        """
+        if custom_params and custom_params.get("include_text", True):
+            # 构建文字配置
+            text_config = self._build_text_configuration(custom_params)
+            use_english = text_config.language != TextLanguage.CHINESE
+            
+            # 生成多语言文案
+            product_info = {
+                "product_category": listing.product_category,
+                "key_selling_points": listing.key_selling_points,
+                "competitive_advantages": listing.competitive_advantages,
+                "target_demographics": listing.target_demographics
+            }
+            
+            generated_text = self.text_service.generate_multilingual_text(
+                product_info, text_config, "trust"
+            )
+            
+            # 构建文字增强提示词
+            text_prompt_enhancement = self.text_service.build_text_prompt_enhancement(
+                generated_text, text_config
+            )
         
-        # 构建视觉区域设计
-        visual_area_design = f"""
-        视觉区域内容设计：
-        - 内容类型：{visual_content['visual_type']}
-        - 展示重点：{visual_content['visual_focus']}
-        - 内容描述：{visual_content['description']}
-        - 情感影响：{visual_content['emotional_impact']}
-        - 构图要点：{visual_content['composition_tips']}
-        - 视觉权重：{visual_content['visual_weight']*100:.0f}%
-        """
-        
-        # 构建文字区域内容
-        text_area_content = f"""
-        文字区域内容结构：
-        
-        === 核心参数汇总 ===
-        {chr(10).join([f"• {param}" for param in content_structure['core_parameters']])}
-        
-        === 服务保障承诺 ===
-        {chr(10).join([f"• {guarantee}" for guarantee in content_structure['service_guarantees']])}
-        
-        === CTA行动引导 ===
-        {chr(10).join([f"• {cta}" for cta in content_structure['cta_guidance']])}
-        """
-        
-        # 构建清单式排版要求
-        bullet_points_formatting = f"""
-        清单式Bullet Points排版要求：
-        
-        格式规范：
-        {chr(10).join([f"• {rule}" for rule in self.bullet_point_structure.formatting_rules])}
-        
-        信息密度优化：
-        - 密度级别：{density_optimization['density_level']}
-        - 信息项目总数：{density_optimization['total_information_items']}
-        - 字体调整：{density_optimization['font_adjustments']}
-        - 间距调整：{density_optimization['spacing_adjustments']}
-        
-        视觉层次：
-        {chr(10).join([f"• {hierarchy}" for hierarchy in density_optimization['hierarchy_rules']])}
-        
-        可读性优化：
-        {chr(10).join([f"• {rule}" for rule in density_optimization['readability_optimization']])}
-        
-        视觉强化：
-        {chr(10).join([f"• {technique}" for technique in density_optimization['visual_enhancement']])}
-        """
-        
-        # 构建信任转化要素
-        trust_conversion_elements = f"""
-        信任转化要素集成：
-        
-        可信度指标：
-        {chr(10).join([f"• {indicator}" for indicator in self.trust_elements.credibility_indicators])}
-        
-        社会证明：
-        {chr(10).join([f"• {proof}" for proof in self.trust_elements.social_proof])}
-        
-        保障声明：
-        {chr(10).join([f"• {guarantee}" for guarantee in self.trust_elements.guarantee_statements])}
-        
-        紧迫感触发：
-        {chr(10).join([f"• {trigger}" for trigger in self.trust_elements.urgency_triggers])}
-        """
-        
-        # 应用自定义参数
-        custom_adjustments = ""
-        if custom_params:
-            if "trust_emphasis" in custom_params:
-                custom_adjustments += f"\n信任强调：{custom_params['trust_emphasis']}"
-            if "cta_style" in custom_params:
-                custom_adjustments += f"\nCTA风格：{custom_params['cta_style']}"
-            if "information_priority" in custom_params:
-                custom_adjustments += f"\n信息优先级：{custom_params['information_priority']}"
-        
-        # 构建完整提示词
-        full_prompt = f"""
-        创建一个600x450像素的Premium Image with Text布局，展现{listing.product_category}的完整产品信息和购买引导。
+        # 根据语言设置构建提示词
+        if use_english:
+            # 英文提示词
+            layout_description = f"""
+            Golden Ratio Layout Design - {layout_config.ratio_type}:
+            - Left Section ({layout_config.visual_weight['image']*100:.0f}%): Product visual display area
+            - Right Section ({layout_config.visual_weight['text']*100:.0f}%): Text information display area
+            
+            Layout Principles:
+            - Visual Balance: Image-text ratio follows golden ratio aesthetics
+            - Information Hierarchy: Clear priority of important information
+            - Reading Flow: From visual attraction to information acquisition to action guidance
+            - Space Utilization: Maximize information density while maintaining readability
+            """
+            
+            visual_area_design = f"""
+            Visual Area Content Design:
+            - Content Type: {visual_content['visual_type']}
+            - Display Focus: {visual_content['visual_focus']}
+            - Description: {visual_content['description']}
+            - Emotional Impact: {visual_content['emotional_impact']}
+            - Composition Tips: {visual_content['composition_tips']}
+            - Visual Weight: {visual_content['visual_weight']*100:.0f}%
+            """
+            
+            text_area_content = f"""
+            Text Area Content Structure:
+            
+            === Core Parameters Summary ===
+            {chr(10).join([f"• {param}" for param in content_structure['core_parameters']])}
+            
+            === Service Guarantee Commitments ===
+            {chr(10).join([f"• {guarantee}" for guarantee in content_structure['service_guarantees']])}
+            
+            === CTA Action Guidance ===
+            {chr(10).join([f"• {cta}" for cta in content_structure['cta_guidance']])}
+            """
+            
+            bullet_points_formatting = f"""
+            Bullet Points Formatting Requirements:
+            
+            Format Specifications:
+            • Use clear bullet points (•)
+            • Each line of information concise and clear
+            • Important information highlighted in bold
+            • Organize related content in sections
+            • Maintain clear visual hierarchy
+            
+            Information Density Optimization:
+            - Density Level: {density_optimization['density_level']}
+            - Total Information Items: {density_optimization['total_information_items']}
+            - Font Adjustments: {density_optimization['font_adjustments']}
+            - Spacing Adjustments: {density_optimization['spacing_adjustments']}
+            """
+            
+            trust_conversion_elements = f"""
+            Trust Conversion Elements Integration:
+            
+            Credibility Indicators:
+            • Brand certification marks
+            • Quality inspection reports
+            • Industry awards and honors
+            • Professional organization recognition
+            • International standard compliance
+            
+            Social Proof:
+            • User review count
+            • Satisfaction ratings
+            • Sales data display
+            • Expert recommendations
+            • Media coverage
+            
+            Guarantee Statements:
+            • 100% authentic guarantee
+            • 30-day no-reason return
+            • Nationwide warranty service
+            • 7x24 customer service
+            • Lifetime technical support
+            
+            Urgency Triggers:
+            • Limited-time special offers
+            • Limited stock quantity
+            • Today's order discount
+            • Limited to first 100 customers
+            • Event ending soon
+            """
+            
+            custom_adjustments = ""
+            if custom_params:
+                if "trust_emphasis" in custom_params:
+                    custom_adjustments += f"\nTrust Emphasis: {custom_params['trust_emphasis']}"
+                if "cta_style" in custom_params:
+                    custom_adjustments += f"\nCTA Style: {custom_params['cta_style']}"
+                if "information_priority" in custom_params:
+                    custom_adjustments += f"\nInformation Priority: {custom_params['information_priority']}"
+            
+            # 添加文字增强提示词
+            if text_prompt_enhancement:
+                custom_adjustments += f"\n\n{text_prompt_enhancement}"
+            
+            full_prompt = f"""
+            Create a 600x450 pixel Premium Image with Text layout showcasing complete product information and purchase guidance for {listing.product_category}.
 
-        === 产品信息 ===
-        产品类别：{listing.product_category}
-        核心卖点：{', '.join(listing.key_selling_points)}
-        目标用户：{listing.target_demographics}
-        竞争优势：{', '.join(listing.competitive_advantages)}
-        技术规格：{', '.join(f"{k}: {v}" for k, v in list(listing.technical_specifications.items())[:3])}
+            === Product Information ===
+            Product Category: {listing.product_category}
+            Key Selling Points: {', '.join(listing.key_selling_points)}
+            Target Users: {listing.target_demographics}
+            Competitive Advantages: {', '.join(listing.competitive_advantages)}
+            Technical Specifications: {', '.join(f"{k}: {v}" for k, v in list(listing.technical_specifications.items())[:3])}
 
-        === 黄金比例布局 ===
-        {layout_description}
+            === Golden Ratio Layout ===
+            {layout_description}
 
-        === 视觉区域设计 ===
-        {visual_area_design}
+            === Visual Area Design ===
+            {visual_area_design}
 
-        === 文字区域内容 ===
-        {text_area_content}
+            === Text Area Content ===
+            {text_area_content}
 
-        === 清单式排版 ===
-        {bullet_points_formatting}
+            === Bullet Points Formatting ===
+            {bullet_points_formatting}
 
-        === 信任转化要素 ===
-        {trust_conversion_elements}
+            === Trust Conversion Elements ===
+            {trust_conversion_elements}
 
-        === 视觉风格 ===
-        色调盘：{', '.join(visual_style.color_palette)}
-        光照风格：{visual_style.lighting_style}
-        构图规则：{', '.join(visual_style.composition_rules)}
-        美学方向：{visual_style.aesthetic_direction}
+            === Visual Style ===
+            Color Palette: {', '.join(visual_style.color_palette)}
+            Lighting Style: {visual_style.lighting_style}
+            Composition Rules: {', '.join(visual_style.composition_rules)}
+            Aesthetic Direction: {visual_style.aesthetic_direction}
 
-        === 技术规格 ===
-        - 尺寸：600x450像素（4:3宽高比）
-        - 格式：高质量PNG，适合电商展示
-        - 色彩空间：sRGB
-        - 分辨率：最低72 DPI
-        - 文件大小：5MB以内
+            === Technical Specifications ===
+            - Dimensions: 600x450 pixels (4:3 aspect ratio)
+            - Format: High-quality PNG suitable for e-commerce display
+            - Color Space: sRGB
+            - Resolution: Minimum 72 DPI
+            - File Size: Under 5MB
 
-        === 质量标准 ===
-        - 专业电商级别的视觉质量
-        - 清晰的信息层次和可读性
-        - 平衡的图文比例和视觉美感
-        - 有效的信任建立和转化引导
-        - 符合Amazon A+页面展示要求
-        - 优化的信息密度和用户体验
+            === Quality Standards ===
+            - Professional e-commerce level visual quality
+            - Clear information hierarchy and readability
+            - Balanced image-text ratio and visual aesthetics
+            - Effective trust building and conversion guidance
+            - Compliant with Amazon A+ page display requirements
+            - Optimized information density and user experience
 
-        === 核心目标 ===
-        通过完整的产品信息展示、可信的服务保障和有效的行动引导，建立用户信任并促进购买决策。
+            === Core Objective ===
+            Build user trust and promote purchase decisions through complete product information display, credible service guarantees, and effective action guidance.
 
-        {custom_adjustments}
-        """
+            IMPORTANT: ALL TEXT IN THE IMAGE MUST BE IN ENGLISH ONLY. Do not include any Chinese characters or text in the generated image.
+
+            {custom_adjustments}
+            """
+        else:
+            # 中文提示词（原有逻辑）
+            layout_description = f"""
+            黄金比例布局设计 - {layout_config.ratio_type}：
+            - 左侧区域（{layout_config.visual_weight['image']*100:.0f}%）：{layout_config.left_section}
+            - 右侧区域（{layout_config.visual_weight['text']*100:.0f}%）：{layout_config.right_section}
+            
+            布局原则：
+            - 视觉平衡：图文比例符合黄金分割美学
+            - 信息层次：重要信息优先级明确
+            - 阅读流程：从视觉吸引到信息获取再到行动引导
+            - 空间利用：最大化信息密度同时保持可读性
+            """
+            
+            visual_area_design = f"""
+            视觉区域内容设计：
+            - 内容类型：{visual_content['visual_type']}
+            - 展示重点：{visual_content['visual_focus']}
+            - 内容描述：{visual_content['description']}
+            - 情感影响：{visual_content['emotional_impact']}
+            - 构图要点：{visual_content['composition_tips']}
+            - 视觉权重：{visual_content['visual_weight']*100:.0f}%
+            """
+            
+            text_area_content = f"""
+            文字区域内容结构：
+            
+            === 核心参数汇总 ===
+            {chr(10).join([f"• {param}" for param in content_structure['core_parameters']])}
+            
+            === 服务保障承诺 ===
+            {chr(10).join([f"• {guarantee}" for guarantee in content_structure['service_guarantees']])}
+            
+            === CTA行动引导 ===
+            {chr(10).join([f"• {cta}" for cta in content_structure['cta_guidance']])}
+            """
+            
+            bullet_points_formatting = f"""
+            清单式Bullet Points排版要求：
+            
+            格式规范：
+            {chr(10).join([f"• {rule}" for rule in self.bullet_point_structure.formatting_rules])}
+            
+            信息密度优化：
+            - 密度级别：{density_optimization['density_level']}
+            - 信息项目总数：{density_optimization['total_information_items']}
+            - 字体调整：{density_optimization['font_adjustments']}
+            - 间距调整：{density_optimization['spacing_adjustments']}
+            
+            视觉层次：
+            {chr(10).join([f"• {hierarchy}" for hierarchy in density_optimization['hierarchy_rules']])}
+            
+            可读性优化：
+            {chr(10).join([f"• {rule}" for rule in density_optimization['readability_optimization']])}
+            
+            视觉强化：
+            {chr(10).join([f"• {technique}" for technique in density_optimization['visual_enhancement']])}
+            """
+            
+            trust_conversion_elements = f"""
+            信任转化要素集成：
+            
+            可信度指标：
+            {chr(10).join([f"• {indicator}" for indicator in self.trust_elements.credibility_indicators])}
+            
+            社会证明：
+            {chr(10).join([f"• {proof}" for proof in self.trust_elements.social_proof])}
+            
+            保障声明：
+            {chr(10).join([f"• {guarantee}" for guarantee in self.trust_elements.guarantee_statements])}
+            
+            紧迫感触发：
+            {chr(10).join([f"• {trigger}" for trigger in self.trust_elements.urgency_triggers])}
+            """
+            
+            custom_adjustments = ""
+            if custom_params:
+                if "trust_emphasis" in custom_params:
+                    custom_adjustments += f"\n信任强调：{custom_params['trust_emphasis']}"
+                if "cta_style" in custom_params:
+                    custom_adjustments += f"\nCTA风格：{custom_params['cta_style']}"
+                if "information_priority" in custom_params:
+                    custom_adjustments += f"\n信息优先级：{custom_params['information_priority']}"
+            
+            # 添加文字增强提示词
+            if text_prompt_enhancement:
+                custom_adjustments += f"\n\n{text_prompt_enhancement}"
+            
+            full_prompt = f"""
+            创建一个600x450像素的Premium Image with Text布局，展现{listing.product_category}的完整产品信息和购买引导。
+
+            === 产品信息 ===
+            产品类别：{listing.product_category}
+            核心卖点：{', '.join(listing.key_selling_points)}
+            目标用户：{listing.target_demographics}
+            竞争优势：{', '.join(listing.competitive_advantages)}
+            技术规格：{', '.join(f"{k}: {v}" for k, v in list(listing.technical_specifications.items())[:3])}
+
+            === 黄金比例布局 ===
+            {layout_description}
+
+            === 视觉区域设计 ===
+            {visual_area_design}
+
+            === 文字区域内容 ===
+            {text_area_content}
+
+            === 清单式排版 ===
+            {bullet_points_formatting}
+
+            === 信任转化要素 ===
+            {trust_conversion_elements}
+
+            === 视觉风格 ===
+            色调盘：{', '.join(visual_style.color_palette)}
+            光照风格：{visual_style.lighting_style}
+            构图规则：{', '.join(visual_style.composition_rules)}
+            美学方向：{visual_style.aesthetic_direction}
+
+            === 技术规格 ===
+            - 尺寸：600x450像素（4:3宽高比）
+            - 格式：高质量PNG，适合电商展示
+            - 色彩空间：sRGB
+            - 分辨率：最低72 DPI
+            - 文件大小：5MB以内
+
+            === 质量标准 ===
+            - 专业电商级别的视觉质量
+            - 清晰的信息层次和可读性
+            - 平衡的图文比例和视觉美感
+            - 有效的信任建立和转化引导
+            - 符合Amazon A+页面展示要求
+            - 优化的信息密度和用户体验
+
+            === 核心目标 ===
+            通过完整的产品信息展示、可信的服务保障和有效的行动引导，建立用户信任并促进购买决策。
+
+            {custom_adjustments}
+            """
         
         return ModulePrompt(
             module_type=ModuleType.TRUST,
@@ -595,7 +777,8 @@ class TrustModuleGenerator:
                 "cta_integration",
                 "credibility_indicators",
                 "social_proof_display",
-                "service_guarantee_emphasis"
+                "service_guarantee_emphasis",
+                "multilingual_text_support"  # 新增多语言支持
             ],
             technical_requirements=[
                 "600x450_pixels",
@@ -606,7 +789,8 @@ class TrustModuleGenerator:
                 "trust_elements_integration",
                 "cta_prominence",
                 "information_hierarchy",
-                "visual_text_balance"
+                "visual_text_balance",
+                "multilingual_text_rendering"  # 新增多语言文字渲染
             ],
             aspect_ratio="600x450",
             quality_settings={
@@ -615,9 +799,79 @@ class TrustModuleGenerator:
                 "compression": "lossless",
                 "text_rendering": "crisp",
                 "layout_precision": "professional",
-                "readability_optimization": True
+                "readability_optimization": True,
+                "text_language": generated_text.language_code if generated_text else "en",
+                "font_style": text_config.font_style.value if text_config else "modern",
+                "text_effects_enabled": text_config is not None
             }
         )
+    
+    def _build_text_configuration(self, custom_params: Dict[str, Any]) -> TextConfiguration:
+        """从自定义参数构建文字配置"""
+        
+        try:
+            # 解析语言
+            language_str = custom_params.get("text_language", "English (英语)")
+            language = TextLanguage.ENGLISH  # 默认
+            for lang in TextLanguage:
+                if lang.value == language_str:
+                    language = lang
+                    break
+            
+            # 解析字体样式
+            font_style_str = custom_params.get("font_style", "Modern Sans (现代无衬线)")
+            font_style = FontStyle.MODERN_SANS  # 默认
+            for style in FontStyle:
+                if style.value == font_style_str:
+                    font_style = style
+                    break
+            
+            # 解析颜色方案
+            color_scheme_str = custom_params.get("text_color_scheme", "Classic Black (经典黑色)")
+            color_scheme = ColorScheme.CLASSIC_BLACK  # 默认
+            for color in ColorScheme:
+                if color.value == color_scheme_str:
+                    color_scheme = color
+                    break
+            
+            # 解析文字效果
+            text_effect_str = custom_params.get("text_effect", "Drop Shadow (投影)")
+            text_effect = TextEffect.DROP_SHADOW  # 默认
+            for effect in TextEffect:
+                if effect.value == text_effect_str:
+                    text_effect = effect
+                    break
+            
+            return TextConfiguration(
+                language=language,
+                font_style=font_style,
+                font_weight=custom_params.get("font_weight", "Medium (中等)"),
+                color_scheme=color_scheme,
+                text_effect=text_effect,
+                opacity=custom_params.get("text_opacity", 0.9),
+                position=custom_params.get("text_position", "Auto (自动)"),
+                size=custom_params.get("text_size", "Auto (自动)"),
+                include_background=custom_params.get("text_background", False),
+                background_color=custom_params.get("background_color", "Black (黑色)") if custom_params.get("text_background") else None
+            )
+        except Exception as e:
+            # 如果文字配置失败，返回默认配置
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Text configuration failed, using defaults: {str(e)}")
+            
+            return TextConfiguration(
+                language=TextLanguage.ENGLISH,
+                font_style=FontStyle.MODERN_SANS,
+                font_weight="Medium (中等)",
+                color_scheme=ColorScheme.CLASSIC_BLACK,
+                text_effect=TextEffect.DROP_SHADOW,
+                opacity=0.9,
+                position="Auto (自动)",
+                size="Auto (自动)",
+                include_background=False,
+                background_color=None
+            )
     
     def _get_reference_images(self, analysis: AnalysisResult) -> Optional[List[Image.Image]]:
         """获取参考图片"""
