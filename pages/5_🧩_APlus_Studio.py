@@ -116,7 +116,7 @@ def render_sidebar(controller: APlusController):
                 st.metric("总模块", session_info['total_modules'])
             
             # 会话操作
-            if st.button("🔄 重置会话", use_container_width=True):
+            if st.button("🔄 重置会话", width="stretch"):
                 controller.reset_session()
                 st.rerun()
         else:
@@ -162,11 +162,11 @@ def render_sidebar(controller: APlusController):
         # 快速操作
         st.subheader("⚡ 快速操作")
         
-        if st.button("🔍 系统诊断", use_container_width=True):
+        if st.button("🔍 系统诊断", width="stretch"):
             with st.expander("系统诊断结果", expanded=True):
                 st.json(health_status)
         
-        if st.button("🧹 清理缓存", use_container_width=True):
+        if st.button("🧹 清理缓存", width="stretch"):
             controller.cleanup_old_versions()
             st.success("缓存已清理")
 
@@ -202,7 +202,7 @@ def render_selling_points_analysis_tab(controller: APlusController):
                     for i, file in enumerate(uploaded_files):
                         with cols[i]:
                             image = Image.open(file)
-                            st.image(image, caption=f"图片 {i+1}", use_container_width=True)
+                            st.image(image, caption=f"图片 {i+1}", width="stretch")
                 else:
                     # 如果图片多，使用2列布局
                     for i in range(0, len(uploaded_files), 2):
@@ -211,10 +211,10 @@ def render_selling_points_analysis_tab(controller: APlusController):
                             if i + j < len(uploaded_files):
                                 with cols[j]:
                                     image = Image.open(uploaded_files[i + j])
-                                    st.image(image, caption=f"图片 {i+j+1}", use_container_width=True)
+                                    st.image(image, caption=f"图片 {i+j+1}", width="stretch")
             
             # 分析按钮
-            if st.button("🔍 开始卖点分析", type="primary", use_container_width=True):
+            if st.button("🔍 开始卖点分析", type="primary", width="stretch"):
                 with st.spinner("🤖 AI正在分析产品卖点..."):
                     try:
                         # 转换图片格式
@@ -382,12 +382,12 @@ A+页面建议:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("📄 完整报告", use_container_width=True):
+        if st.button("📄 完整报告", width="stretch"):
             st.session_state['show_full_report'] = True
             st.rerun()
     
     with col2:
-        if st.button("🔄 重新分析", use_container_width=True):
+        if st.button("🔄 重新分析", width="stretch"):
             if 'selling_points_result' in st.session_state:
                 del st.session_state['selling_points_result']
             if 'show_full_report' in st.session_state:
@@ -407,7 +407,7 @@ A+页面建议:
             data=json_str,
             file_name=f"selling_points_{datetime.now().strftime('%m%d_%H%M')}.json",
             mime="application/json",
-            use_container_width=True
+            width="stretch"
         )
     
     # 显示完整报告
@@ -583,11 +583,11 @@ A+页面建议:
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📋 生成完整报告", use_container_width=True):
+        if st.button("📋 生成完整报告", width="stretch"):
             st.session_state['show_full_report'] = True
     
     with col2:
-        if st.button("🔄 重新分析", use_container_width=True):
+        if st.button("🔄 重新分析", width="stretch"):
             if 'selling_points_result' in st.session_state:
                 del st.session_state['selling_points_result']
             if 'show_full_report' in st.session_state:
