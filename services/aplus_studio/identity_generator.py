@@ -174,7 +174,12 @@ class IdentityModuleGenerator:
             
             # 确保错误信息不包含ModuleType对象
             error_message = str(e)
-            if "ModuleType" in error_message:
+            # 如果错误信息包含ModuleType枚举，进行清理
+            if "ModuleType.IDENTITY" in error_message:
+                error_message = error_message.replace("ModuleType.IDENTITY", "identity module")
+            elif "<ModuleType.IDENTITY:" in error_message:
+                error_message = "Identity module generation failed due to configuration error"
+            elif "ModuleType" in error_message:
                 error_message = f"Identity module generation failed: {error_message}"
             
             return GenerationResult(
@@ -551,50 +556,69 @@ class IdentityModuleGenerator:
     def _build_text_configuration(self, custom_params: Dict[str, Any]) -> TextConfiguration:
         """从自定义参数构建文字配置"""
         
-        # 解析语言
-        language_str = custom_params.get("text_language", "English (英语)")
-        language = TextLanguage.ENGLISH  # 默认
-        for lang in TextLanguage:
-            if lang.value == language_str:
-                language = lang
-                break
-        
-        # 解析字体样式
-        font_style_str = custom_params.get("font_style", "Modern Sans (现代无衬线)")
-        font_style = FontStyle.MODERN_SANS  # 默认
-        for style in FontStyle:
-            if style.value == font_style_str:
-                font_style = style
-                break
-        
-        # 解析颜色方案
-        color_scheme_str = custom_params.get("text_color_scheme", "Classic Black (经典黑色)")
-        color_scheme = ColorScheme.CLASSIC_BLACK  # 默认
-        for color in ColorScheme:
-            if color.value == color_scheme_str:
-                color_scheme = color
-                break
-        
-        # 解析文字效果
-        text_effect_str = custom_params.get("text_effect", "Drop Shadow (投影)")
-        text_effect = TextEffect.DROP_SHADOW  # 默认
-        for effect in TextEffect:
-            if effect.value == text_effect_str:
-                text_effect = effect
-                break
-        
-        return TextConfiguration(
-            language=language,
-            font_style=font_style,
-            font_weight=custom_params.get("font_weight", "Medium (中等)"),
-            color_scheme=color_scheme,
-            text_effect=text_effect,
-            opacity=custom_params.get("text_opacity", 0.9),
-            position=custom_params.get("text_position", "Auto (自动)"),
-            size=custom_params.get("text_size", "Auto (自动)"),
-            include_background=custom_params.get("text_background", False),
-            background_color=custom_params.get("background_color", "Black (黑色)") if custom_params.get("text_background") else None
-        )
+        try:
+            # 解析语言
+            language_str = custom_params.get("text_language", "English (英语)")
+            language = TextLanguage.ENGLISH  # 默认
+            for lang in TextLanguage:
+                if lang.value == language_str:
+                    language = lang
+                    break
+            
+            # 解析字体样式
+            font_style_str = custom_params.get("font_style", "Modern Sans (现代无衬线)")
+            font_style = FontStyle.MODERN_SANS  # 默认
+            for style in FontStyle:
+                if style.value == font_style_str:
+                    font_style = style
+                    break
+            
+            # 解析颜色方案
+            color_scheme_str = custom_params.get("text_color_scheme", "Classic Black (经典黑色)")
+            color_scheme = ColorScheme.CLASSIC_BLACK  # 默认
+            for color in ColorScheme:
+                if color.value == color_scheme_str:
+                    color_scheme = color
+                    break
+            
+            # 解析文字效果
+            text_effect_str = custom_params.get("text_effect", "Drop Shadow (投影)")
+            text_effect = TextEffect.DROP_SHADOW  # 默认
+            for effect in TextEffect:
+                if effect.value == text_effect_str:
+                    text_effect = effect
+                    break
+            
+            return TextConfiguration(
+                language=language,
+                font_style=font_style,
+                font_weight=custom_params.get("font_weight", "Medium (中等)"),
+                color_scheme=color_scheme,
+                text_effect=text_effect,
+                opacity=custom_params.get("text_opacity", 0.9),
+                position=custom_params.get("text_position", "Auto (自动)"),
+                size=custom_params.get("text_size", "Auto (自动)"),
+                include_background=custom_params.get("text_background", False),
+                background_color=custom_params.get("background_color", "Black (黑色)") if custom_params.get("text_background") else None
+            )
+        except Exception as e:
+            # 如果文字配置失败，返回默认配置
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Text configuration failed, using defaults: {str(e)}")
+            
+            return TextConfiguration(
+                language=TextLanguage.ENGLISH,
+                font_style=FontStyle.MODERN_SANS,
+                font_weight="Medium (中等)",
+                color_scheme=ColorScheme.CLASSIC_BLACK,
+                text_effect=TextEffect.DROP_SHADOW,
+                opacity=0.9,
+                position="Auto (自动)",
+                size="Auto (自动)",
+                include_background=False,
+                background_color=None
+            )
     
     def _get_reference_images(self, analysis: AnalysisResult) -> Optional[List[Image.Image]]:
         """获取参考图片"""
