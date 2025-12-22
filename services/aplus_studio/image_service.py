@@ -106,12 +106,27 @@ class APlusImageService(StudioVisionService):
             if result.success and result.image_data:
                 logger.info("Image generation successful, validating A+ requirements...")
                 validation_result = self.validate_aplus_requirements(result.image_data)
-                aplus_result.validation_status = (
-                    ValidationStatus.PASSED if validation_result["is_valid"] 
-                    else ValidationStatus.NEEDS_REVIEW
-                )
-                aplus_result.metadata.update(validation_result)
-                logger.info(f"Validation result: {validation_result['is_valid']}")
+                logger.info(f"Validation result: is_valid={validation_result.is_valid}")
+                if not validation_result.is_valid:
+                    logger.warning(f"Validation issues: {validation_result.issues}")
+                    logger.info(f"Validation suggestions: {validation_result.suggestions}")
+                
+                aplus_result.validation_status = validation_result.validation_status
+                aplus_result.metadata.update({
+                    "validation_is_valid": validation_result.is_valid,
+                    "validation_issues": validation_result.issues,
+                    "validation_suggestions": validation_result.suggestions,
+                    "quality_metrics": validation_result.quality_metrics
+                })
+                
+                # 重要：即使验证有问题，也保留图片数据！
+                # 只有在严重错误时才清空image_data
+                if validation_result.validation_status == ValidationStatus.FAILED:
+                    logger.error("Validation failed completely, clearing image data")
+                    aplus_result.image_data = None
+                else:
+                    logger.info("Keeping image data despite any validation issues")
+                
             else:
                 logger.warning(f"Image generation failed: {result.error}")
                 aplus_result.validation_status = ValidationStatus.FAILED
