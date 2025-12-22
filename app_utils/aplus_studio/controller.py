@@ -385,6 +385,11 @@ class APlusController:
         
         if module_type == ModuleType.IDENTITY:
             with st.spinner("正在生成身份代入模块图片..."):
+                # 验证分析结果
+                if not session.analysis_result:
+                    raise ValueError("产品分析结果为空，请先完成产品分析")
+                
+                logger.info(f"Starting identity generation with analysis result: {bool(session.analysis_result)}")
                 return await self.identity_generator.generate_identity_image(
                     session.analysis_result, adjusted_params
                 )
