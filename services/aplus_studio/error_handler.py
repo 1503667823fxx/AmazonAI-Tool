@@ -13,7 +13,7 @@ import logging
 import time
 import traceback
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Callable, Union, Type
+from typing import Dict, List, Optional, Any, Callable, Union, Type, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import wraps
