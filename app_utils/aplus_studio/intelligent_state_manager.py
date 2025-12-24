@@ -216,6 +216,175 @@ class IntelligentWorkflowStateManager:
         """检查是否有活跃会话"""
         return st.session_state.get('intelligent_workflow_session') is not None
     
+    def get_current_state(self) -> WorkflowState:
+        """获取当前工作流状态"""
+        try:
+            session = self.get_current_session()
+            if session:
+                return session.current_state
+            else:
+                # 如果没有会话，返回初始状态
+                return WorkflowState.INITIAL
+        except Exception as e:
+            logger.error(f"Failed to get current workflow state: {str(e)}")
+            return WorkflowState.INITIAL
+    
+    def transition_to_state(self, target_state: WorkflowState) -> bool:
+        """转换到指定状态"""
+        try:
+            session = self.get_current_session()
+            if not session:
+                # 如果没有会话，创建新会话
+                session = self.create_new_session()
+            
+            # 更新状态
+            session.update_state(target_state)
+            self._save_session(session)
+            
+            logger.info(f"Transitioned to state: {target_state.value}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to transition to state {target_state.value}: {str(e)}")
+            return False
+    
+    # 便捷方法用于主应用调用
+    def set_analysis_result(self, analysis_result):
+        """设置分析结果"""
+        try:
+            session = self.get_current_session()
+            if session:
+                # 这里应该转换为ProductAnalysis对象，暂时存储原始数据
+                session.workflow_metadata['analysis_result'] = analysis_result
+                self._save_session(session)
+        except Exception as e:
+            logger.error(f"Failed to set analysis result: {str(e)}")
+    
+    def get_analysis_result(self):
+        """获取分析结果"""
+        try:
+            session = self.get_current_session()
+            if session:
+                return session.workflow_metadata.get('analysis_result')
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get analysis result: {str(e)}")
+            return None
+    
+    def set_module_recommendation(self, recommendation):
+        """设置模块推荐"""
+        try:
+            session = self.get_current_session()
+            if session:
+                session.workflow_metadata['module_recommendation'] = recommendation
+                self._save_session(session)
+        except Exception as e:
+            logger.error(f"Failed to set module recommendation: {str(e)}")
+    
+    def get_module_recommendation(self):
+        """获取模块推荐"""
+        try:
+            session = self.get_current_session()
+            if session:
+                return session.workflow_metadata.get('module_recommendation')
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get module recommendation: {str(e)}")
+            return None
+    
+    def set_generated_content(self, content):
+        """设置生成的内容"""
+        try:
+            session = self.get_current_session()
+            if session:
+                session.workflow_metadata['generated_content'] = content
+                self._save_session(session)
+        except Exception as e:
+            logger.error(f"Failed to set generated content: {str(e)}")
+    
+    def get_generated_content(self):
+        """获取生成的内容"""
+        try:
+            session = self.get_current_session()
+            if session:
+                return session.workflow_metadata.get('generated_content')
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get generated content: {str(e)}")
+            return None
+    
+    def set_final_content(self, content):
+        """设置最终内容"""
+        try:
+            session = self.get_current_session()
+            if session:
+                session.workflow_metadata['final_content'] = content
+                self._save_session(session)
+        except Exception as e:
+            logger.error(f"Failed to set final content: {str(e)}")
+    
+    def get_final_content(self):
+        """获取最终内容"""
+        try:
+            session = self.get_current_session()
+            if session:
+                return session.workflow_metadata.get('final_content')
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get final content: {str(e)}")
+            return None
+    
+    def set_style_theme(self, theme):
+        """设置风格主题"""
+        try:
+            session = self.get_current_session()
+            if session:
+                session.workflow_metadata['style_theme'] = theme
+                self._save_session(session)
+        except Exception as e:
+            logger.error(f"Failed to set style theme: {str(e)}")
+    
+    def get_style_theme(self):
+        """获取风格主题"""
+        try:
+            session = self.get_current_session()
+            if session:
+                return session.workflow_metadata.get('style_theme')
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get style theme: {str(e)}")
+            return None
+    
+    def set_generated_images(self, images):
+        """设置生成的图片"""
+        try:
+            session = self.get_current_session()
+            if session:
+                session.workflow_metadata['generated_images'] = images
+                self._save_session(session)
+        except Exception as e:
+            logger.error(f"Failed to set generated images: {str(e)}")
+    
+    def get_generated_images(self):
+        """获取生成的图片"""
+        try:
+            session = self.get_current_session()
+            if session:
+                return session.workflow_metadata.get('generated_images')
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get generated images: {str(e)}")
+            return None
+    
+    def reset_workflow(self):
+        """重置工作流"""
+        try:
+            self.clear_current_session()
+            # 创建新会话
+            self.create_new_session()
+        except Exception as e:
+            logger.error(f"Failed to reset workflow: {str(e)}")
+    
     def update_product_analysis(self, product_analysis: ProductAnalysis):
         """更新产品分析结果"""
         try:
