@@ -103,6 +103,9 @@ def render_modular_workflow():
     # 侧边栏 - 进度跟踪和系统状态
     render_modular_sidebar()
     
+    # 面包屑导航
+    render_breadcrumb_navigation()
+    
     # 主工作流程
     current_step = st.session_state.current_step
     
@@ -118,6 +121,62 @@ def render_modular_workflow():
         # 默认回到模块选择
         st.session_state.current_step = "module_selection"
         st.rerun()
+
+
+def render_breadcrumb_navigation():
+    """渲染面包屑导航"""
+    current_step = st.session_state.current_step
+    
+    steps = [
+        ("module_selection", "🧩 选择模块"),
+        ("material_upload", "📁 上传素材"),
+        ("generation", "🎨 生成内容"),
+        ("preview", "🖼️ 预览管理")
+    ]
+    
+    # 创建面包屑
+    breadcrumb_items = []
+    
+    for i, (step_key, step_name) in enumerate(steps):
+        if step_key == current_step:
+            # 当前步骤 - 高亮显示
+            breadcrumb_items.append(f"**{step_name}**")
+            break
+        elif _is_step_completed(step_key):
+            # 已完成步骤 - 可点击
+            breadcrumb_items.append(step_name)
+        else:
+            # 未完成步骤 - 不显示
+            break
+    
+    if len(breadcrumb_items) > 1:
+        # 显示面包屑导航
+        st.markdown("**导航**: " + " → ".join(breadcrumb_items))
+        
+        # 快速返回按钮（只在非第一步时显示）
+        if current_step != "module_selection":
+            col1, col2, col3 = st.columns([1, 1, 4])
+            
+            with col1:
+                if st.button("⬅️ 上一步", use_container_width=True):
+                    # 返回到上一个步骤
+                    current_index = next(i for i, (key, _) in enumerate(steps) if key == current_step)
+                    if current_index > 0:
+                        prev_step = steps[current_index - 1][0]
+                        st.session_state.current_step = prev_step
+                        st.rerun()
+            
+            with col2:
+                if st.button("🏠 重新开始", use_container_width=True):
+                    # 清理会话状态，重新开始
+                    keys_to_clear = ['selected_modules', 'module_materials', 'generated_modules']
+                    for key in keys_to_clear:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.session_state.current_step = "module_selection"
+                    st.rerun()
+        
+        st.markdown("---")
 
 
 def render_selling_points_analysis():
@@ -238,7 +297,10 @@ def render_modular_sidebar():
             if step_key == current_step:
                 st.markdown(f"👉 **{step_name}** ← 当前")
             elif _is_step_completed(step_key):
-                st.markdown(f"✅ {step_name}")
+                # 已完成的步骤可以点击返回
+                if st.button(f"✅ {step_name}", key=f"nav_{step_key}", use_container_width=True):
+                    st.session_state.current_step = step_key
+                    st.rerun()
             else:
                 st.markdown(f"⚪ {step_name}")
         
@@ -337,20 +399,26 @@ def render_material_upload_step():
             len(ms.images) + len(ms.documents) + len(ms.text_inputs) + len(ms.custom_prompts)
             for ms in material_sets.values()
         )
-        
+    else:
+        total_materials = 0
+    
+    # 导航按钮 - 始终显示
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🧩 返回模块选择", use_container_width=True):
+            st.session_state.current_step = "module_selection"
+            st.rerun()
+    
+    with col2:
+        # 只有在有素材时才启用生成按钮
         if total_materials > 0:
-            # 导航按钮
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("🧩 返回模块选择", use_container_width=True):
-                    st.session_state.current_step = "module_selection"
-                    st.rerun()
-            
-            with col2:
-                if st.button("🎨 开始生成", type="primary", use_container_width=True):
-                    st.session_state.current_step = "generation"
-                    st.rerun()
+            if st.button("🎨 开始生成", type="primary", use_container_width=True):
+                st.session_state.current_step = "generation"
+                st.rerun()
+        else:
+            st.button("🎨 开始生成", disabled=True, use_container_width=True, help="请先上传素材")
 
 
 def render_generation_step():
