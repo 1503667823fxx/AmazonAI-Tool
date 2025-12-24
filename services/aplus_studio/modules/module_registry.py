@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import Dict, Type, Optional, List
+from typing import Dict, Type, Optional, List, Any
 from ..models import ModuleType, ModuleInfo
 from .base_module import BaseModuleGenerator
 
