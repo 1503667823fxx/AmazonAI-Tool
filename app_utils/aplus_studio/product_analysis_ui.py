@@ -68,8 +68,8 @@ class ProductAnalysisUI:
         if session and session.product_analysis:
             return self._render_analysis_results(session.product_analysis)
         
-        # 如果正在分析中，显示进度界面
-        if session and session.current_state == WorkflowState.PRODUCT_ANALYSIS:
+        # 检查是否正在进行分析（通过session_state标记）
+        if st.session_state.get('analysis_in_progress', False):
             return self._render_analysis_progress()
         
         # 否则显示输入界面
