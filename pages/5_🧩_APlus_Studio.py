@@ -124,7 +124,7 @@ def render_intelligent_workflow():
         
         # 显示当前步骤和进度
         current_state = state_manager.get_current_state()
-        nav_action = nav_ui.render_navigation_bar()
+        nav_action = nav_ui.render_navigation_header()
         
         # 根据当前状态渲染对应的界面
         if current_state == WorkflowState.INITIAL:
@@ -206,7 +206,8 @@ def render_product_analysis_step(state_manager):
         st.markdown("上传产品图片，AI将自动分析产品特性、目标用户和营销角度")
         
         # 创建产品分析UI
-        analysis_result = create_product_analysis_ui(state_manager.workflow_controller)
+        analysis_ui = create_product_analysis_ui(state_manager.workflow_controller)
+        analysis_result = analysis_ui.render_analysis_interface()
         
         if analysis_result and analysis_result.get('status') == 'completed':
             # 保存分析结果
