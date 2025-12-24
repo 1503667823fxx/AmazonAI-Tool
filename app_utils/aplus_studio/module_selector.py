@@ -100,7 +100,7 @@ def render_module_selector() -> Dict[str, Any]:
     
     # 返回选择结果
     return {
-        'selected_modules': [ModuleType(m) for m in st.session_state.selected_modules],
+        'selected_modules': st.session_state.selected_modules.copy(),
         'total_selected': len(st.session_state.selected_modules),
         'estimated_time': _calculate_estimated_time(st.session_state.selected_modules)
     }
@@ -221,7 +221,7 @@ def _render_selection_summary() -> None:
     # 已选择的模块列表
     if selected_count > 0:
         st.markdown("**已选择的模块:**")
-        selected_names = [_get_module_display_name(ModuleType(m)) for m in st.session_state.selected_modules]
+        selected_names = [_get_module_display_name(m) for m in st.session_state.selected_modules]
         st.markdown("• " + " • ".join(selected_names))
     
     # 进度条
