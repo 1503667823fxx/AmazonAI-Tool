@@ -1,5 +1,5 @@
 # Streamlit配置文件
-# 适用于APlus Studio模板库管理系统
+# 适用于Amazon AI工具集
 
 [global]
 # 开发模式设置
@@ -20,6 +20,9 @@ maxMessageSize = 200
 
 # WebSocket设置
 enableWebsocketCompression = false
+
+# 文件监控设置
+fileWatcherType = "none"
 
 [browser]
 # 浏览器设置
@@ -48,6 +51,9 @@ fixMatplotlib = true
 
 # 快速重新运行
 fastReruns = true
+
+# 文件监控设置 - 修复字典迭代错误
+postProcessorEnabled = false
 
 [logger]
 # 日志设置
