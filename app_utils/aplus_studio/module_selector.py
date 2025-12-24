@@ -47,7 +47,7 @@ def render_module_selector() -> Dict[str, Any]:
     
     with col1:
         if st.button("✅ 全选"):
-            st.session_state.selected_modules = [m.value for m in available_modules]
+            st.session_state.selected_modules = available_modules.copy()
             st.rerun()
     
     with col2:
@@ -59,10 +59,10 @@ def render_module_selector() -> Dict[str, Any]:
         if st.button("⭐ 推荐组合"):
             # 选择推荐的核心模块组合
             recommended = [
-                ModuleType.PRODUCT_OVERVIEW.value,
-                ModuleType.FEATURE_ANALYSIS.value,
-                ModuleType.SPECIFICATION_COMPARISON.value,
-                ModuleType.USAGE_SCENARIOS.value
+                ModuleType.PRODUCT_OVERVIEW,
+                ModuleType.FEATURE_ANALYSIS,
+                ModuleType.SPECIFICATION_COMPARISON,
+                ModuleType.USAGE_SCENARIOS
             ]
             st.session_state.selected_modules = recommended
             st.rerun()
@@ -71,9 +71,9 @@ def render_module_selector() -> Dict[str, Any]:
         if st.button("🎯 基础套装"):
             # 选择基础模块套装
             basic = [
-                ModuleType.PRODUCT_OVERVIEW.value,
-                ModuleType.PROBLEM_SOLUTION.value,
-                ModuleType.QUALITY_ASSURANCE.value
+                ModuleType.PRODUCT_OVERVIEW,
+                ModuleType.PROBLEM_SOLUTION,
+                ModuleType.QUALITY_ASSURANCE
             ]
             st.session_state.selected_modules = basic
             st.rerun()
@@ -144,7 +144,7 @@ def _render_module_card(module_type: ModuleType, registry) -> None:
     display_name = _get_module_display_name(module_type)
     
     # 检查是否已选中
-    is_selected = module_type.value in st.session_state.selected_modules
+    is_selected = module_type in st.session_state.selected_modules
     
     # 创建卡片容器
     with st.container():
@@ -187,9 +187,9 @@ def _render_module_card(module_type: ModuleType, registry) -> None:
         
         if st.button(button_text, key=f"btn_{module_type.value}", type=button_type):
             if is_selected:
-                st.session_state.selected_modules.remove(module_type.value)
+                st.session_state.selected_modules.remove(module_type)
             else:
-                st.session_state.selected_modules.append(module_type.value)
+                st.session_state.selected_modules.append(module_type)
             st.rerun()
         
         st.markdown("</div>", unsafe_allow_html=True)
@@ -278,22 +278,22 @@ def _get_module_display_name(module_type: ModuleType) -> str:
     return display_names.get(module_type, module_type.value)
 
 
-def _calculate_estimated_time(selected_modules: List[str]) -> int:
+def _calculate_estimated_time(selected_modules: List[ModuleType]) -> int:
     """计算预估总时间（秒）"""
     # 每个模块的预估时间
     module_times = {
-        ModuleType.PRODUCT_OVERVIEW.value: 45,
-        ModuleType.PROBLEM_SOLUTION.value: 50,
-        ModuleType.FEATURE_ANALYSIS.value: 60,
-        ModuleType.SPECIFICATION_COMPARISON.value: 55,
-        ModuleType.USAGE_SCENARIOS.value: 50,
-        ModuleType.INSTALLATION_GUIDE.value: 60,
-        ModuleType.SIZE_COMPATIBILITY.value: 50,
-        ModuleType.MAINTENANCE_CARE.value: 45,
-        ModuleType.MATERIAL_CRAFTSMANSHIP.value: 50,
-        ModuleType.QUALITY_ASSURANCE.value: 40,
-        ModuleType.CUSTOMER_REVIEWS.value: 45,
-        ModuleType.PACKAGE_CONTENTS.value: 40
+        ModuleType.PRODUCT_OVERVIEW: 45,
+        ModuleType.PROBLEM_SOLUTION: 50,
+        ModuleType.FEATURE_ANALYSIS: 60,
+        ModuleType.SPECIFICATION_COMPARISON: 55,
+        ModuleType.USAGE_SCENARIOS: 50,
+        ModuleType.INSTALLATION_GUIDE: 60,
+        ModuleType.SIZE_COMPATIBILITY: 50,
+        ModuleType.MAINTENANCE_CARE: 45,
+        ModuleType.MATERIAL_CRAFTSMANSHIP: 50,
+        ModuleType.QUALITY_ASSURANCE: 40,
+        ModuleType.CUSTOMER_REVIEWS: 45,
+        ModuleType.PACKAGE_CONTENTS: 40
     }
     
     total_time = sum(module_times.get(module, 60) for module in selected_modules)
