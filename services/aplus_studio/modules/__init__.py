@@ -8,7 +8,7 @@ A+ Studio 模块生成器包
 """
 
 from .base_module import BaseModuleGenerator, ModuleGenerationError
-from .module_registry import ModuleRegistry, register_module, get_module_generator
+from .module_registry import ModuleRegistry, register_module, get_module_generator, get_registry
 from .product_overview import ProductOverviewGenerator
 from .problem_solution import ProblemSolutionGenerator
 from .feature_analysis import FeatureAnalysisGenerator
@@ -45,6 +45,7 @@ __all__ = [
     'ModuleRegistry',
     'register_module',
     'get_module_generator',
+    'get_registry',
     'ProductOverviewGenerator',
     'ProblemSolutionGenerator',
     'FeatureAnalysisGenerator',
