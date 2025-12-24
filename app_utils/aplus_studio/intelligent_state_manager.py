@@ -38,6 +38,9 @@ class IntelligentWorkflowStateManager:
         # 初始化工作流控制器
         self.workflow_controller = IntelligentWorkflowController()
         
+        # 设置双向引用
+        self.workflow_controller.state_manager = self
+        
         self._init_session_state()
         self._setup_auto_backup()
         
