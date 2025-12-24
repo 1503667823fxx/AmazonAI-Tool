@@ -616,7 +616,7 @@ def _is_step_completed(step_key: str) -> bool:
     return False
 
 
-def _get_module_display_name_sidebar(module_type: ModuleType) -> str:
+def _get_module_display_name_sidebar(module_type) -> str:
     """获取模块显示名称（侧边栏用）"""
     display_names = {
         ModuleType.PRODUCT_OVERVIEW: "产品概览",
@@ -632,7 +632,25 @@ def _get_module_display_name_sidebar(module_type: ModuleType) -> str:
         ModuleType.CUSTOMER_REVIEWS: "用户评价",
         ModuleType.PACKAGE_CONTENTS: "包装内容"
     }
-    return display_names.get(module_type, module_type.value)
+    
+    # 如果是ModuleType枚举，直接查找
+    if isinstance(module_type, ModuleType):
+        return display_names.get(module_type, module_type.value)
+    
+    # 如果是字符串，尝试转换为ModuleType
+    if isinstance(module_type, str):
+        try:
+            # 尝试通过value查找对应的ModuleType
+            for mt in ModuleType:
+                if mt.value == module_type:
+                    return display_names.get(mt, module_type)
+            # 如果找不到，直接返回字符串
+            return module_type
+        except:
+            return str(module_type)
+    
+    # 其他情况，转换为字符串
+    return str(module_type)
 
 
 def _save_session_progress():
