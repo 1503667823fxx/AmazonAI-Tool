@@ -310,6 +310,9 @@ class IntelligentWorkflowController:
         self.current_session: Optional[IntelligentWorkflowSession] = None
         self.session_history: List[IntelligentWorkflowSession] = []
         
+        # 添加state_manager属性以兼容UI组件
+        self.state_manager = None  # 将在外部设置
+        
         # 预定义的风格主题
         self.style_themes = self._initialize_style_themes()
         
