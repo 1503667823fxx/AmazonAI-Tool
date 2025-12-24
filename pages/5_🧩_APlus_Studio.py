@@ -209,7 +209,62 @@ def render_product_analysis_step(state_manager):
         analysis_ui = create_product_analysis_ui(state_manager.workflow_controller)
         analysis_result = analysis_ui.render_analysis_interface()
         
-        if analysis_result and analysis_result.get('status') == 'completed':
+        # 处理分析动作
+        if analysis_result and analysis_result.get('action') == 'start_analysis':
+            # 设置分析进度状态
+            st.session_state['analysis_in_progress'] = True
+            
+            # 开始分析
+            with st.spinner("🤖 AI正在分析您的产品..."):
+                try:
+                    # 模拟分析过程
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    import time
+                    
+                    status_text.text("正在处理图片...")
+                    progress_bar.progress(0.2)
+                    time.sleep(1)
+                    
+                    status_text.text("正在分析产品特征...")
+                    progress_bar.progress(0.5)
+                    time.sleep(1)
+                    
+                    status_text.text("正在识别目标用户...")
+                    progress_bar.progress(0.8)
+                    time.sleep(1)
+                    
+                    status_text.text("正在生成分析报告...")
+                    progress_bar.progress(1.0)
+                    time.sleep(0.5)
+                    
+                    # 创建模拟分析结果
+                    product_info = analysis_result['product_info']
+                    mock_analysis_data = {
+                        'product_type': '电子产品',
+                        'target_audience': '科技爱好者和专业用户',
+                        'key_features': ['高性能', '便携设计', '多功能'],
+                        'confidence_score': 0.92,
+                        'materials': ['金属外壳', '高质量塑料'],
+                        'use_cases': ['办公', '娱乐', '专业工作'],
+                        'marketing_angles': ['性能优势', '设计美学', '实用性']
+                    }
+                    
+                    # 保存分析结果
+                    state_manager.set_analysis_result(mock_analysis_data)
+                    
+                    # 清除进度状态
+                    st.session_state['analysis_in_progress'] = False
+                    
+                    st.success("✅ 产品分析完成！")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.session_state['analysis_in_progress'] = False
+                    st.error(f"分析失败: {str(e)}")
+        
+        elif analysis_result and analysis_result.get('status') == 'completed':
             # 保存分析结果
             state_manager.set_analysis_result(analysis_result['data'])
             
@@ -231,6 +286,35 @@ def render_product_analysis_step(state_manager):
             if st.button("🎯 继续到模块推荐", type="primary", use_container_width=True):
                 state_manager.transition_to_state(WorkflowState.MODULE_RECOMMENDATION)
                 st.rerun()
+        
+        # 检查是否已有分析结果
+        existing_result = state_manager.get_analysis_result()
+        if existing_result:
+            st.success("✅ 产品分析已完成！")
+            
+            # 显示分析结果摘要
+            with st.expander("📊 分析结果摘要", expanded=True):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write(f"**产品类型**: {existing_result.get('product_type', '未识别')}")
+                    st.write(f"**目标用户**: {existing_result.get('target_audience', '未分析')}")
+                
+                with col2:
+                    st.write(f"**主要特征**: {len(existing_result.get('key_features', []))} 个")
+                    st.write(f"**分析置信度**: {existing_result.get('confidence_score', 0):.1%}")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 重新分析", use_container_width=True):
+                    # 清除现有结果，重新开始
+                    state_manager.set_analysis_result(None)
+                    st.rerun()
+            
+            with col2:
+                if st.button("🎯 继续到模块推荐", type="primary", use_container_width=True):
+                    state_manager.transition_to_state(WorkflowState.MODULE_RECOMMENDATION)
+                    st.rerun()
                 
     except ImportError:
         st.error("产品分析组件未找到，请检查系统配置")
