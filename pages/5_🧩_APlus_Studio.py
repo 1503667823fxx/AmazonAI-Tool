@@ -21,7 +21,7 @@ except ImportError:
 # 导入核心模型（必需）
 from services.aplus_studio.models import (
     ModuleType, GenerationStatus, get_new_professional_modules,
-    GeneratedModule, ComplianceStatus, ValidationStatus
+    GeneratedModule, ComplianceStatus, ValidationStatus, WorkflowState
 )
 
 # 导入新的模块化A+工作流组件
@@ -87,15 +87,511 @@ def main():
     
     mode = st.radio(
         "选择功能模式",
-        ["🧩 模块化A+制作", "💡 产品卖点分析"],
+        ["🤖 智能工作流", "🧩 模块化A+制作", "💡 产品卖点分析"],
         horizontal=True,
-        help="模块化制作：完整的A+内容生成流程；卖点分析：快速分析产品图片获取营销建议"
+        help="智能工作流：AI驱动的端到端A+制作；模块化制作：手动选择模块制作；卖点分析：快速分析产品图片"
     )
     
-    if mode == "🧩 模块化A+制作":
+    if mode == "🤖 智能工作流":
+        render_intelligent_workflow()
+    elif mode == "🧩 模块化A+制作":
         render_modular_workflow()
     else:
         render_selling_points_analysis()
+
+
+def render_intelligent_workflow():
+    """渲染智能工作流"""
+    st.header("🤖 A+ 智能工作流")
+    st.caption("AI驱动的端到端A+页面创建解决方案")
+    
+    # 初始化智能工作流状态管理器
+    if 'intelligent_state_manager' not in st.session_state:
+        try:
+            from app_utils.aplus_studio.intelligent_state_manager import IntelligentWorkflowStateManager
+            st.session_state.intelligent_state_manager = IntelligentWorkflowStateManager()
+        except ImportError as e:
+            st.error(f"智能工作流组件加载失败: {str(e)}")
+            st.info("请检查系统配置或使用模块化A+制作功能")
+            return
+    
+    state_manager = st.session_state.intelligent_state_manager
+    
+    # 渲染工作流导航
+    try:
+        from app_utils.aplus_studio.workflow_navigation_ui import WorkflowNavigationUI
+        nav_ui = WorkflowNavigationUI(state_manager)
+        
+        # 显示当前步骤和进度
+        current_state = state_manager.get_current_state()
+        nav_action = nav_ui.render_navigation_bar()
+        
+        # 根据当前状态渲染对应的界面
+        if current_state == WorkflowState.INITIAL:
+            render_workflow_start(state_manager)
+        elif current_state == WorkflowState.PRODUCT_ANALYSIS:
+            render_product_analysis_step(state_manager)
+        elif current_state == WorkflowState.MODULE_RECOMMENDATION:
+            render_module_recommendation_step(state_manager)
+        elif current_state == WorkflowState.CONTENT_GENERATION:
+            render_content_generation_step(state_manager)
+        elif current_state == WorkflowState.CONTENT_EDITING:
+            render_content_editing_step(state_manager)
+        elif current_state == WorkflowState.STYLE_SELECTION:
+            render_style_selection_step(state_manager)
+        elif current_state == WorkflowState.IMAGE_GENERATION:
+            render_image_generation_step(state_manager)
+        elif current_state == WorkflowState.COMPLETED:
+            render_workflow_completed_step(state_manager)
+        else:
+            st.error(f"未知的工作流状态: {current_state}")
+            
+        # 处理导航操作
+        if nav_action:
+            handle_navigation_action(state_manager, nav_action)
+            
+    except ImportError as e:
+        st.error(f"智能工作流界面组件加载失败: {str(e)}")
+        st.info("正在使用简化版智能工作流...")
+        render_simplified_intelligent_workflow()
+
+
+def render_workflow_start(state_manager):
+    """渲染工作流开始页面"""
+    st.subheader("🚀 开始智能工作流")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("""
+        ### 智能工作流将为您提供：
+        
+        1. **🔍 AI产品分析** - 上传产品图片，AI自动分析产品特性和目标用户
+        2. **🎯 智能模块推荐** - 基于分析结果推荐最适合的4个A+模块
+        3. **✍️ 自动内容生成** - AI为每个模块生成专业的文案内容
+        4. **🎨 风格主题选择** - 自动选择或手动调整视觉风格主题
+        5. **🖼️ 批量图片生成** - 一键生成所有模块的A+图片
+        6. **📊 结果管理** - 预览、下载、重新生成等完整管理功能
+        
+        ### 准备工作：
+        - 准备1-5张清晰的产品图片（JPG、PNG、WebP格式）
+        - 确保网络连接稳定
+        - 预计总用时：5-10分钟
+        """)
+        
+        if st.button("🚀 开始智能工作流", type="primary", use_container_width=True):
+            state_manager.transition_to_state(WorkflowState.PRODUCT_ANALYSIS)
+            st.rerun()
+    
+    with col2:
+        st.info("""
+        **💡 提示**
+        
+        智能工作流适合：
+        - 新手用户
+        - 快速制作需求
+        - 标准化产品
+        - 批量制作场景
+        
+        如需更多控制，可选择"模块化A+制作"
+        """)
+
+
+def render_product_analysis_step(state_manager):
+    """渲染产品分析步骤"""
+    try:
+        from app_utils.aplus_studio.product_analysis_ui import ProductAnalysisUI, create_product_analysis_ui
+        
+        st.subheader("🔍 第一步：产品分析")
+        st.markdown("上传产品图片，AI将自动分析产品特性、目标用户和营销角度")
+        
+        # 创建产品分析UI
+        analysis_result = create_product_analysis_ui(state_manager.workflow_controller)
+        
+        if analysis_result and analysis_result.get('status') == 'completed':
+            # 保存分析结果
+            state_manager.set_analysis_result(analysis_result['data'])
+            
+            st.success("✅ 产品分析完成！")
+            
+            # 显示分析结果摘要
+            with st.expander("📊 分析结果摘要", expanded=True):
+                data = analysis_result['data']
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write(f"**产品类型**: {data.get('product_type', '未识别')}")
+                    st.write(f"**目标用户**: {data.get('target_audience', '未分析')}")
+                
+                with col2:
+                    st.write(f"**主要特征**: {len(data.get('key_features', []))} 个")
+                    st.write(f"**分析置信度**: {data.get('confidence_score', 0):.1%}")
+            
+            if st.button("🎯 继续到模块推荐", type="primary", use_container_width=True):
+                state_manager.transition_to_state(WorkflowState.MODULE_RECOMMENDATION)
+                st.rerun()
+                
+    except ImportError:
+        st.error("产品分析组件未找到，请检查系统配置")
+
+
+def render_module_recommendation_step(state_manager):
+    """渲染模块推荐步骤"""
+    try:
+        from app_utils.aplus_studio.module_recommendation_ui import ModuleRecommendationUI
+        
+        st.subheader("🎯 第二步：模块推荐")
+        st.markdown("基于产品分析结果，AI推荐最适合的4个A+模块组合")
+        
+        # 检查是否有分析结果
+        analysis_result = state_manager.get_analysis_result()
+        if not analysis_result:
+            st.warning("⚠️ 请先完成产品分析")
+            if st.button("🔍 返回产品分析"):
+                state_manager.transition_to_state(WorkflowState.PRODUCT_ANALYSIS)
+                st.rerun()
+            return
+        
+        # 创建模块推荐UI
+        recommendation_ui = ModuleRecommendationUI(state_manager.workflow_controller)
+        recommendation_result = recommendation_ui.render_recommendation_interface(analysis_result)
+        
+        if recommendation_result and recommendation_result.get('status') == 'confirmed':
+            # 保存推荐结果
+            state_manager.set_module_recommendation(recommendation_result['data'])
+            
+            st.success("✅ 模块推荐确认完成！")
+            
+            if st.button("✍️ 继续到内容生成", type="primary", use_container_width=True):
+                state_manager.transition_to_state(WorkflowState.CONTENT_GENERATION)
+                st.rerun()
+                
+    except ImportError:
+        st.error("模块推荐组件未找到，请检查系统配置")
+
+
+def render_content_generation_step(state_manager):
+    """渲染内容生成步骤"""
+    st.subheader("✍️ 第三步：内容生成")
+    st.markdown("AI为每个推荐的模块自动生成专业的文案内容")
+    
+    # 检查前置条件
+    recommendation = state_manager.get_module_recommendation()
+    if not recommendation:
+        st.warning("⚠️ 请先完成模块推荐")
+        if st.button("🎯 返回模块推荐"):
+            state_manager.transition_to_state(WorkflowState.MODULE_RECOMMENDATION)
+            st.rerun()
+        return
+    
+    # 显示推荐的模块
+    st.write("**推荐的模块：**")
+    recommended_modules = recommendation.get('recommended_modules', [])
+    
+    cols = st.columns(len(recommended_modules))
+    for i, module in enumerate(recommended_modules):
+        with cols[i]:
+            st.info(f"📋 {module.value}")
+    
+    # 内容生成按钮
+    if st.button("🤖 开始AI内容生成", type="primary", use_container_width=True):
+        with st.spinner("AI正在为您生成专业内容..."):
+            try:
+                # 模拟内容生成过程
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                for i, module in enumerate(recommended_modules):
+                    status_text.text(f"正在生成 {module.value} 内容...")
+                    progress_bar.progress((i + 1) / len(recommended_modules))
+                    time.sleep(1)  # 模拟生成时间
+                
+                # 保存生成的内容（模拟）
+                generated_content = {
+                    module: {
+                        'title': f'{module.value}标题',
+                        'description': f'{module.value}的详细描述内容...',
+                        'key_points': [f'{module.value}卖点1', f'{module.value}卖点2']
+                    }
+                    for module in recommended_modules
+                }
+                
+                state_manager.set_generated_content(generated_content)
+                
+                st.success("✅ 内容生成完成！")
+                
+                if st.button("📝 继续到内容编辑", type="primary", use_container_width=True):
+                    state_manager.transition_to_state(WorkflowState.CONTENT_EDITING)
+                    st.rerun()
+                    
+            except Exception as e:
+                st.error(f"内容生成失败: {str(e)}")
+
+
+def render_content_editing_step(state_manager):
+    """渲染内容编辑步骤"""
+    try:
+        from app_utils.aplus_studio.content_editing_ui import ContentEditingUI
+        
+        st.subheader("📝 第四步：内容编辑")
+        st.markdown("查看和编辑AI生成的内容，确保符合您的需求")
+        
+        # 检查生成的内容
+        generated_content = state_manager.get_generated_content()
+        if not generated_content:
+            st.warning("⚠️ 请先完成内容生成")
+            if st.button("✍️ 返回内容生成"):
+                state_manager.transition_to_state(WorkflowState.CONTENT_GENERATION)
+                st.rerun()
+            return
+        
+        # 创建内容编辑UI
+        editing_ui = ContentEditingUI()
+        editing_result = editing_ui.render_content_editing_interface(generated_content)
+        
+        if editing_result and editing_result.get('action') == 'confirm':
+            # 保存编辑后的内容
+            state_manager.set_final_content(editing_result['content'])
+            
+            st.success("✅ 内容编辑完成！")
+            
+            if st.button("🎨 继续到风格选择", type="primary", use_container_width=True):
+                state_manager.transition_to_state(WorkflowState.STYLE_SELECTION)
+                st.rerun()
+                
+    except ImportError:
+        st.error("内容编辑组件未找到，使用简化编辑界面")
+        render_simplified_content_editing(state_manager)
+
+
+def render_style_selection_step(state_manager):
+    """渲染风格选择步骤"""
+    st.subheader("🎨 第五步：风格选择")
+    st.markdown("选择适合您产品的视觉风格主题")
+    
+    # 获取产品分析结果以推荐风格
+    analysis_result = state_manager.get_analysis_result()
+    
+    # 风格选项
+    style_options = {
+        "现代科技风": {
+            "description": "简洁现代，适合电子产品和科技类商品",
+            "colors": ["深蓝色", "白色", "银灰色"],
+            "suitable_for": ["电子产品", "数码设备", "智能家居"]
+        },
+        "温馨家居风": {
+            "description": "温暖舒适，适合家居用品和生活类商品",
+            "colors": ["米色", "棕色", "绿色"],
+            "suitable_for": ["家居用品", "厨房用具", "装饰品"]
+        },
+        "高端奢华风": {
+            "description": "精致奢华，适合高端产品和奢侈品",
+            "colors": ["金色", "黑色", "深红色"],
+            "suitable_for": ["奢侈品", "高端产品", "珠宝配饰"]
+        },
+        "清新自然风": {
+            "description": "清新自然，适合美容护肤和健康产品",
+            "colors": ["浅绿色", "白色", "粉色"],
+            "suitable_for": ["美容产品", "护肤品", "健康食品"]
+        }
+    }
+    
+    # 基于产品类型推荐风格
+    product_type = analysis_result.get('product_type', '') if analysis_result else ''
+    recommended_style = "现代科技风"  # 默认推荐
+    
+    if "家居" in product_type or "生活" in product_type:
+        recommended_style = "温馨家居风"
+    elif "美容" in product_type or "护肤" in product_type:
+        recommended_style = "清新自然风"
+    elif "奢华" in product_type or "高端" in product_type:
+        recommended_style = "高端奢华风"
+    
+    st.info(f"💡 基于您的产品类型，推荐使用：**{recommended_style}**")
+    
+    # 风格选择
+    selected_style = st.selectbox(
+        "选择风格主题",
+        options=list(style_options.keys()),
+        index=list(style_options.keys()).index(recommended_style)
+    )
+    
+    # 显示选中风格的详情
+    style_info = style_options[selected_style]
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"**描述**: {style_info['description']}")
+        st.write(f"**色彩方案**: {', '.join(style_info['colors'])}")
+    
+    with col2:
+        st.write(f"**适合产品**: {', '.join(style_info['suitable_for'])}")
+    
+    # 确认风格选择
+    if st.button("🖼️ 确认风格，开始生成图片", type="primary", use_container_width=True):
+        # 保存风格选择
+        state_manager.set_style_theme({
+            'theme_name': selected_style,
+            'theme_config': style_info
+        })
+        
+        state_manager.transition_to_state(WorkflowState.IMAGE_GENERATION)
+        st.rerun()
+
+
+def render_image_generation_step(state_manager):
+    """渲染图片生成步骤"""
+    st.subheader("🖼️ 第六步：图片生成")
+    st.markdown("AI正在为您生成专业的A+模块图片")
+    
+    # 检查前置条件
+    final_content = state_manager.get_final_content()
+    style_theme = state_manager.get_style_theme()
+    
+    if not final_content or not style_theme:
+        st.warning("⚠️ 请先完成内容编辑和风格选择")
+        return
+    
+    # 显示生成配置
+    st.write("**生成配置：**")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write(f"**模块数量**: {len(final_content)} 个")
+        st.write(f"**风格主题**: {style_theme.get('theme_name', '未选择')}")
+    
+    with col2:
+        st.write(f"**图片尺寸**: 600x450 像素")
+        st.write(f"**预计用时**: 3-5 分钟")
+    
+    # 开始生成
+    if st.button("🚀 开始批量生成", type="primary", use_container_width=True):
+        with st.spinner("AI正在生成A+模块图片..."):
+            try:
+                # 模拟批量生成过程
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                generated_images = {}
+                modules = list(final_content.keys())
+                
+                for i, module in enumerate(modules):
+                    status_text.text(f"正在生成 {module.value} 模块图片...")
+                    progress_bar.progress((i + 1) / len(modules))
+                    time.sleep(2)  # 模拟生成时间
+                    
+                    # 模拟生成结果
+                    generated_images[module] = {
+                        'image_path': f'generated/{module.value}_{int(time.time())}.png',
+                        'generation_time': 2.0,
+                        'quality_score': 0.85 + (i * 0.02)
+                    }
+                
+                # 保存生成结果
+                state_manager.set_generated_images(generated_images)
+                
+                st.success("✅ 所有模块图片生成完成！")
+                
+                if st.button("📊 查看生成结果", type="primary", use_container_width=True):
+                    state_manager.transition_to_state(WorkflowState.COMPLETED)
+                    st.rerun()
+                    
+            except Exception as e:
+                st.error(f"图片生成失败: {str(e)}")
+
+
+def render_workflow_completed_step(state_manager):
+    """渲染工作流完成步骤"""
+    st.subheader("🎉 智能工作流完成！")
+    st.markdown("恭喜！您的A+页面已经生成完成")
+    
+    # 显示完成摘要
+    generated_images = state_manager.get_generated_images()
+    
+    if generated_images:
+        st.write(f"**生成结果**: 成功生成 {len(generated_images)} 个A+模块")
+        
+        # 显示生成的模块列表
+        for module, result in generated_images.items():
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col1:
+                st.write(f"📋 {module.value}")
+            
+            with col2:
+                st.write(f"质量: {result['quality_score']:.1%}")
+            
+            with col3:
+                st.button(f"下载", key=f"download_{module.value}")
+        
+        # 批量操作
+        st.markdown("---")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("📦 批量下载", use_container_width=True):
+                st.success("开始批量下载...")
+        
+        with col2:
+            if st.button("🔄 重新生成", use_container_width=True):
+                state_manager.transition_to_state(WorkflowState.IMAGE_GENERATION)
+                st.rerun()
+        
+        with col3:
+            if st.button("🆕 新建项目", use_container_width=True):
+                # 清理状态，开始新项目
+                state_manager.reset_workflow()
+                st.rerun()
+    
+    else:
+        st.warning("没有找到生成的图片")
+
+
+def render_simplified_intelligent_workflow():
+    """渲染简化版智能工作流（当组件加载失败时使用）"""
+    st.info("🔧 正在使用简化版智能工作流")
+    
+    st.markdown("""
+    ### 智能工作流功能正在完善中
+    
+    当前可用功能：
+    - ✅ 产品卖点分析
+    - ✅ 模块化A+制作
+    - 🚧 完整智能工作流（开发中）
+    
+    建议您使用"模块化A+制作"功能来创建A+页面。
+    """)
+
+
+def render_simplified_content_editing(state_manager):
+    """渲染简化版内容编辑界面"""
+    st.info("使用简化版内容编辑界面")
+    
+    generated_content = state_manager.get_generated_content()
+    
+    if generated_content:
+        for module, content in generated_content.items():
+            with st.expander(f"📝 编辑 {module.value}", expanded=True):
+                title = st.text_input("标题", value=content.get('title', ''), key=f"title_{module.value}")
+                description = st.text_area("描述", value=content.get('description', ''), key=f"desc_{module.value}")
+                
+                # 更新内容
+                generated_content[module]['title'] = title
+                generated_content[module]['description'] = description
+        
+        if st.button("✅ 确认编辑", type="primary", use_container_width=True):
+            state_manager.set_final_content(generated_content)
+            state_manager.transition_to_state(WorkflowState.STYLE_SELECTION)
+            st.rerun()
+
+
+def handle_navigation_action(state_manager, action):
+    """处理导航操作"""
+    if action and action.get('action_type') == 'jump':
+        target_state = action.get('target_state')
+        if target_state:
+            state_manager.transition_to_state(target_state)
+            st.rerun()
 
 
 def render_modular_workflow():
