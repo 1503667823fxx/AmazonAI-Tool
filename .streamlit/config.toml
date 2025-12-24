@@ -21,8 +21,8 @@ maxMessageSize = 200
 # WebSocket设置
 enableWebsocketCompression = false
 
-# 文件监控设置
-fileWatcherType = "none"
+# 文件监控设置none
+fileWatcherType = "true"
 
 [browser]
 # 浏览器设置
@@ -53,7 +53,7 @@ fixMatplotlib = true
 fastReruns = true
 
 # 文件监控设置 - 修复字典迭代错误
-postProcessorEnabled = true
+postProcessorEnabled = false
 
 [logger]
 # 日志设置
