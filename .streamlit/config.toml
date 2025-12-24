@@ -53,7 +53,7 @@ fixMatplotlib = true
 fastReruns = true
 
 # 文件监控设置 - 修复字典迭代错误
-postProcessorEnabled = false
+postProcessorEnabled = ture
 
 [logger]
 # 日志设置
