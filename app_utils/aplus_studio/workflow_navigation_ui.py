@@ -361,7 +361,7 @@ class WorkflowNavigationUI:
                         
                         # 步骤跳转按钮
                         if self.enable_step_jumping and step.is_accessible and not step.is_current:
-                            if st.button(f"跳转到{step.name}", key=f"jump_to_{state.value}", size="sm"):
+                            if st.button(f"跳转到{step.name}", key=f"jump_to_{state.value}"):
                                 action = NavigationAction(
                                     action_type="jump",
                                     target_state=state,
