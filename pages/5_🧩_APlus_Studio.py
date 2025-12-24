@@ -588,11 +588,29 @@ def render_simplified_content_editing(state_manager):
 
 def handle_navigation_action(state_manager, action):
     """处理导航操作"""
-    if action and action.get('action_type') == 'jump':
-        target_state = action.get('target_state')
+    if not action:
+        return
+        
+    if action.action_type == 'jump':
+        target_state = action.target_state
         if target_state:
             state_manager.transition_to_state(target_state)
             st.rerun()
+    elif action.action_type == 'start_new':
+        target_state = action.target_state
+        if target_state:
+            state_manager.transition_to_state(target_state)
+            st.rerun()
+    elif action.action_type == 'next':
+        # 处理下一步操作
+        current_state = state_manager.get_current_state()
+        # 这里可以添加下一步的逻辑
+        pass
+    elif action.action_type == 'previous':
+        # 处理上一步操作
+        current_state = state_manager.get_current_state()
+        # 这里可以添加上一步的逻辑
+        pass
 
 
 def render_modular_workflow():
