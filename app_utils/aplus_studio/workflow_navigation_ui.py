@@ -366,7 +366,7 @@ class WorkflowNavigationUI:
                                     action_type="jump",
                                     target_state=state,
                                     confirmation_required=True,
-                                    confirmation_message=f"确定要跳转到"{step.name}"步骤吗？当前进度将被保存。"
+                                    confirmation_message=f"确定要跳转到\"{step.name}\"步骤吗？当前进度将被保存。"
                                 )
                         
                         # 显示步骤详细信息
