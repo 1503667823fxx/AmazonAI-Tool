@@ -18,12 +18,17 @@ try:
 except ImportError:
     pass
 
+# 导入核心模型（必需）
+from services.aplus_studio.models import (
+    ModuleType, GenerationStatus, get_new_professional_modules,
+    GeneratedModule, ComplianceStatus, ValidationStatus
+)
+
 # 导入新的模块化A+工作流组件
 try:
     from app_utils.aplus_studio.module_selector import render_module_selector
     from app_utils.aplus_studio.material_upload_ui import render_material_upload_interface
     from app_utils.aplus_studio.preview_ui import render_preview_interface
-    from services.aplus_studio.models import ModuleType, GenerationStatus, get_new_professional_modules
     from services.aplus_studio.modules import ModuleRegistry
     from services.aplus_studio.module_factory import ModuleFactory
     APLUS_AVAILABLE = True
@@ -477,7 +482,6 @@ def _handle_sequential_generation(selected_modules: List[ModuleType],
             # result = factory.generate_module(module_type, material_sets[module_type])
             
             # 模拟生成结果
-            from services.aplus_studio.models import GeneratedModule, ComplianceStatus, ValidationStatus
             import time
             time.sleep(2)  # 模拟生成时间
             
@@ -532,8 +536,6 @@ def _handle_batch_generation(selected_modules: List[ModuleType],
             # 模拟批量生成
             import time
             time.sleep(1)  # 模拟生成时间
-            
-            from services.aplus_studio.models import GeneratedModule, ComplianceStatus, ValidationStatus
             
             result = GeneratedModule(
                 module_type=module_type,
