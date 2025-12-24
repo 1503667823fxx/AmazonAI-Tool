@@ -34,7 +34,20 @@ try:
     APLUS_AVAILABLE = True
 except ImportError as e:
     APLUS_AVAILABLE = False
-    st.error(f"A+ Studio组件导入失败: {e}")
+    # 在开发环境中显示详细错误，在生产环境中显示友好提示
+    import traceback
+    error_details = str(e)
+    if "ModuleFactory" in error_details:
+        st.error("A+ Studio模块工厂初始化失败，请检查系统配置")
+    elif "ModuleRegistry" in error_details:
+        st.error("A+ Studio模块注册表初始化失败，请检查系统配置")
+    else:
+        st.error("A+ Studio系统组件未正确加载，请检查系统配置")
+    
+    # 显示详细错误信息（仅在调试时）
+    with st.expander("🔧 技术详情（开发者用）"):
+        st.code(f"导入错误: {error_details}")
+        st.code(traceback.format_exc())
 
 # 页面配置
 st.set_page_config(
