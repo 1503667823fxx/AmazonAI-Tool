@@ -471,7 +471,7 @@ class ModuleRecommendationUI:
         """渲染手动选择模式"""
         
         st.write("**🎯 手动选择模块**")
-        st.info("💡 **使用说明：** 选择您需要的模块类型，然后点击下方的"确认选择"按钮继续")
+        st.info("💡 **使用说明：** 选择您需要的模块类型，然后点击下方的'确认选择'按钮继续")
         
         # 确保 ModuleType 在当前作用域可用
         from services.aplus_studio.models import ModuleType
