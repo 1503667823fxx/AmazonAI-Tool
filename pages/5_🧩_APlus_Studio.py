@@ -176,6 +176,20 @@ def render_workflow_start(state_manager):
     """渲染工作流开始页面"""
     st.subheader("🚀 开始智能工作流")
     
+    # 调试信息
+    logger.info("render_workflow_start called")
+    
+    # 临时调试面板
+    with st.expander("🔧 调试信息", expanded=False):
+        current_session = state_manager.get_current_session()
+        if current_session:
+            st.write(f"**会话ID**: {current_session.session_id}")
+            st.write(f"**当前状态**: {current_session.current_state.value}")
+        else:
+            st.write("**没有当前会话**")
+        
+        st.write(f"**有活跃会话**: {state_manager.has_active_session()}")
+    
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -196,8 +210,11 @@ def render_workflow_start(state_manager):
         """)
         
         if st.button("🚀 开始智能工作流", type="primary", use_container_width=True):
-            state_manager.transition_workflow_state(WorkflowState.PRODUCT_ANALYSIS)
-            st.rerun()
+            success = state_manager.transition_workflow_state(WorkflowState.PRODUCT_ANALYSIS)
+            if success:
+                st.rerun()
+            else:
+                st.error("❌ 启动工作流失败，请重试")
     
     with col2:
         st.info("""
