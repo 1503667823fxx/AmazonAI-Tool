@@ -8,9 +8,13 @@ import google.generativeai as genai
 import json
 import uuid
 import io
+import time
+import logging
 
 # 添加项目根目录到路径
 sys.path.append(os.path.abspath('.'))
+
+logger = logging.getLogger(__name__)
 
 # 身份验证
 try:
@@ -408,18 +412,411 @@ def render_module_recommendation_step(state_manager):
         recommendation_ui = ModuleRecommendationUI(state_manager.workflow_controller)
         recommendation_result = recommendation_ui.render_recommendation_interface(analysis_result)
         
-        if recommendation_result and recommendation_result.get('status') == 'confirmed':
-            # 保存推荐结果
-            state_manager.set_module_recommendation(recommendation_result['data'])
+        # 处理推荐生成动作
+        if recommendation_result and recommendation_result.get('action') == 'generate_recommendation':
+            with st.spinner("🤖 AI正在生成智能模块推荐..."):
+                try:
+                    # 获取分析结果和选项
+                    analysis_data = recommendation_result['analysis_result']
+                    options = recommendation_result.get('options', {})
+                    
+                    # 生成智能推荐
+                    recommendation_data = _generate_intelligent_recommendation(analysis_data, options)
+                    
+                    # 保存推荐结果
+                    state_manager.set_module_recommendation(recommendation_data)
+                    
+                    st.success("✅ AI推荐生成完成！")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"推荐生成失败: {str(e)}")
+                    
+                    # 显示详细错误信息
+                    with st.expander("🔧 错误详情", expanded=False):
+                        st.code(str(e))
+                        st.write("**可能的解决方案：**")
+                        st.write("1. 检查产品分析结果是否完整")
+                        st.write("2. 稍后重试或使用手动选择模式")
+        
+        elif recommendation_result and recommendation_result.get('action') == 'confirm_selection':
+            # 处理模块选择确认
+            selected_modules = recommendation_result.get('selected_modules', [])
+            mode = recommendation_result.get('mode', 'unknown')
             
-            st.success("✅ 模块推荐确认完成！")
+            # 保存选择结果
+            selection_data = {
+                'selected_modules': selected_modules,
+                'selection_mode': mode,
+                'selection_timestamp': datetime.now().isoformat(),
+                'total_modules': len(selected_modules)
+            }
+            
+            state_manager.set_module_recommendation(selection_data)
+            
+            st.success(f"✅ 已确认选择 {len(selected_modules)} 个模块！")
             
             if st.button("✍️ 继续到内容生成", type="primary", use_container_width=True):
                 state_manager.transition_to_state(WorkflowState.CONTENT_GENERATION)
                 st.rerun()
+        
+        elif recommendation_result and recommendation_result.get('action') == 'manual_selection':
+            st.info("💡 切换到手动选择模式")
+            # 这里可以添加手动选择的逻辑
+            
+        elif recommendation_result and recommendation_result.get('action') == 'show_module_guide':
+            # 显示模块指南
+            recommendation_ui.render_module_guide()
                 
     except ImportError:
         st.error("模块推荐组件未找到，请检查系统配置")
+
+
+def _generate_intelligent_recommendation(analysis_result: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
+    """生成智能模块推荐"""
+    try:
+        # 获取产品信息
+        product_type = analysis_result.get('product_type', '未识别')
+        key_features = analysis_result.get('key_features', [])
+        target_audience = analysis_result.get('target_audience', '')
+        marketing_angles = analysis_result.get('marketing_angles', [])
+        confidence_score = analysis_result.get('confidence_score', 0.5)
+        
+        # 推荐选项
+        recommendation_count = options.get('count', 4)
+        style = options.get('style', '平衡推荐')
+        prioritize_simplicity = options.get('prioritize_simplicity', False)
+        
+        # 基于产品类型的基础推荐
+        base_recommendations = _get_base_recommendations_by_product_type(product_type)
+        
+        # 基于特征的推荐调整
+        feature_adjustments = _get_feature_based_adjustments(key_features)
+        
+        # 基于目标用户的推荐调整
+        audience_adjustments = _get_audience_based_adjustments(target_audience)
+        
+        # 基于营销角度的推荐调整
+        marketing_adjustments = _get_marketing_based_adjustments(marketing_angles)
+        
+        # 合并推荐逻辑
+        final_recommendations = _merge_recommendations(
+            base_recommendations, 
+            feature_adjustments, 
+            audience_adjustments, 
+            marketing_adjustments,
+            recommendation_count,
+            prioritize_simplicity
+        )
+        
+        # 生成推荐理由
+        recommendation_reasons = _generate_recommendation_reasons(
+            final_recommendations, 
+            analysis_result
+        )
+        
+        # 计算置信度分数
+        confidence_scores = _calculate_recommendation_confidence(
+            final_recommendations, 
+            analysis_result
+        )
+        
+        # 生成替代建议
+        alternative_modules = _generate_alternative_suggestions(
+            final_recommendations, 
+            analysis_result
+        )
+        
+        return {
+            'recommended_modules': final_recommendations,
+            'recommendation_reasons': recommendation_reasons,
+            'confidence_scores': confidence_scores,
+            'alternative_modules': alternative_modules,
+            'recommendation_timestamp': datetime.now().isoformat(),
+            'analysis_input': {
+                'product_type': product_type,
+                'key_features_count': len(key_features),
+                'confidence_score': confidence_score
+            },
+            'recommendation_options': options
+        }
+        
+    except Exception as e:
+        logger.error(f"Intelligent recommendation generation failed: {str(e)}")
+        raise
+
+
+def _get_base_recommendations_by_product_type(product_type: str) -> List[ModuleType]:
+    """根据产品类型获取基础推荐"""
+    from services.aplus_studio.models import ModuleType
+    
+    # 产品类型映射
+    type_mappings = {
+        '电子产品': [ModuleType.PRODUCT_OVERVIEW, ModuleType.FEATURE_ANALYSIS, ModuleType.SPECIFICATION_COMPARISON, ModuleType.INSTALLATION_GUIDE],
+        '数码设备': [ModuleType.PRODUCT_OVERVIEW, ModuleType.FEATURE_ANALYSIS, ModuleType.SPECIFICATION_COMPARISON, ModuleType.QUALITY_ASSURANCE],
+        '家居用品': [ModuleType.PRODUCT_OVERVIEW, ModuleType.USAGE_SCENARIOS, ModuleType.MATERIAL_CRAFTSMANSHIP, ModuleType.SIZE_COMPATIBILITY],
+        '生活用品': [ModuleType.PRODUCT_OVERVIEW, ModuleType.USAGE_SCENARIOS, ModuleType.PROBLEM_SOLUTION, ModuleType.CUSTOMER_REVIEWS],
+        '服装配饰': [ModuleType.PRODUCT_OVERVIEW, ModuleType.MATERIAL_CRAFTSMANSHIP, ModuleType.SIZE_COMPATIBILITY, ModuleType.CUSTOMER_REVIEWS],
+        '美容护理': [ModuleType.PRODUCT_OVERVIEW, ModuleType.USAGE_SCENARIOS, ModuleType.PROBLEM_SOLUTION, ModuleType.QUALITY_ASSURANCE],
+        '运动户外': [ModuleType.PRODUCT_OVERVIEW, ModuleType.FEATURE_ANALYSIS, ModuleType.USAGE_SCENARIOS, ModuleType.MATERIAL_CRAFTSMANSHIP],
+        '汽车用品': [ModuleType.PRODUCT_OVERVIEW, ModuleType.INSTALLATION_GUIDE, ModuleType.SIZE_COMPATIBILITY, ModuleType.QUALITY_ASSURANCE],
+        '母婴用品': [ModuleType.PRODUCT_OVERVIEW, ModuleType.USAGE_SCENARIOS, ModuleType.QUALITY_ASSURANCE, ModuleType.CUSTOMER_REVIEWS],
+        '食品饮料': [ModuleType.PRODUCT_OVERVIEW, ModuleType.PACKAGE_CONTENTS, ModuleType.QUALITY_ASSURANCE, ModuleType.CUSTOMER_REVIEWS],
+        '工具设备': [ModuleType.PRODUCT_OVERVIEW, ModuleType.FEATURE_ANALYSIS, ModuleType.INSTALLATION_GUIDE, ModuleType.MAINTENANCE_CARE]
+    }
+    
+    # 尝试精确匹配
+    for key, modules in type_mappings.items():
+        if key in product_type:
+            return modules
+    
+    # 尝试模糊匹配
+    if any(keyword in product_type for keyword in ['电子', '数码', '科技', '智能']):
+        return type_mappings['电子产品']
+    elif any(keyword in product_type for keyword in ['家居', '家庭', '室内']):
+        return type_mappings['家居用品']
+    elif any(keyword in product_type for keyword in ['美容', '护肤', '化妆']):
+        return type_mappings['美容护理']
+    elif any(keyword in product_type for keyword in ['运动', '户外', '健身']):
+        return type_mappings['运动户外']
+    elif any(keyword in product_type for keyword in ['汽车', '车载', '车用']):
+        return type_mappings['汽车用品']
+    elif any(keyword in product_type for keyword in ['母婴', '儿童', '婴儿']):
+        return type_mappings['母婴用品']
+    elif any(keyword in product_type for keyword in ['食品', '饮料', '零食']):
+        return type_mappings['食品饮料']
+    elif any(keyword in product_type for keyword in ['工具', '设备', '机械']):
+        return type_mappings['工具设备']
+    
+    # 默认推荐
+    return [ModuleType.PRODUCT_OVERVIEW, ModuleType.FEATURE_ANALYSIS, ModuleType.USAGE_SCENARIOS, ModuleType.QUALITY_ASSURANCE]
+
+
+def _get_feature_based_adjustments(key_features: List[str]) -> Dict[ModuleType, float]:
+    """基于产品特征的推荐调整"""
+    from services.aplus_studio.models import ModuleType
+    
+    adjustments = {}
+    
+    for feature in key_features:
+        feature_lower = feature.lower()
+        
+        # 技术特征
+        if any(keyword in feature_lower for keyword in ['技术', '功能', '性能', '参数', '规格']):
+            adjustments[ModuleType.FEATURE_ANALYSIS] = adjustments.get(ModuleType.FEATURE_ANALYSIS, 0) + 0.2
+            adjustments[ModuleType.SPECIFICATION_COMPARISON] = adjustments.get(ModuleType.SPECIFICATION_COMPARISON, 0) + 0.15
+        
+        # 材质特征
+        if any(keyword in feature_lower for keyword in ['材质', '材料', '工艺', '制作', '品质']):
+            adjustments[ModuleType.MATERIAL_CRAFTSMANSHIP] = adjustments.get(ModuleType.MATERIAL_CRAFTSMANSHIP, 0) + 0.2
+            adjustments[ModuleType.QUALITY_ASSURANCE] = adjustments.get(ModuleType.QUALITY_ASSURANCE, 0) + 0.1
+        
+        # 使用场景特征
+        if any(keyword in feature_lower for keyword in ['使用', '应用', '场景', '环境', '适用']):
+            adjustments[ModuleType.USAGE_SCENARIOS] = adjustments.get(ModuleType.USAGE_SCENARIOS, 0) + 0.2
+        
+        # 安装特征
+        if any(keyword in feature_lower for keyword in ['安装', '组装', '设置', '配置']):
+            adjustments[ModuleType.INSTALLATION_GUIDE] = adjustments.get(ModuleType.INSTALLATION_GUIDE, 0) + 0.25
+        
+        # 尺寸特征
+        if any(keyword in feature_lower for keyword in ['尺寸', '大小', '规格', '兼容', '适配']):
+            adjustments[ModuleType.SIZE_COMPATIBILITY] = adjustments.get(ModuleType.SIZE_COMPATIBILITY, 0) + 0.2
+        
+        # 包装特征
+        if any(keyword in feature_lower for keyword in ['包装', '配件', '套装', '内容']):
+            adjustments[ModuleType.PACKAGE_CONTENTS] = adjustments.get(ModuleType.PACKAGE_CONTENTS, 0) + 0.15
+    
+    return adjustments
+
+
+def _get_audience_based_adjustments(target_audience: str) -> Dict[ModuleType, float]:
+    """基于目标用户的推荐调整"""
+    from services.aplus_studio.models import ModuleType
+    
+    adjustments = {}
+    audience_lower = target_audience.lower()
+    
+    # 专业用户
+    if any(keyword in audience_lower for keyword in ['专业', '技术', '工程师', '开发者']):
+        adjustments[ModuleType.FEATURE_ANALYSIS] = 0.3
+        adjustments[ModuleType.SPECIFICATION_COMPARISON] = 0.25
+        adjustments[ModuleType.INSTALLATION_GUIDE] = 0.2
+    
+    # 家庭用户
+    elif any(keyword in audience_lower for keyword in ['家庭', '家用', '日常', '普通用户']):
+        adjustments[ModuleType.USAGE_SCENARIOS] = 0.3
+        adjustments[ModuleType.PROBLEM_SOLUTION] = 0.2
+        adjustments[ModuleType.CUSTOMER_REVIEWS] = 0.15
+    
+    # 高端用户
+    elif any(keyword in audience_lower for keyword in ['高端', '奢华', '精英', '商务']):
+        adjustments[ModuleType.MATERIAL_CRAFTSMANSHIP] = 0.3
+        adjustments[ModuleType.QUALITY_ASSURANCE] = 0.25
+    
+    # 年轻用户
+    elif any(keyword in audience_lower for keyword in ['年轻', '学生', '时尚', '潮流']):
+        adjustments[ModuleType.CUSTOMER_REVIEWS] = 0.2
+        adjustments[ModuleType.USAGE_SCENARIOS] = 0.15
+    
+    return adjustments
+
+
+def _get_marketing_based_adjustments(marketing_angles: List[str]) -> Dict[ModuleType, float]:
+    """基于营销角度的推荐调整"""
+    from services.aplus_studio.models import ModuleType
+    
+    adjustments = {}
+    
+    for angle in marketing_angles:
+        angle_lower = angle.lower()
+        
+        # 功能导向
+        if any(keyword in angle_lower for keyword in ['功能', '性能', '效果', '优势']):
+            adjustments[ModuleType.FEATURE_ANALYSIS] = adjustments.get(ModuleType.FEATURE_ANALYSIS, 0) + 0.2
+            adjustments[ModuleType.PROBLEM_SOLUTION] = adjustments.get(ModuleType.PROBLEM_SOLUTION, 0) + 0.15
+        
+        # 品质导向
+        elif any(keyword in angle_lower for keyword in ['品质', '质量', '工艺', '材质']):
+            adjustments[ModuleType.MATERIAL_CRAFTSMANSHIP] = adjustments.get(ModuleType.MATERIAL_CRAFTSMANSHIP, 0) + 0.25
+            adjustments[ModuleType.QUALITY_ASSURANCE] = adjustments.get(ModuleType.QUALITY_ASSURANCE, 0) + 0.2
+        
+        # 用户体验导向
+        elif any(keyword in angle_lower for keyword in ['体验', '使用', '便捷', '简单']):
+            adjustments[ModuleType.USAGE_SCENARIOS] = adjustments.get(ModuleType.USAGE_SCENARIOS, 0) + 0.2
+            adjustments[ModuleType.CUSTOMER_REVIEWS] = adjustments.get(ModuleType.CUSTOMER_REVIEWS, 0) + 0.15
+    
+    return adjustments
+
+
+def _merge_recommendations(base_recommendations: List[ModuleType], 
+                         feature_adjustments: Dict[ModuleType, float],
+                         audience_adjustments: Dict[ModuleType, float],
+                         marketing_adjustments: Dict[ModuleType, float],
+                         target_count: int,
+                         prioritize_simplicity: bool) -> List[ModuleType]:
+    """合并推荐逻辑"""
+    from services.aplus_studio.models import ModuleType
+    
+    # 计算每个模块的综合得分
+    module_scores = {}
+    
+    # 基础推荐得分
+    for module in base_recommendations:
+        module_scores[module] = 1.0
+    
+    # 添加调整得分
+    for module, adjustment in feature_adjustments.items():
+        module_scores[module] = module_scores.get(module, 0) + adjustment
+    
+    for module, adjustment in audience_adjustments.items():
+        module_scores[module] = module_scores.get(module, 0) + adjustment
+    
+    for module, adjustment in marketing_adjustments.items():
+        module_scores[module] = module_scores.get(module, 0) + adjustment
+    
+    # 简单性调整
+    if prioritize_simplicity:
+        simple_modules = [
+            ModuleType.PRODUCT_OVERVIEW, 
+            ModuleType.USAGE_SCENARIOS, 
+            ModuleType.SIZE_COMPATIBILITY,
+            ModuleType.PACKAGE_CONTENTS,
+            ModuleType.QUALITY_ASSURANCE
+        ]
+        for module in simple_modules:
+            if module in module_scores:
+                module_scores[module] += 0.3
+    
+    # 确保产品概览总是包含
+    if ModuleType.PRODUCT_OVERVIEW not in module_scores:
+        module_scores[ModuleType.PRODUCT_OVERVIEW] = 1.0
+    else:
+        module_scores[ModuleType.PRODUCT_OVERVIEW] += 0.5  # 提升产品概览的优先级
+    
+    # 按得分排序并选择前N个
+    sorted_modules = sorted(module_scores.items(), key=lambda x: x[1], reverse=True)
+    final_recommendations = [module for module, score in sorted_modules[:target_count]]
+    
+    return final_recommendations
+
+
+def _generate_recommendation_reasons(recommended_modules: List[ModuleType], 
+                                   analysis_result: Dict[str, Any]) -> Dict[ModuleType, str]:
+    """生成推荐理由"""
+    from services.aplus_studio.models import ModuleType
+    
+    reasons = {}
+    product_type = analysis_result.get('product_type', '产品')
+    key_features = analysis_result.get('key_features', [])
+    
+    reason_templates = {
+        ModuleType.PRODUCT_OVERVIEW: f"作为{product_type}的核心展示模块，能够全面展示产品价值",
+        ModuleType.FEATURE_ANALYSIS: f"基于产品的{len(key_features)}个核心特征，详细解析功能优势",
+        ModuleType.SPECIFICATION_COMPARISON: f"通过规格对比突出{product_type}的技术优势",
+        ModuleType.USAGE_SCENARIOS: f"展示{product_type}在实际使用中的应用场景和效果",
+        ModuleType.PROBLEM_SOLUTION: f"突出{product_type}解决用户痛点的能力",
+        ModuleType.MATERIAL_CRAFTSMANSHIP: f"展示{product_type}的材质工艺和制造品质",
+        ModuleType.INSTALLATION_GUIDE: f"为{product_type}提供清晰的安装和使用指导",
+        ModuleType.SIZE_COMPATIBILITY: f"说明{product_type}的尺寸规格和兼容性信息",
+        ModuleType.PACKAGE_CONTENTS: f"展示{product_type}的完整包装内容和配件",
+        ModuleType.QUALITY_ASSURANCE: f"通过认证和保修信息建立{product_type}的品质信任",
+        ModuleType.CUSTOMER_REVIEWS: f"通过用户评价展示{product_type}的实际使用效果",
+        ModuleType.MAINTENANCE_CARE: f"提供{product_type}的维护保养指导，延长使用寿命"
+    }
+    
+    for module in recommended_modules:
+        reasons[module] = reason_templates.get(module, f"推荐使用此模块来展示{product_type}的相关信息")
+    
+    return reasons
+
+
+def _calculate_recommendation_confidence(recommended_modules: List[ModuleType], 
+                                       analysis_result: Dict[str, Any]) -> Dict[ModuleType, float]:
+    """计算推荐置信度"""
+    from services.aplus_studio.models import ModuleType
+    
+    confidence_scores = {}
+    base_confidence = analysis_result.get('confidence_score', 0.7)
+    
+    # 基于产品分析置信度调整
+    for module in recommended_modules:
+        # 基础置信度
+        confidence = base_confidence
+        
+        # 产品概览总是高置信度
+        if module == ModuleType.PRODUCT_OVERVIEW:
+            confidence = max(confidence, 0.9)
+        
+        # 基于特征匹配度调整
+        key_features = analysis_result.get('key_features', [])
+        if len(key_features) > 3:
+            confidence += 0.1
+        
+        # 确保置信度在合理范围内
+        confidence = max(0.6, min(0.95, confidence))
+        confidence_scores[module] = confidence
+    
+    return confidence_scores
+
+
+def _generate_alternative_suggestions(recommended_modules: List[ModuleType], 
+                                    analysis_result: Dict[str, Any]) -> List[ModuleType]:
+    """生成替代建议"""
+    from services.aplus_studio.models import ModuleType
+    
+    all_modules = [
+        ModuleType.PRODUCT_OVERVIEW, ModuleType.FEATURE_ANALYSIS, ModuleType.SPECIFICATION_COMPARISON,
+        ModuleType.USAGE_SCENARIOS, ModuleType.PROBLEM_SOLUTION, ModuleType.MATERIAL_CRAFTSMANSHIP,
+        ModuleType.INSTALLATION_GUIDE, ModuleType.SIZE_COMPATIBILITY, ModuleType.PACKAGE_CONTENTS,
+        ModuleType.QUALITY_ASSURANCE, ModuleType.CUSTOMER_REVIEWS, ModuleType.MAINTENANCE_CARE
+    ]
+    
+    # 排除已推荐的模块
+    alternatives = [module for module in all_modules if module not in recommended_modules]
+    
+    # 返回前6个替代选项
+    return alternatives[:6]
 
 
 def render_content_generation_step(state_manager):
