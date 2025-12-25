@@ -328,26 +328,11 @@ class ModuleRecommendationUI:
             
             with col1:
                 if st.button("✍️ 继续到内容生成", type="primary", use_container_width=True):
-                    # 直接设置状态并跳转
-                    from services.aplus_studio.models import WorkflowState
-                    from datetime import datetime
-                    
-                    session = self.workflow_controller.state_manager.get_current_session()
-                    if session:
-                        session.current_state = WorkflowState.CONTENT_GENERATION
-                        session.last_updated = datetime.now()
-                        st.session_state.intelligent_workflow_session = session
-                        self.workflow_controller.state_manager._create_session_backup()
-                        st.rerun()
-                    
                     return {"action": "continue_to_content_generation"}
             
             with col2:
                 if st.button("🔄 重新选择", use_container_width=True):
-                    # 清除确认状态，重新选择
-                    recommendation['selection_confirmed'] = False
-                    self.workflow_controller.state_manager.set_module_recommendation(recommendation)
-                    st.rerun()
+                    return {"action": "reset_selection"}
             
             return {"action": None}
         
