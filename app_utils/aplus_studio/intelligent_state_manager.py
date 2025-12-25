@@ -279,10 +279,22 @@ class IntelligentWorkflowStateManager:
         try:
             session = self.get_current_session()
             if session:
+                # 验证推荐数据结构
+                if isinstance(recommendation, dict):
+                    logger.debug(f"Saving module recommendation with keys: {list(recommendation.keys())}")
+                    
+                    # 检查是否包含ModuleType对象
+                    if 'recommended_modules' in recommendation:
+                        modules = recommendation['recommended_modules']
+                        logger.debug(f"Recommended modules type: {type(modules)}, count: {len(modules) if isinstance(modules, list) else 'N/A'}")
+                
                 session.workflow_metadata['module_recommendation'] = recommendation
                 self._save_session(session)
+                logger.info("Module recommendation saved successfully")
         except Exception as e:
             logger.error(f"Failed to set module recommendation: {str(e)}")
+            # 重新抛出异常以便上层处理
+            raise
     
     def get_module_recommendation(self):
         """获取模块推荐"""
@@ -615,7 +627,7 @@ class IntelligentWorkflowStateManager:
                 'compliance_results_count': len(session.compliance_results),
                 'generation_results_count': len(session.generation_results),
                 'user_edits_count': len(session.user_edits),
-                'workflow_metadata': session.workflow_metadata
+                'workflow_metadata': self._serialize_workflow_metadata(session.workflow_metadata)
             }
             
             # 使用base64编码
@@ -625,6 +637,70 @@ class IntelligentWorkflowStateManager:
         except Exception as e:
             logger.error(f"Intelligent workflow session serialization failed: {str(e)}")
             return ""
+    
+    def _serialize_workflow_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """序列化工作流元数据，处理ModuleType等不可序列化对象"""
+        try:
+            serialized_metadata = {}
+            
+            for key, value in metadata.items():
+                if key == 'module_recommendation' and isinstance(value, dict):
+                    # 处理模块推荐数据中的ModuleType对象
+                    serialized_recommendation = {}
+                    for rec_key, rec_value in value.items():
+                        if rec_key == 'recommended_modules' and isinstance(rec_value, list):
+                            # 转换ModuleType列表为字符串列表
+                            serialized_recommendation[rec_key] = [
+                                m.value if hasattr(m, 'value') else str(m) for m in rec_value
+                            ]
+                        elif rec_key == 'alternative_modules' and isinstance(rec_value, list):
+                            # 转换ModuleType列表为字符串列表
+                            serialized_recommendation[rec_key] = [
+                                m.value if hasattr(m, 'value') else str(m) for m in rec_value
+                            ]
+                        elif rec_key in ['recommendation_reasons', 'confidence_scores'] and isinstance(rec_value, dict):
+                            # 转换以ModuleType为键的字典
+                            serialized_recommendation[rec_key] = {
+                                (k.value if hasattr(k, 'value') else str(k)): v 
+                                for k, v in rec_value.items()
+                            }
+                        else:
+                            # 其他数据直接复制
+                            serialized_recommendation[rec_key] = rec_value
+                    
+                    serialized_metadata[key] = serialized_recommendation
+                    
+                elif key == 'generated_content' and isinstance(value, dict):
+                    # 处理生成内容中的ModuleType键
+                    serialized_metadata[key] = {
+                        (k.value if hasattr(k, 'value') else str(k)): v 
+                        for k, v in value.items()
+                    }
+                    
+                elif key == 'final_content' and isinstance(value, dict):
+                    # 处理最终内容中的ModuleType键
+                    serialized_metadata[key] = {
+                        (k.value if hasattr(k, 'value') else str(k)): v 
+                        for k, v in value.items()
+                    }
+                    
+                elif key == 'generated_images' and isinstance(value, dict):
+                    # 处理生成图片中的ModuleType键
+                    serialized_metadata[key] = {
+                        (k.value if hasattr(k, 'value') else str(k)): v 
+                        for k, v in value.items()
+                    }
+                    
+                else:
+                    # 其他数据直接复制
+                    serialized_metadata[key] = value
+            
+            return serialized_metadata
+            
+        except Exception as e:
+            logger.warning(f"Failed to serialize workflow metadata: {str(e)}")
+            # 返回空字典作为fallback
+            return {}
     
     def _deserialize_session(self, backup_data: str) -> Optional[IntelligentWorkflowSession]:
         """反序列化会话数据"""
@@ -642,7 +718,7 @@ class IntelligentWorkflowStateManager:
                     ModuleType(k): GenerationStatus(v) 
                     for k, v in session_data.get('generation_status', {}).items()
                 },
-                workflow_metadata=session_data.get('workflow_metadata', {})
+                workflow_metadata=self._deserialize_workflow_metadata(session_data.get('workflow_metadata', {}))
             )
             
             # 设置时间戳
@@ -654,6 +730,67 @@ class IntelligentWorkflowStateManager:
         except Exception as e:
             logger.error(f"Intelligent workflow session deserialization failed: {str(e)}")
             return None
+    
+    def _deserialize_workflow_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """反序列化工作流元数据，恢复ModuleType等对象"""
+        try:
+            deserialized_metadata = {}
+            
+            for key, value in metadata.items():
+                if key == 'module_recommendation' and isinstance(value, dict):
+                    # 处理模块推荐数据中的ModuleType对象
+                    deserialized_recommendation = {}
+                    for rec_key, rec_value in value.items():
+                        if rec_key == 'recommended_modules' and isinstance(rec_value, list):
+                            # 转换字符串列表为ModuleType列表
+                            try:
+                                deserialized_recommendation[rec_key] = [
+                                    ModuleType(m) for m in rec_value
+                                ]
+                            except:
+                                deserialized_recommendation[rec_key] = rec_value
+                        elif rec_key == 'alternative_modules' and isinstance(rec_value, list):
+                            # 转换字符串列表为ModuleType列表
+                            try:
+                                deserialized_recommendation[rec_key] = [
+                                    ModuleType(m) for m in rec_value
+                                ]
+                            except:
+                                deserialized_recommendation[rec_key] = rec_value
+                        elif rec_key in ['recommendation_reasons', 'confidence_scores'] and isinstance(rec_value, dict):
+                            # 转换以字符串为键的字典为以ModuleType为键的字典
+                            try:
+                                deserialized_recommendation[rec_key] = {
+                                    ModuleType(k): v for k, v in rec_value.items()
+                                }
+                            except:
+                                deserialized_recommendation[rec_key] = rec_value
+                        else:
+                            # 其他数据直接复制
+                            deserialized_recommendation[rec_key] = rec_value
+                    
+                    deserialized_metadata[key] = deserialized_recommendation
+                    
+                elif key in ['generated_content', 'final_content', 'generated_images'] and isinstance(value, dict):
+                    # 处理以ModuleType为键的字典
+                    try:
+                        deserialized_metadata[key] = {
+                            ModuleType(k): v for k, v in value.items()
+                        }
+                    except:
+                        # 如果转换失败，保持原样
+                        deserialized_metadata[key] = value
+                        
+                else:
+                    # 其他数据直接复制
+                    deserialized_metadata[key] = value
+            
+            return deserialized_metadata
+            
+        except Exception as e:
+            logger.warning(f"Failed to deserialize workflow metadata: {str(e)}")
+            # 返回原始数据作为fallback
+            return metadata
     
     def save_current_session_to_history(self):
         """保存当前会话到历史记录"""
