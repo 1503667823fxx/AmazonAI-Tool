@@ -132,6 +132,21 @@ def render_intelligent_workflow():
         
         # 显示当前步骤和进度
         current_state = state_manager.get_current_state()
+        
+        # 检查URL参数是否指定了特定步骤
+        url_step = st.query_params.get("step")
+        if url_step == "content_generation":
+            from services.aplus_studio.models import WorkflowState
+            logger.info("URL parameter indicates content_generation step")
+            current_state = WorkflowState.CONTENT_GENERATION
+            
+            # 确保session状态也是正确的
+            session = state_manager.get_current_session()
+            if session and session.current_state != WorkflowState.CONTENT_GENERATION:
+                session.current_state = WorkflowState.CONTENT_GENERATION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+        
         logger.info(f"Rendering intelligent workflow, current state: {current_state.value}")
         
         # 添加状态验证和恢复机制
@@ -543,10 +558,10 @@ def render_module_recommendation_step(state_manager):
                 st.rerun()
         
         elif recommendation_result and recommendation_result.get('action') == 'continue_to_content_generation':
-            # 处理继续到内容生成
+            # 处理继续到内容生成 - 使用URL参数方法
             logger.info("Processing continue_to_content_generation action")
             
-            # 直接设置状态并跳转
+            # 保存状态到session state
             session = state_manager.get_current_session()
             if session:
                 from services.aplus_studio.models import WorkflowState
@@ -555,7 +570,10 @@ def render_module_recommendation_step(state_manager):
                 st.session_state.intelligent_workflow_session = session
                 state_manager._create_session_backup()
                 
-                logger.info("State set to CONTENT_GENERATION, triggering rerun")
+                # 使用URL参数强制跳转
+                st.query_params.update({"step": "content_generation", "t": str(int(datetime.now().timestamp()))})
+                
+                logger.info("State set to CONTENT_GENERATION with URL params")
                 st.success("✅ 正在跳转到内容生成...")
                 st.rerun()
             else:
