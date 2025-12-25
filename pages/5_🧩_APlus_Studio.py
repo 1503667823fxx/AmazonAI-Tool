@@ -278,7 +278,6 @@ def render_product_analysis_step(state_manager):
                     
                     # 创建图片集合
                     image_set = ProductImageSet(
-                        set_id=str(uuid.uuid4()),
                         images=processed_images,
                         total_size=sum(img.file_size for img in processed_images),
                         upload_session_id=str(uuid.uuid4())
