@@ -461,6 +461,9 @@ class ModuleRecommendationUI:
         
         st.write("**🎯 手动选择模块**")
         
+        # 确保 ModuleType 在当前作用域可用
+        from services.aplus_studio.models import ModuleType
+        
         # 按类别组织模块
         module_categories = {
             "核心展示": [ModuleType.PRODUCT_OVERVIEW, ModuleType.FEATURE_ANALYSIS, ModuleType.SPECIFICATION_COMPARISON],
@@ -740,6 +743,9 @@ class ModuleRecommendationUI:
         
         st.subheader("📖 A+模块使用指南")
         
+        # 确保 ModuleType 在当前作用域可用
+        from services.aplus_studio.models import ModuleType
+        
         # 模块分类说明
         st.write("**模块分类**")
         
@@ -842,6 +848,9 @@ class ModuleRecommendationUI:
     def validate_module_selection(self, selected_modules: List[ModuleType]) -> Dict[str, Any]:
         """验证模块选择"""
         
+        # 确保 ModuleType 在当前作用域可用
+        from services.aplus_studio.models import ModuleType
+        
         errors = []
         warnings = []
         suggestions = []
@@ -900,6 +909,9 @@ class ModuleRecommendationUI:
     
     def get_recommended_modules_for_category(self, product_category: str) -> List[ModuleType]:
         """根据产品类别获取推荐模块"""
+        
+        # 确保 ModuleType 在当前作用域可用
+        from services.aplus_studio.models import ModuleType
         
         # 基于产品类别的推荐逻辑
         category_recommendations = {
