@@ -111,86 +111,11 @@ def render_intelligent_workflow():
     st.header("🤖 A+ 智能工作流")
     st.caption("AI驱动的端到端A+页面创建解决方案")
     
-    # 显示会话状态调试信息
-    st.markdown("---")
-    st.subheader("🔧 会话状态调试")
-    
-    # 显示所有相关的session state
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**Streamlit Session State Keys:**")
-        relevant_keys = [k for k in st.session_state.keys() if 'intelligent' in k.lower()]
-        if relevant_keys:
-            for key in relevant_keys:
-                st.write(f"- {key}: {type(st.session_state[key])}")
-        else:
-            st.write("没有找到智能工作流相关的键")
-    
-    with col2:
-        st.write("**会话详情:**")
-        session = st.session_state.get('intelligent_workflow_session')
-        if session:
-            st.write(f"- 会话ID: {session.session_id}")
-            st.write(f"- 当前状态: {session.current_state.value}")
-            st.write(f"- 最后更新: {session.last_updated}")
-            st.write(f"- 元数据键: {list(session.workflow_metadata.keys())}")
-        else:
-            st.write("没有活跃的智能工作流会话")
-    
-    # 手动测试按钮
-    st.markdown("---")
-    st.subheader("🧪 手动测试")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("创建测试会话"):
-            from services.aplus_studio.intelligent_workflow import IntelligentWorkflowSession
-            from services.aplus_studio.models import WorkflowState
-            from datetime import datetime
-            
-            test_session = IntelligentWorkflowSession(
-                session_id="test_session_123",
-                current_state=WorkflowState.MODULE_RECOMMENDATION
-            )
-            test_session.workflow_metadata['test_data'] = {'test': True}
-            
-            st.session_state.intelligent_workflow_session = test_session
-            st.success("测试会话已创建")
-            st.rerun()
-    
-    with col2:
-        if st.button("设置为内容生成状态"):
-            from services.aplus_studio.models import WorkflowState
-            from datetime import datetime
-            
-            session = st.session_state.get('intelligent_workflow_session')
-            if session:
-                session.current_state = WorkflowState.CONTENT_GENERATION
-                session.last_updated = datetime.now()
-                st.session_state.intelligent_workflow_session = session
-                st.success("状态已设置为内容生成")
-                st.rerun()
-            else:
-                st.error("没有会话")
-    
-    with col3:
-        if st.button("清除所有会话"):
-            keys_to_remove = [k for k in st.session_state.keys() if 'intelligent' in k.lower()]
-            for key in keys_to_remove:
-                del st.session_state[key]
-            st.success("所有智能工作流会话已清除")
-            st.rerun()
-    
-    st.markdown("---")
-    
     # 初始化智能工作流状态管理器
     if 'intelligent_state_manager' not in st.session_state:
         try:
             from app_utils.aplus_studio.intelligent_state_manager import IntelligentWorkflowStateManager
             st.session_state.intelligent_state_manager = IntelligentWorkflowStateManager()
-            st.info("智能工作流状态管理器已初始化")
         except ImportError as e:
             st.error(f"智能工作流组件加载失败: {str(e)}")
             st.info("请检查系统配置或使用模块化A+制作功能")
@@ -611,6 +536,8 @@ def render_module_recommendation_step(state_manager):
             selected_modules = recommendation_result.get('selected_modules', [])
             mode = recommendation_result.get('mode', 'unknown')
             
+            logger.info(f"Processing confirm_selection: {len(selected_modules)} modules, mode: {mode}")
+            
             # 保存选择结果
             selection_data = {
                 'selected_modules': selected_modules,
@@ -637,56 +564,30 @@ def render_module_recommendation_step(state_manager):
                 
                 if st.button("✍️ 继续到内容生成", type="primary", use_container_width=True):
                     logger.info("User clicked '继续到内容生成' button")
-                    logger.debug(f"Current state before transition: {state_manager.get_current_state()}")
                     
-                    # 执行状态转换
-                    success = state_manager.transition_workflow_state(WorkflowState.CONTENT_GENERATION)
-                    logger.debug(f"State transition success: {success}")
+                    # 使用简单直接的状态转换方法
+                    session = state_manager.get_current_session()
+                    if not session:
+                        logger.info("No session found, creating new session")
+                        session = state_manager.create_new_session()
                     
-                    if success:
-                        # 强制验证状态转换是否成功
-                        current_state = state_manager.get_current_state()
-                        logger.debug(f"Current state after transition: {current_state}")
-                        
-                        if current_state == WorkflowState.CONTENT_GENERATION:
-                            logger.info("State transition verified successful, triggering rerun")
-                            st.success("✅ 正在跳转到内容生成...")
-                            st.rerun()
-                        else:
-                            logger.error(f"State transition verification failed: expected CONTENT_GENERATION, got {current_state}")
-                            st.error("❌ 状态转换验证失败，请重试")
-                    else:
-                        logger.error("State transition failed")
-                        st.error("❌ 状态转换失败，请重试")
-                
-                # 临时调试按钮
-                st.markdown("---")
-                st.write("🔧 **调试工具**")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.button("🚀 强制跳转到内容生成", use_container_width=True):
+                    if session:
                         # 直接设置状态
-                        session = state_manager.get_current_session()
-                        if session:
-                            session.current_state = WorkflowState.CONTENT_GENERATION
-                            session.last_updated = datetime.now()
-                            st.session_state.intelligent_workflow_session = session
-                            state_manager._create_session_backup()
-                            st.success("✅ 强制跳转成功")
-                            st.rerun()
-                        else:
-                            st.error("❌ 没有活跃会话")
-                
-                with col2:
-                    if st.button("🔍 检查当前状态", use_container_width=True):
-                        session = state_manager.get_current_session()
-                        if session:
-                            st.write(f"**会话状态**: {session.current_state.value}")
-                            st.write(f"**管理器状态**: {state_manager.get_current_state().value}")
-                            st.write(f"**会话ID**: {session.session_id}")
-                        else:
-                            st.write("**没有活跃会话**")
+                        from services.aplus_studio.models import WorkflowState
+                        session.current_state = WorkflowState.CONTENT_GENERATION
+                        session.last_updated = datetime.now()
+                        
+                        # 保存到session state
+                        st.session_state.intelligent_workflow_session = session
+                        
+                        # 创建备份
+                        state_manager._create_session_backup()
+                        
+                        logger.info(f"State set to CONTENT_GENERATION, triggering rerun")
+                        st.success("✅ 正在跳转到内容生成...")
+                        st.rerun()
+                    else:
+                        st.error("❌ 无法创建会话")
                         
             except Exception as e:
                 st.error(f"❌ 保存选择结果失败: {str(e)}")
