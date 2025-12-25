@@ -531,6 +531,36 @@ def render_module_recommendation_step(state_manager):
                         st.write("1. 检查产品分析结果是否完整")
                         st.write("2. 稍后重试或使用手动选择模式")
         
+        elif recommendation_result and recommendation_result.get('action') == 'reset_selection':
+            # 处理重新选择
+            logger.info("Processing reset_selection action")
+            
+            existing_recommendation = state_manager.get_module_recommendation()
+            if existing_recommendation:
+                existing_recommendation['selection_confirmed'] = False
+                state_manager.set_module_recommendation(existing_recommendation)
+                st.success("✅ 已重置选择，请重新选择模块")
+                st.rerun()
+        
+        elif recommendation_result and recommendation_result.get('action') == 'continue_to_content_generation':
+            # 处理继续到内容生成
+            logger.info("Processing continue_to_content_generation action")
+            
+            # 直接设置状态并跳转
+            session = state_manager.get_current_session()
+            if session:
+                from services.aplus_studio.models import WorkflowState
+                session.current_state = WorkflowState.CONTENT_GENERATION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+                state_manager._create_session_backup()
+                
+                logger.info("State set to CONTENT_GENERATION, triggering rerun")
+                st.success("✅ 正在跳转到内容生成...")
+                st.rerun()
+            else:
+                st.error("❌ 没有活跃会话")
+        
         elif recommendation_result and recommendation_result.get('action') == 'confirm_selection':
             # 处理模块选择确认
             selected_modules = recommendation_result.get('selected_modules', [])
