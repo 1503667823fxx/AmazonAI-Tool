@@ -172,54 +172,65 @@ class ModuleRecommendationUI:
             }
         }
     
-    def render_recommendation_interface(self) -> Dict[str, Any]:
+    def render_recommendation_interface(self, analysis_result: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         渲染完整的模块推荐界面
+        
+        Args:
+            analysis_result: 产品分析结果（可选，如果不提供则从session获取）
         
         Returns:
             Dict: 包含用户操作和选择结果的字典
         """
         st.subheader("🎯 智能模块推荐")
         
-        # 检查前置条件
-        session = self.workflow_controller.state_manager.get_current_session()
+        # 检查前置条件 - 优先使用传入的analysis_result
+        if analysis_result is None:
+            session = self.workflow_controller.state_manager.get_current_session()
+            if not session or not session.product_analysis:
+                st.warning("⚠️ 请先完成产品分析")
+                return {"action": None}
+            # 从session获取分析结果
+            analysis_result = session.product_analysis
         
-        if not session or not session.product_analysis:
+        # 确保analysis_result不为空
+        if not analysis_result:
             st.warning("⚠️ 请先完成产品分析")
             return {"action": None}
         
         # 如果已有推荐结果，显示推荐界面
-        if session.module_recommendation:
+        session = self.workflow_controller.state_manager.get_current_session()
+        if session and session.module_recommendation:
             return self._render_recommendation_results(session.module_recommendation)
         
         # 否则显示推荐生成界面
-        return self._render_recommendation_generation()
+        return self._render_recommendation_generation(analysis_result)
     
-    def _render_recommendation_generation(self) -> Dict[str, Any]:
+    def _render_recommendation_generation(self, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
         """渲染推荐生成界面"""
         
         st.write("**🤖 AI正在分析您的产品，生成最佳模块推荐...**")
         
         # 显示分析摘要
-        session = self.workflow_controller.state_manager.get_current_session()
-        analysis = session.product_analysis
-        
         with st.expander("📋 产品分析摘要", expanded=True):
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.metric("产品类别", analysis.product_category)
+                product_type = analysis_result.get('product_type', '未识别')
+                st.metric("产品类别", product_type)
             
             with col2:
-                st.metric("置信度", f"{analysis.confidence_score:.1%}")
+                confidence_score = analysis_result.get('confidence_score', 0)
+                st.metric("置信度", f"{confidence_score:.1%}")
             
             with col3:
-                st.metric("特征数量", len(analysis.key_features))
+                key_features = analysis_result.get('key_features', [])
+                st.metric("特征数量", len(key_features))
             
             # 核心特征
-            if analysis.key_features:
+            if key_features:
                 st.write("**核心特征：**")
-                for feature in analysis.key_features[:3]:
+                for feature in key_features[:3]:
                     st.write(f"• {feature}")
         
         # 推荐选项
@@ -260,6 +271,7 @@ class ModuleRecommendationUI:
             if st.button("🚀 生成AI推荐", type="primary", use_container_width=True):
                 return {
                     "action": "generate_recommendation",
+                    "analysis_result": analysis_result,
                     "options": {
                         "count": recommendation_count,
                         "include_alternatives": include_alternatives,
@@ -287,19 +299,38 @@ class ModuleRecommendationUI:
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("推荐模块", len(recommendation.recommended_modules))
+            recommended_modules = recommendation.get('recommended_modules', [])
+            st.metric("推荐模块", len(recommended_modules))
         
         with col2:
-            avg_confidence = sum(recommendation.confidence_scores.values()) / len(recommendation.confidence_scores)
-            st.metric("平均置信度", f"{avg_confidence:.1%}")
+            confidence_scores = recommendation.get('confidence_scores', {})
+            if confidence_scores:
+                avg_confidence = sum(confidence_scores.values()) / len(confidence_scores)
+                st.metric("平均置信度", f"{avg_confidence:.1%}")
+            else:
+                st.metric("平均置信度", "N/A")
         
         with col3:
-            total_time = sum(self.module_configs[m]["estimated_time"] for m in recommendation.recommended_modules)
+            total_time = 0
+            for module in recommended_modules:
+                if hasattr(module, 'value'):
+                    module_key = module
+                else:
+                    # 如果是字符串，转换为ModuleType
+                    from services.aplus_studio.models import ModuleType
+                    try:
+                        module_key = ModuleType(module)
+                    except:
+                        continue
+                
+                if module_key in self.module_configs:
+                    total_time += self.module_configs[module_key]["estimated_time"]
+            
             st.metric("预计制作时间", f"{total_time}分钟")
         
         with col4:
-            alternative_count = len(recommendation.alternative_modules) if hasattr(recommendation, 'alternative_modules') else 0
-            st.metric("替代选项", f"{alternative_count}个")
+            alternative_modules = recommendation.get('alternative_modules', [])
+            st.metric("替代选项", f"{len(alternative_modules)}个")
         
         # 推荐模式选择
         recommendation_mode = self._render_mode_selection()
@@ -339,11 +370,27 @@ class ModuleRecommendationUI:
         
         selected_modules = []
         
+        # 获取推荐数据
+        recommended_modules = recommendation.get('recommended_modules', [])
+        recommendation_reasons = recommendation.get('recommendation_reasons', {})
+        confidence_scores = recommendation.get('confidence_scores', {})
+        
         # 显示推荐模块
-        for i, module_type in enumerate(recommendation.recommended_modules, 1):
-            config = self.module_configs[module_type]
-            reason = recommendation.recommendation_reasons.get(module_type, "AI推荐此模块")
-            confidence = recommendation.confidence_scores.get(module_type, 0.8)
+        for i, module_type in enumerate(recommended_modules, 1):
+            # 确保module_type是ModuleType对象
+            if isinstance(module_type, str):
+                from services.aplus_studio.models import ModuleType
+                try:
+                    module_type = ModuleType(module_type)
+                except:
+                    continue
+            
+            config = self.module_configs.get(module_type, {})
+            if not config:
+                continue
+                
+            reason = recommendation_reasons.get(module_type, "AI推荐此模块")
+            confidence = confidence_scores.get(module_type, 0.8)
             
             with st.container():
                 # 模块卡片
@@ -388,8 +435,9 @@ class ModuleRecommendationUI:
                 st.divider()
         
         # 替代建议
-        if hasattr(recommendation, 'alternative_modules') and recommendation.alternative_modules:
-            self._render_alternative_suggestions(recommendation.alternative_modules)
+        alternative_modules = recommendation.get('alternative_modules', [])
+        if alternative_modules:
+            self._render_alternative_suggestions(alternative_modules)
         
         # 操作按钮
         return self._render_action_buttons(selected_modules, "ai_recommended")
@@ -408,6 +456,12 @@ class ModuleRecommendationUI:
         }
         
         selected_modules = []
+        recommended_modules = recommendation.get('recommended_modules', [])
+        
+        # 确保recommended_modules是ModuleType对象列表
+        if recommended_modules and isinstance(recommended_modules[0], str):
+            from services.aplus_studio.models import ModuleType
+            recommended_modules = [ModuleType(m) for m in recommended_modules if m in [mt.value for mt in ModuleType]]
         
         # 显示分类选择
         for category_name, modules in module_categories.items():
@@ -420,7 +474,7 @@ class ModuleRecommendationUI:
                 
                 with cols[i]:
                     # 模块选择卡片
-                    is_recommended = module_type in recommendation.recommended_modules
+                    is_recommended = module_type in recommended_modules
                     
                     # 卡片样式
                     card_style = "border: 2px solid #28a745;" if is_recommended else "border: 1px solid #dee2e6;"
@@ -473,12 +527,23 @@ class ModuleRecommendationUI:
         st.write("**🤖 AI推荐模块**")
         
         selected_modules = []
+        recommended_modules = recommendation.get('recommended_modules', [])
+        recommendation_reasons = recommendation.get('recommendation_reasons', {})
+        confidence_scores = recommendation.get('confidence_scores', {})
+        
+        # 确保recommended_modules是ModuleType对象列表
+        if recommended_modules and isinstance(recommended_modules[0], str):
+            from services.aplus_studio.models import ModuleType
+            recommended_modules = [ModuleType(m) for m in recommended_modules if m in [mt.value for mt in ModuleType]]
         
         # 显示AI推荐的模块
-        for module_type in recommendation.recommended_modules:
-            config = self.module_configs[module_type]
-            reason = recommendation.recommendation_reasons.get(module_type, "AI推荐此模块")
-            confidence = recommendation.confidence_scores.get(module_type, 0.8)
+        for module_type in recommended_modules:
+            config = self.module_configs.get(module_type, {})
+            if not config:
+                continue
+                
+            reason = recommendation_reasons.get(module_type, "AI推荐此模块")
+            confidence = confidence_scores.get(module_type, 0.8)
             
             col1, col2, col3 = st.columns([1, 5, 1])
             
@@ -506,7 +571,7 @@ class ModuleRecommendationUI:
         # 其他可选模块
         st.write("**➕ 其他可选模块**")
         
-        other_modules = [m for m in self.module_configs.keys() if m not in recommendation.recommended_modules]
+        other_modules = [m for m in self.module_configs.keys() if m not in recommended_modules]
         
         if other_modules:
             # 按行显示其他模块
@@ -538,7 +603,7 @@ class ModuleRecommendationUI:
         
         # 选择统计
         if selected_modules:
-            ai_count = sum(1 for m in selected_modules if m in recommendation.recommended_modules)
+            ai_count = sum(1 for m in selected_modules if m in recommended_modules)
             manual_count = len(selected_modules) - ai_count
             total_time = sum(self.module_configs[m]["estimated_time"] for m in selected_modules)
             
