@@ -425,13 +425,28 @@ def render_module_recommendation_step(state_manager):
                     recommendation_data = _generate_intelligent_recommendation(analysis_data, options)
                     
                     # 保存推荐结果
-                    state_manager.set_module_recommendation(recommendation_data)
-                    
-                    st.success("✅ AI推荐生成完成！")
-                    st.rerun()
+                    try:
+                        state_manager.set_module_recommendation(recommendation_data)
+                        st.success("✅ AI推荐生成完成！")
+                        st.rerun()
+                    except Exception as save_error:
+                        logger.error(f"Failed to save recommendation data: {str(save_error)}")
+                        st.error(f"保存推荐结果失败: {str(save_error)}")
+                        
+                        # 显示调试信息
+                        with st.expander("🔧 调试信息", expanded=False):
+                            st.write("**推荐数据结构：**")
+                            st.json({
+                                "recommended_modules_count": len(recommendation_data.get('recommended_modules', [])),
+                                "recommendation_reasons_count": len(recommendation_data.get('recommendation_reasons', {})),
+                                "confidence_scores_count": len(recommendation_data.get('confidence_scores', {})),
+                                "alternative_modules_count": len(recommendation_data.get('alternative_modules', [])),
+                                "has_timestamp": 'recommendation_timestamp' in recommendation_data
+                            })
                     
                 except Exception as e:
                     st.error(f"推荐生成失败: {str(e)}")
+                    logger.error(f"Intelligent recommendation generation failed: {str(e)}")
                     
                     # 显示详细错误信息
                     with st.expander("🔧 错误详情", expanded=False):
