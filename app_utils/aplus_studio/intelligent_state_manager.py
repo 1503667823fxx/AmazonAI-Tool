@@ -554,13 +554,31 @@ class IntelligentWorkflowStateManager:
         try:
             logger.info(f"Starting workflow state transition to: {target_state.value}")
             
+            # 检查工作流控制器
+            if not self.workflow_controller:
+                logger.error("Workflow controller is not initialized")
+                return False
+            
             session = self.get_current_session()
             if not session:
-                logger.error("No active session for workflow state transition")
-                return False
+                logger.info("No active session found, creating new session for state transition")
+                try:
+                    session = self.create_new_session()
+                    if not session:
+                        logger.error("Failed to create new session for workflow state transition")
+                        return False
+                    logger.info(f"Created new session: {session.session_id}")
+                except Exception as create_error:
+                    logger.error(f"Exception creating new session: {str(create_error)}")
+                    return False
             
             logger.debug(f"Current session state: {session.current_state.value}")
             logger.debug(f"Session ID: {session.session_id}")
+            
+            # 确保工作流控制器有当前会话
+            if not self.workflow_controller.current_session:
+                logger.info("Workflow controller has no current session, setting it")
+                self.workflow_controller.current_session = session
             
             success = self.workflow_controller.transition_to_state(target_state)
             logger.debug(f"Workflow controller transition result: {success}")
@@ -571,7 +589,7 @@ class IntelligentWorkflowStateManager:
                 st.session_state.intelligent_workflow_session = self.workflow_controller.current_session
                 
                 logger.debug("Saving session")
-                self._save_session(session)
+                self._save_session(self.workflow_controller.current_session)
                 
                 # 触发自动保存（如果启用）
                 if hasattr(self, 'save_on_state_change') and getattr(self, 'save_on_state_change', True):
@@ -588,6 +606,8 @@ class IntelligentWorkflowStateManager:
         except Exception as e:
             logger.error(f"Failed to transition workflow state: {str(e)}")
             logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
     def save_user_edit(self, edit_key: str, edit_value: Any):
