@@ -650,6 +650,7 @@ class ModuleRecommendationUI:
         
         with st.expander("🔄 替代建议", expanded=False):
             st.write("**如果您对推荐不满意，可以考虑以下替代模块：**")
+            st.info("💡 点击"选择"按钮将该模块添加到您的选择中")
             
             for module_type in alternative_modules[:6]:  # 最多显示6个替代选项
                 config = self.module_configs[module_type]
@@ -664,8 +665,32 @@ class ModuleRecommendationUI:
                     st.caption(config["description"])
                 
                 with col3:
-                    if st.button("选择", key=f"alt_{module_type.value}", help="替换推荐模块"):
-                        st.session_state[f"replace_with_{module_type.value}"] = True
+                    if st.button("选择", key=f"alt_{module_type.value}", help="添加此模块到选择中"):
+                        # 添加到已选择的模块中
+                        if f"selected_alternatives" not in st.session_state:
+                            st.session_state.selected_alternatives = []
+                        
+                        if module_type not in st.session_state.selected_alternatives:
+                            st.session_state.selected_alternatives.append(module_type)
+                            st.success(f"✅ 已添加 {config['name']} 到选择中")
+                            st.rerun()
+                        else:
+                            st.warning(f"⚠️ {config['name']} 已经在选择中")
+            
+            # 显示已选择的替代模块
+            if hasattr(st.session_state, 'selected_alternatives') and st.session_state.selected_alternatives:
+                st.write("**已选择的替代模块：**")
+                for module_type in st.session_state.selected_alternatives:
+                    config = self.module_configs[module_type]
+                    col1, col2, col3 = st.columns([1, 4, 1])
+                    with col1:
+                        st.write(config['icon'])
+                    with col2:
+                        st.write(f"**{config['name']}**")
+                    with col3:
+                        if st.button("移除", key=f"remove_alt_{module_type.value}"):
+                            st.session_state.selected_alternatives.remove(module_type)
+                            st.rerun()
     
     def _render_module_details(self, module_type: ModuleType, config: Dict[str, Any]) -> None:
         """渲染模块详细信息"""
@@ -692,27 +717,34 @@ class ModuleRecommendationUI:
         
         st.write("**操作选项**")
         
+        # 合并替代选择的模块
+        final_selected_modules = selected_modules.copy()
+        if hasattr(st.session_state, 'selected_alternatives') and st.session_state.selected_alternatives:
+            for alt_module in st.session_state.selected_alternatives:
+                if alt_module not in final_selected_modules:
+                    final_selected_modules.append(alt_module)
+        
         # 验证选择
-        if not selected_modules:
+        if not final_selected_modules:
             st.warning("⚠️ 请至少选择一个模块后再进行操作")
             return {"action": None}
         
-        if len(selected_modules) > 6:
+        if len(final_selected_modules) > 6:
             st.error("❌ 最多只能选择6个模块，请取消一些选择")
             return {"action": None}
         
         # 显示选择摘要
-        total_time = sum(self.module_configs[m]["estimated_time"] for m in selected_modules)
+        total_time = sum(self.module_configs[m]["estimated_time"] for m in final_selected_modules)
         complexity_counts = {}
         
-        for module in selected_modules:
+        for module in final_selected_modules:
             complexity = self.module_configs[module]["complexity"]
             complexity_counts[complexity] = complexity_counts.get(complexity, 0) + 1
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            st.metric("选择模块", len(selected_modules))
+            st.metric("选择模块", len(final_selected_modules))
         
         with col2:
             st.metric("预计时间", f"{total_time}分钟")
@@ -721,24 +753,34 @@ class ModuleRecommendationUI:
             complexity_text = ", ".join([f"{k}:{v}" for k, v in complexity_counts.items()])
             st.metric("复杂度分布", complexity_text)
         
+        # 显示所有选择的模块
+        if final_selected_modules != selected_modules:
+            st.info("💡 包含了您从替代建议中选择的模块")
+            
         # 操作按钮
         col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
         
         with col1:
             if st.button("✅ 确认选择", type="primary", use_container_width=True):
+                # 清除替代选择状态
+                if hasattr(st.session_state, 'selected_alternatives'):
+                    del st.session_state.selected_alternatives
                 return {
                     "action": "confirm_selection",
-                    "selected_modules": selected_modules,
+                    "selected_modules": final_selected_modules,
                     "mode": mode
                 }
         
         with col2:
             if st.button("🔄 重新推荐", use_container_width=True):
+                # 清除替代选择状态
+                if hasattr(st.session_state, 'selected_alternatives'):
+                    del st.session_state.selected_alternatives
                 return {"action": "regenerate_recommendation"}
         
         with col3:
             if st.button("💾 保存草稿", use_container_width=True):
-                self._save_selection_draft(selected_modules, mode)
+                self._save_selection_draft(final_selected_modules, mode)
                 st.success("草稿已保存")
         
         with col4:
