@@ -472,10 +472,6 @@ def render_module_recommendation_step(state_manager):
             selected_modules = recommendation_result.get('selected_modules', [])
             mode = recommendation_result.get('mode', 'unknown')
             
-            # 添加调试信息
-            st.write(f"🔧 调试：确认选择 {len(selected_modules)} 个模块")
-            st.write(f"🔧 调试：选择模式 - {mode}")
-            
             # 保存选择结果
             selection_data = {
                 'selected_modules': selected_modules,
@@ -492,21 +488,21 @@ def render_module_recommendation_step(state_manager):
                 if selected_modules:
                     st.write("**已选择的模块：**")
                     for module in selected_modules:
-                        st.write(f"• {module}")
+                        module_name = str(module)
+                        if hasattr(module, 'value'):
+                            module_name = module.value
+                        st.write(f"• {module_name}")
                 
                 if st.button("✍️ 继续到内容生成", type="primary", use_container_width=True):
-                    st.write("🔧 调试：点击了继续到内容生成按钮")
                     success = state_manager.transition_to_state(WorkflowState.CONTENT_GENERATION)
-                    st.write(f"🔧 调试：状态转换结果 - {success}")
                     if success:
-                        st.write("🔧 调试：准备重新运行页面")
                         st.rerun()
                     else:
-                        st.error("❌ 状态转换失败")
+                        st.error("❌ 状态转换失败，请重试")
                         
             except Exception as e:
                 st.error(f"❌ 保存选择结果失败: {str(e)}")
-                st.write(f"🔧 调试：异常详情 - {e}")
+                logger.error(f"Failed to save module selection: {str(e)}")
         
         elif recommendation_result and recommendation_result.get('action') == 'manual_selection':
             st.info("💡 切换到手动选择模式")
@@ -872,16 +868,8 @@ def render_content_generation_step(state_manager):
     st.subheader("✍️ 第三步：内容生成")
     st.markdown("AI为每个推荐的模块自动生成专业的文案内容")
     
-    # 添加调试信息
-    current_state = state_manager.get_current_state()
-    st.write(f"🔧 调试：当前状态 - {current_state}")
-    
     # 检查前置条件
     recommendation = state_manager.get_module_recommendation()
-    st.write(f"🔧 调试：推荐数据存在 - {recommendation is not None}")
-    
-    if recommendation:
-        st.write(f"🔧 调试：推荐数据键 - {list(recommendation.keys())}")
     
     if not recommendation:
         st.warning("⚠️ 请先完成模块推荐")
