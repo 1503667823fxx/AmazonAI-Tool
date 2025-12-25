@@ -460,6 +460,7 @@ class ModuleRecommendationUI:
         """渲染手动选择模式"""
         
         st.write("**🎯 手动选择模块**")
+        st.info("💡 **使用说明：** 选择您需要的模块类型，然后点击下方的"确认选择"按钮继续")
         
         # 确保 ModuleType 在当前作用域可用
         from services.aplus_studio.models import ModuleType
@@ -530,7 +531,22 @@ class ModuleRecommendationUI:
         # 选择统计
         if selected_modules:
             total_time = sum(self.module_configs[m]["estimated_time"] for m in selected_modules)
-            st.info(f"已选择 {len(selected_modules)} 个模块，预计制作时间: {total_time} 分钟")
+            complexity_counts = {}
+            for module in selected_modules:
+                complexity = self.module_configs[module]["complexity"]
+                complexity_counts[complexity] = complexity_counts.get(complexity, 0) + 1
+            
+            # 显示选择摘要
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("已选择", f"{len(selected_modules)} 个模块")
+            with col2:
+                st.metric("预计时间", f"{total_time} 分钟")
+            with col3:
+                complexity_text = ", ".join([f"{k}:{v}" for k, v in complexity_counts.items()])
+                st.metric("复杂度", complexity_text)
+        else:
+            st.info("👆 请选择您需要的模块类型")
         
         # 操作按钮
         return self._render_action_buttons(selected_modules, "manual")
@@ -678,11 +694,11 @@ class ModuleRecommendationUI:
         
         # 验证选择
         if not selected_modules:
-            st.warning("⚠️ 请至少选择一个模块")
+            st.warning("⚠️ 请至少选择一个模块后再进行操作")
             return {"action": None}
         
         if len(selected_modules) > 6:
-            st.error("❌ 最多只能选择6个模块")
+            st.error("❌ 最多只能选择6个模块，请取消一些选择")
             return {"action": None}
         
         # 显示选择摘要
