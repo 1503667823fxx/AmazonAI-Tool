@@ -549,19 +549,25 @@ class IntelligentWorkflowController:
     @error_handler("transition_to_state", max_retries=1, enable_recovery=True)
     def transition_to_state(self, target_state: WorkflowState) -> bool:
         """状态转换"""
+        logger.info(f"Workflow controller transition_to_state called: {target_state.value}")
+        
         if not self.current_session:
             logger.error("No active session for state transition")
             return False
         
         current_state = self.current_session.current_state
+        logger.debug(f"Current session state: {current_state.value}")
         
         # 验证状态转换的合法性
         if not self._is_valid_transition(current_state, target_state):
             logger.error(f"Invalid state transition: {current_state.value} -> {target_state.value}")
             return False
         
+        logger.debug(f"State transition is valid: {current_state.value} -> {target_state.value}")
+        
         self.current_session.update_state(target_state)
         logger.info(f"State transition successful: {current_state.value} -> {target_state.value}")
+        logger.debug(f"Session state after update: {self.current_session.current_state.value}")
         
         return True
     
