@@ -411,7 +411,19 @@ def render_module_recommendation_step(state_manager):
         
         # 创建模块推荐UI
         recommendation_ui = ModuleRecommendationUI(state_manager.workflow_controller)
+        
+        # 添加调试信息
+        existing_recommendation = state_manager.get_module_recommendation()
+        logger.debug(f"Existing recommendation: {existing_recommendation is not None}")
+        
         recommendation_result = recommendation_ui.render_recommendation_interface(analysis_result)
+        
+        # 添加调试信息
+        logger.debug(f"Recommendation result: {recommendation_result}")
+        
+        # 显示调试信息（临时）
+        if recommendation_result:
+            st.write(f"🔧 调试：收到动作 - {recommendation_result.get('action', 'None')}")
         
         # 处理推荐生成动作
         if recommendation_result and recommendation_result.get('action') == 'generate_recommendation':
