@@ -655,12 +655,24 @@ class IntelligentWorkflowStateManager:
             logger.debug(f"Saving session to st.session_state: {session.session_id}")
             logger.debug(f"Session state being saved: {session.current_state.value}")
             
+            # 强制更新session的最后更新时间
+            session.last_updated = datetime.now()
+            
             st.session_state.intelligent_workflow_session = session
             
             # 验证保存是否成功
             saved_session = st.session_state.get('intelligent_workflow_session')
             if saved_session:
                 logger.debug(f"Session saved successfully, state: {saved_session.current_state.value}")
+                
+                # 双重验证：确保状态一致
+                if saved_session.current_state != session.current_state:
+                    logger.warning(f"State mismatch after save: expected {session.current_state.value}, got {saved_session.current_state.value}")
+                    # 强制同步
+                    saved_session.current_state = session.current_state
+                    saved_session.last_updated = session.last_updated
+                    st.session_state.intelligent_workflow_session = saved_session
+                    logger.info("Forced state synchronization completed")
             else:
                 logger.error("Session save failed - session not found in st.session_state")
             
