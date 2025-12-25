@@ -472,6 +472,10 @@ def render_module_recommendation_step(state_manager):
             selected_modules = recommendation_result.get('selected_modules', [])
             mode = recommendation_result.get('mode', 'unknown')
             
+            # 添加调试信息
+            st.write(f"🔧 调试：确认选择 {len(selected_modules)} 个模块")
+            st.write(f"🔧 调试：选择模式 - {mode}")
+            
             # 保存选择结果
             selection_data = {
                 'selected_modules': selected_modules,
@@ -480,13 +484,29 @@ def render_module_recommendation_step(state_manager):
                 'total_modules': len(selected_modules)
             }
             
-            state_manager.set_module_recommendation(selection_data)
-            
-            st.success(f"✅ 已确认选择 {len(selected_modules)} 个模块！")
-            
-            if st.button("✍️ 继续到内容生成", type="primary", use_container_width=True):
-                state_manager.transition_to_state(WorkflowState.CONTENT_GENERATION)
-                st.rerun()
+            try:
+                state_manager.set_module_recommendation(selection_data)
+                st.success(f"✅ 已确认选择 {len(selected_modules)} 个模块！")
+                
+                # 显示选择的模块
+                if selected_modules:
+                    st.write("**已选择的模块：**")
+                    for module in selected_modules:
+                        st.write(f"• {module}")
+                
+                if st.button("✍️ 继续到内容生成", type="primary", use_container_width=True):
+                    st.write("🔧 调试：点击了继续到内容生成按钮")
+                    success = state_manager.transition_to_state(WorkflowState.CONTENT_GENERATION)
+                    st.write(f"🔧 调试：状态转换结果 - {success}")
+                    if success:
+                        st.write("🔧 调试：准备重新运行页面")
+                        st.rerun()
+                    else:
+                        st.error("❌ 状态转换失败")
+                        
+            except Exception as e:
+                st.error(f"❌ 保存选择结果失败: {str(e)}")
+                st.write(f"🔧 调试：异常详情 - {e}")
         
         elif recommendation_result and recommendation_result.get('action') == 'manual_selection':
             st.info("💡 切换到手动选择模式")
@@ -852,8 +872,17 @@ def render_content_generation_step(state_manager):
     st.subheader("✍️ 第三步：内容生成")
     st.markdown("AI为每个推荐的模块自动生成专业的文案内容")
     
+    # 添加调试信息
+    current_state = state_manager.get_current_state()
+    st.write(f"🔧 调试：当前状态 - {current_state}")
+    
     # 检查前置条件
     recommendation = state_manager.get_module_recommendation()
+    st.write(f"🔧 调试：推荐数据存在 - {recommendation is not None}")
+    
+    if recommendation:
+        st.write(f"🔧 调试：推荐数据键 - {list(recommendation.keys())}")
+    
     if not recommendation:
         st.warning("⚠️ 请先完成模块推荐")
         if st.button("🎯 返回模块推荐"):
@@ -863,12 +892,49 @@ def render_content_generation_step(state_manager):
     
     # 显示推荐的模块
     st.write("**推荐的模块：**")
-    recommended_modules = recommendation.get('recommended_modules', [])
+    selected_modules = recommendation.get('selected_modules', [])
     
-    cols = st.columns(len(recommended_modules))
-    for i, module in enumerate(recommended_modules):
-        with cols[i]:
-            st.info(f"📋 {module.value}")
+    if not selected_modules:
+        st.error("❌ 没有找到选择的模块")
+        if st.button("🎯 返回模块推荐"):
+            state_manager.transition_to_state(WorkflowState.MODULE_RECOMMENDATION)
+            st.rerun()
+        return
+    
+    # 处理模块显示（兼容字符串和ModuleType对象）
+    from services.aplus_studio.models import ModuleType
+    
+    # 模块配置信息
+    module_configs = {
+        ModuleType.PRODUCT_OVERVIEW: {"name": "产品概览", "icon": "🎯"},
+        ModuleType.FEATURE_ANALYSIS: {"name": "功能解析", "icon": "🔍"},
+        ModuleType.SPECIFICATION_COMPARISON: {"name": "规格对比", "icon": "📊"},
+        ModuleType.USAGE_SCENARIOS: {"name": "使用场景", "icon": "🏠"},
+        ModuleType.PROBLEM_SOLUTION: {"name": "问题解决", "icon": "💡"},
+        ModuleType.MATERIAL_CRAFTSMANSHIP: {"name": "材质工艺", "icon": "✨"},
+        ModuleType.INSTALLATION_GUIDE: {"name": "安装指南", "icon": "🔧"},
+        ModuleType.SIZE_COMPATIBILITY: {"name": "尺寸兼容", "icon": "📐"},
+        ModuleType.PACKAGE_CONTENTS: {"name": "包装内容", "icon": "📦"},
+        ModuleType.QUALITY_ASSURANCE: {"name": "品质保证", "icon": "🏆"},
+        ModuleType.CUSTOMER_REVIEWS: {"name": "客户评价", "icon": "⭐"},
+        ModuleType.MAINTENANCE_CARE: {"name": "维护保养", "icon": "🧽"}
+    }
+    
+    cols = st.columns(min(len(selected_modules), 4))  # 最多4列
+    for i, module in enumerate(selected_modules):
+        with cols[i % 4]:
+            # 处理模块类型（可能是字符串或ModuleType对象）
+            if isinstance(module, str):
+                try:
+                    module_type = ModuleType(module)
+                except ValueError:
+                    st.error(f"未知模块类型: {module}")
+                    continue
+            else:
+                module_type = module
+            
+            config = module_configs.get(module_type, {"name": str(module_type), "icon": "📋"})
+            st.info(f"{config['icon']} {config['name']}")
     
     # 内容生成按钮
     if st.button("🤖 开始AI内容生成", type="primary", use_container_width=True):
@@ -878,20 +944,38 @@ def render_content_generation_step(state_manager):
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                for i, module in enumerate(recommended_modules):
-                    status_text.text(f"正在生成 {module.value} 内容...")
-                    progress_bar.progress((i + 1) / len(recommended_modules))
+                for i, module in enumerate(selected_modules):
+                    # 获取模块名称用于显示
+                    if isinstance(module, str):
+                        try:
+                            module_type = ModuleType(module)
+                            module_name = module_configs.get(module_type, {"name": module})["name"]
+                        except ValueError:
+                            module_name = str(module)
+                    else:
+                        module_name = module_configs.get(module, {"name": str(module)})["name"]
+                    
+                    status_text.text(f"正在生成 {module_name} 内容...")
+                    progress_bar.progress((i + 1) / len(selected_modules))
                     time.sleep(1)  # 模拟生成时间
                 
                 # 保存生成的内容（模拟）
-                generated_content = {
-                    module: {
-                        'title': f'{module.value}标题',
-                        'description': f'{module.value}的详细描述内容...',
-                        'key_points': [f'{module.value}卖点1', f'{module.value}卖点2']
+                generated_content = {}
+                for module in selected_modules:
+                    if isinstance(module, str):
+                        try:
+                            module_type = ModuleType(module)
+                            module_name = module_configs.get(module_type, {"name": module})["name"]
+                        except ValueError:
+                            module_name = str(module)
+                    else:
+                        module_name = module_configs.get(module, {"name": str(module)})["name"]
+                    
+                    generated_content[str(module)] = {
+                        'title': f'{module_name}标题',
+                        'description': f'{module_name}的详细描述内容...',
+                        'key_points': [f'{module_name}卖点1', f'{module_name}卖点2']
                     }
-                    for module in recommended_modules
-                }
                 
                 state_manager.set_generated_content(generated_content)
                 
