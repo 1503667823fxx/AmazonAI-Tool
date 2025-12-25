@@ -131,6 +131,20 @@ def render_intelligent_workflow():
         # 显示当前步骤和进度
         current_state = state_manager.get_current_state()
         logger.info(f"Rendering intelligent workflow, current state: {current_state.value}")
+        
+        # 添加状态验证和恢复机制
+        session = state_manager.get_current_session()
+        if session:
+            logger.debug(f"Session found: {session.session_id}, state: {session.current_state.value}")
+            # 确保状态一致性
+            if session.current_state != current_state:
+                logger.warning(f"State inconsistency detected: session={session.current_state.value}, manager={current_state.value}")
+                # 以session中的状态为准
+                current_state = session.current_state
+                logger.info(f"Using session state: {current_state.value}")
+        else:
+            logger.debug("No session found")
+        
         nav_action = nav_ui.render_navigation_header()
         
         # 根据当前状态渲染对应的界面
@@ -529,7 +543,10 @@ def render_module_recommendation_step(state_manager):
             }
             
             try:
+                # 先保存模块推荐数据
                 state_manager.set_module_recommendation(selection_data)
+                logger.info(f"Module recommendation saved: {len(selected_modules)} modules")
+                
                 st.success(f"✅ 已确认选择 {len(selected_modules)} 个模块！")
                 
                 # 显示选择的模块
@@ -545,16 +562,54 @@ def render_module_recommendation_step(state_manager):
                     logger.info("User clicked '继续到内容生成' button")
                     logger.debug(f"Current state before transition: {state_manager.get_current_state()}")
                     
+                    # 执行状态转换
                     success = state_manager.transition_workflow_state(WorkflowState.CONTENT_GENERATION)
                     logger.debug(f"State transition success: {success}")
-                    logger.debug(f"Current state after transition: {state_manager.get_current_state()}")
                     
                     if success:
-                        logger.info("State transition successful, triggering rerun")
-                        st.rerun()
+                        # 强制验证状态转换是否成功
+                        current_state = state_manager.get_current_state()
+                        logger.debug(f"Current state after transition: {current_state}")
+                        
+                        if current_state == WorkflowState.CONTENT_GENERATION:
+                            logger.info("State transition verified successful, triggering rerun")
+                            st.success("✅ 正在跳转到内容生成...")
+                            st.rerun()
+                        else:
+                            logger.error(f"State transition verification failed: expected CONTENT_GENERATION, got {current_state}")
+                            st.error("❌ 状态转换验证失败，请重试")
                     else:
                         logger.error("State transition failed")
                         st.error("❌ 状态转换失败，请重试")
+                
+                # 临时调试按钮
+                st.markdown("---")
+                st.write("🔧 **调试工具**")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("🚀 强制跳转到内容生成", use_container_width=True):
+                        # 直接设置状态
+                        session = state_manager.get_current_session()
+                        if session:
+                            session.current_state = WorkflowState.CONTENT_GENERATION
+                            session.last_updated = datetime.now()
+                            st.session_state.intelligent_workflow_session = session
+                            state_manager._create_session_backup()
+                            st.success("✅ 强制跳转成功")
+                            st.rerun()
+                        else:
+                            st.error("❌ 没有活跃会话")
+                
+                with col2:
+                    if st.button("🔍 检查当前状态", use_container_width=True):
+                        session = state_manager.get_current_session()
+                        if session:
+                            st.write(f"**会话状态**: {session.current_state.value}")
+                            st.write(f"**管理器状态**: {state_manager.get_current_state().value}")
+                            st.write(f"**会话ID**: {session.session_id}")
+                        else:
+                            st.write("**没有活跃会话**")
                         
             except Exception as e:
                 st.error(f"❌ 保存选择结果失败: {str(e)}")
