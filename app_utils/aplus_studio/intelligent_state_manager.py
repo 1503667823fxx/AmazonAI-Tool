@@ -283,12 +283,27 @@ class IntelligentWorkflowStateManager:
                 if isinstance(recommendation, dict):
                     logger.debug(f"Saving module recommendation with keys: {list(recommendation.keys())}")
                     
-                    # 检查是否包含ModuleType对象
-                    if 'recommended_modules' in recommendation:
-                        modules = recommendation['recommended_modules']
-                        logger.debug(f"Recommended modules type: {type(modules)}, count: {len(modules) if isinstance(modules, list) else 'N/A'}")
+                    # 处理ModuleType对象，转换为字符串以便序列化
+                    processed_recommendation = {}
+                    for key, value in recommendation.items():
+                        if key == 'selected_modules' and isinstance(value, list):
+                            # 转换ModuleType对象为字符串
+                            processed_recommendation[key] = [
+                                m.value if hasattr(m, 'value') else str(m) for m in value
+                            ]
+                            logger.debug(f"Processed selected_modules: {processed_recommendation[key]}")
+                        elif key in ['recommended_modules', 'alternative_modules'] and isinstance(value, list):
+                            # 转换ModuleType对象为字符串
+                            processed_recommendation[key] = [
+                                m.value if hasattr(m, 'value') else str(m) for m in value
+                            ]
+                        else:
+                            processed_recommendation[key] = value
+                    
+                    session.workflow_metadata['module_recommendation'] = processed_recommendation
+                else:
+                    session.workflow_metadata['module_recommendation'] = recommendation
                 
-                session.workflow_metadata['module_recommendation'] = recommendation
                 self._save_session(session)
                 logger.info("Module recommendation saved successfully")
         except Exception as e:
@@ -648,12 +663,7 @@ class IntelligentWorkflowStateManager:
                     # 处理模块推荐数据中的ModuleType对象
                     serialized_recommendation = {}
                     for rec_key, rec_value in value.items():
-                        if rec_key == 'recommended_modules' and isinstance(rec_value, list):
-                            # 转换ModuleType列表为字符串列表
-                            serialized_recommendation[rec_key] = [
-                                m.value if hasattr(m, 'value') else str(m) for m in rec_value
-                            ]
-                        elif rec_key == 'alternative_modules' and isinstance(rec_value, list):
+                        if rec_key in ['recommended_modules', 'selected_modules', 'alternative_modules'] and isinstance(rec_value, list):
                             # 转换ModuleType列表为字符串列表
                             serialized_recommendation[rec_key] = [
                                 m.value if hasattr(m, 'value') else str(m) for m in rec_value
@@ -741,7 +751,7 @@ class IntelligentWorkflowStateManager:
                     # 处理模块推荐数据中的ModuleType对象
                     deserialized_recommendation = {}
                     for rec_key, rec_value in value.items():
-                        if rec_key == 'recommended_modules' and isinstance(rec_value, list):
+                        if rec_key in ['recommended_modules', 'selected_modules', 'alternative_modules'] and isinstance(rec_value, list):
                             # 转换字符串列表为ModuleType列表
                             try:
                                 deserialized_recommendation[rec_key] = [
@@ -749,10 +759,6 @@ class IntelligentWorkflowStateManager:
                                 ]
                             except:
                                 deserialized_recommendation[rec_key] = rec_value
-                        elif rec_key == 'alternative_modules' and isinstance(rec_value, list):
-                            # 转换字符串列表为ModuleType列表
-                            try:
-                                deserialized_recommendation[rec_key] = [
                                     ModuleType(m) for m in rec_value
                                 ]
                             except:
