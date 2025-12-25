@@ -130,26 +130,36 @@ def render_intelligent_workflow():
         
         # 显示当前步骤和进度
         current_state = state_manager.get_current_state()
+        logger.info(f"Rendering intelligent workflow, current state: {current_state.value}")
         nav_action = nav_ui.render_navigation_header()
         
         # 根据当前状态渲染对应的界面
         if current_state == WorkflowState.INITIAL:
+            logger.debug("Rendering workflow start")
             render_workflow_start(state_manager)
         elif current_state == WorkflowState.PRODUCT_ANALYSIS:
+            logger.debug("Rendering product analysis step")
             render_product_analysis_step(state_manager)
         elif current_state == WorkflowState.MODULE_RECOMMENDATION:
+            logger.debug("Rendering module recommendation step")
             render_module_recommendation_step(state_manager)
         elif current_state == WorkflowState.CONTENT_GENERATION:
+            logger.debug("Rendering content generation step")
             render_content_generation_step(state_manager)
         elif current_state == WorkflowState.CONTENT_EDITING:
+            logger.debug("Rendering content editing step")
             render_content_editing_step(state_manager)
         elif current_state == WorkflowState.STYLE_SELECTION:
+            logger.debug("Rendering style selection step")
             render_style_selection_step(state_manager)
         elif current_state == WorkflowState.IMAGE_GENERATION:
+            logger.debug("Rendering image generation step")
             render_image_generation_step(state_manager)
         elif current_state == WorkflowState.COMPLETED:
+            logger.debug("Rendering workflow completed step")
             render_workflow_completed_step(state_manager)
         else:
+            logger.error(f"Unknown workflow state: {current_state}")
             st.error(f"未知的工作流状态: {current_state}")
             
         # 处理导航操作
@@ -186,7 +196,7 @@ def render_workflow_start(state_manager):
         """)
         
         if st.button("🚀 开始智能工作流", type="primary", use_container_width=True):
-            state_manager.transition_to_state(WorkflowState.PRODUCT_ANALYSIS)
+            state_manager.transition_workflow_state(WorkflowState.PRODUCT_ANALYSIS)
             st.rerun()
     
     with col2:
@@ -356,7 +366,7 @@ def render_product_analysis_step(state_manager):
                     st.write(f"**分析置信度**: {data.get('confidence_score', 0):.1%}")
             
             if st.button("🎯 继续到模块推荐", type="primary", use_container_width=True):
-                state_manager.transition_to_state(WorkflowState.MODULE_RECOMMENDATION)
+                state_manager.transition_workflow_state(WorkflowState.MODULE_RECOMMENDATION)
                 st.rerun()
         
         # 检查是否已有分析结果
@@ -385,7 +395,7 @@ def render_product_analysis_step(state_manager):
             
             with col2:
                 if st.button("🎯 继续到模块推荐", type="primary", use_container_width=True):
-                    state_manager.transition_to_state(WorkflowState.MODULE_RECOMMENDATION)
+                    state_manager.transition_workflow_state(WorkflowState.MODULE_RECOMMENDATION)
                     st.rerun()
                 
     except ImportError:
@@ -405,7 +415,7 @@ def render_module_recommendation_step(state_manager):
         if not analysis_result:
             st.warning("⚠️ 请先完成产品分析")
             if st.button("🔍 返回产品分析"):
-                state_manager.transition_to_state(WorkflowState.PRODUCT_ANALYSIS)
+                state_manager.transition_workflow_state(WorkflowState.PRODUCT_ANALYSIS)
                 st.rerun()
             return
         
@@ -420,6 +430,27 @@ def render_module_recommendation_step(state_manager):
         
         # 添加调试信息
         logger.debug(f"Recommendation result: {recommendation_result}")
+        
+        # 临时调试面板
+        with st.expander("🔧 调试信息", expanded=False):
+            current_session = state_manager.get_current_session()
+            if current_session:
+                st.write(f"**会话ID**: {current_session.session_id}")
+                st.write(f"**当前状态**: {current_session.current_state.value}")
+                st.write(f"**最后更新**: {current_session.last_updated}")
+                
+                # 显示会话状态
+                session_in_state = st.session_state.get('intelligent_workflow_session')
+                if session_in_state:
+                    st.write(f"**st.session_state中的状态**: {session_in_state.current_state.value}")
+                else:
+                    st.write("**st.session_state中没有会话**")
+                    
+                # 显示备份状态
+                backup_data = st.session_state.get('intelligent_workflow_backup')
+                st.write(f"**备份可用**: {backup_data is not None}")
+            else:
+                st.write("**没有当前会话**")
         
         # 显示调试信息（临时）
         if recommendation_result:
@@ -494,10 +525,18 @@ def render_module_recommendation_step(state_manager):
                         st.write(f"• {module_name}")
                 
                 if st.button("✍️ 继续到内容生成", type="primary", use_container_width=True):
-                    success = state_manager.transition_to_state(WorkflowState.CONTENT_GENERATION)
+                    logger.info("User clicked '继续到内容生成' button")
+                    logger.debug(f"Current state before transition: {state_manager.get_current_state()}")
+                    
+                    success = state_manager.transition_workflow_state(WorkflowState.CONTENT_GENERATION)
+                    logger.debug(f"State transition success: {success}")
+                    logger.debug(f"Current state after transition: {state_manager.get_current_state()}")
+                    
                     if success:
+                        logger.info("State transition successful, triggering rerun")
                         st.rerun()
                     else:
+                        logger.error("State transition failed")
                         st.error("❌ 状态转换失败，请重试")
                         
             except Exception as e:
@@ -868,13 +907,27 @@ def render_content_generation_step(state_manager):
     st.subheader("✍️ 第三步：内容生成")
     st.markdown("AI为每个推荐的模块自动生成专业的文案内容")
     
+    # 调试信息
+    logger.info("render_content_generation_step called")
+    st.success("🎉 成功进入内容生成步骤！")
+    
+    # 临时调试面板
+    with st.expander("🔧 调试信息", expanded=True):
+        current_session = state_manager.get_current_session()
+        if current_session:
+            st.write(f"**会话ID**: {current_session.session_id}")
+            st.write(f"**当前状态**: {current_session.current_state.value}")
+            st.write(f"**最后更新**: {current_session.last_updated}")
+        else:
+            st.write("**没有当前会话**")
+    
     # 检查前置条件
     recommendation = state_manager.get_module_recommendation()
     
     if not recommendation:
         st.warning("⚠️ 请先完成模块推荐")
         if st.button("🎯 返回模块推荐"):
-            state_manager.transition_to_state(WorkflowState.MODULE_RECOMMENDATION)
+            state_manager.transition_workflow_state(WorkflowState.MODULE_RECOMMENDATION)
             st.rerun()
         return
     
@@ -885,7 +938,7 @@ def render_content_generation_step(state_manager):
     if not selected_modules:
         st.error("❌ 没有找到选择的模块")
         if st.button("🎯 返回模块推荐"):
-            state_manager.transition_to_state(WorkflowState.MODULE_RECOMMENDATION)
+            state_manager.transition_workflow_state(WorkflowState.MODULE_RECOMMENDATION)
             st.rerun()
         return
     
@@ -970,7 +1023,7 @@ def render_content_generation_step(state_manager):
                 st.success("✅ 内容生成完成！")
                 
                 if st.button("📝 继续到内容编辑", type="primary", use_container_width=True):
-                    state_manager.transition_to_state(WorkflowState.CONTENT_EDITING)
+                    state_manager.transition_workflow_state(WorkflowState.CONTENT_EDITING)
                     st.rerun()
                     
             except Exception as e:
@@ -990,7 +1043,7 @@ def render_content_editing_step(state_manager):
         if not generated_content:
             st.warning("⚠️ 请先完成内容生成")
             if st.button("✍️ 返回内容生成"):
-                state_manager.transition_to_state(WorkflowState.CONTENT_GENERATION)
+                state_manager.transition_workflow_state(WorkflowState.CONTENT_GENERATION)
                 st.rerun()
             return
         
@@ -1005,7 +1058,7 @@ def render_content_editing_step(state_manager):
             st.success("✅ 内容编辑完成！")
             
             if st.button("🎨 继续到风格选择", type="primary", use_container_width=True):
-                state_manager.transition_to_state(WorkflowState.STYLE_SELECTION)
+                state_manager.transition_workflow_state(WorkflowState.STYLE_SELECTION)
                 st.rerun()
                 
     except ImportError:
@@ -1084,7 +1137,7 @@ def render_style_selection_step(state_manager):
             'theme_config': style_info
         })
         
-        state_manager.transition_to_state(WorkflowState.IMAGE_GENERATION)
+        state_manager.transition_workflow_state(WorkflowState.IMAGE_GENERATION)
         st.rerun()
 
 
@@ -1142,7 +1195,7 @@ def render_image_generation_step(state_manager):
                 st.success("✅ 所有模块图片生成完成！")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    state_manager.transition_to_state(WorkflowState.COMPLETED)
+                    state_manager.transition_workflow_state(WorkflowState.COMPLETED)
                     st.rerun()
                     
             except Exception as e:
@@ -1183,7 +1236,7 @@ def render_workflow_completed_step(state_manager):
         
         with col2:
             if st.button("🔄 重新生成", use_container_width=True):
-                state_manager.transition_to_state(WorkflowState.IMAGE_GENERATION)
+                state_manager.transition_workflow_state(WorkflowState.IMAGE_GENERATION)
                 st.rerun()
         
         with col3:
@@ -1230,7 +1283,7 @@ def render_simplified_content_editing(state_manager):
         
         if st.button("✅ 确认编辑", type="primary", use_container_width=True):
             state_manager.set_final_content(generated_content)
-            state_manager.transition_to_state(WorkflowState.STYLE_SELECTION)
+            state_manager.transition_workflow_state(WorkflowState.STYLE_SELECTION)
             st.rerun()
 
 
@@ -1242,12 +1295,12 @@ def handle_navigation_action(state_manager, action):
     if action.action_type == 'jump':
         target_state = action.target_state
         if target_state:
-            state_manager.transition_to_state(target_state)
+            state_manager.transition_workflow_state(target_state)
             st.rerun()
     elif action.action_type == 'start_new':
         target_state = action.target_state
         if target_state:
-            state_manager.transition_to_state(target_state)
+            state_manager.transition_workflow_state(target_state)
             st.rerun()
     elif action.action_type == 'next':
         # 处理下一步操作
