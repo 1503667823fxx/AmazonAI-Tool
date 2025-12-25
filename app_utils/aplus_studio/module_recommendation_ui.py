@@ -471,7 +471,7 @@ class ModuleRecommendationUI:
         """渲染手动选择模式"""
         
         st.write("**🎯 手动选择模块**")
-        st.info("💡 **使用说明：** 选择您需要的模块类型，然后点击下方的'确认选择'按钮继续")
+        st.info("💡 **使用说明：** 选择您需要的模块类型，然后点击下方的确认选择按钮继续")
         
         # 确保 ModuleType 在当前作用域可用
         from services.aplus_studio.models import ModuleType
@@ -696,7 +696,7 @@ class ModuleRecommendationUI:
                                     st.write(config["description"])
                                     st.write(f"**适用于：** {', '.join(config.get('suitable_for', []))}")
             
-            st.caption("💡 提示：您可以切换到"混合模式"或"手动选择"来选择这些替代模块")
+            st.caption("💡 提示：您可以切换到混合模式或手动选择来选择这些替代模块")
     
     def _render_module_details(self, module_type: ModuleType, config: Dict[str, Any]) -> None:
         """渲染模块详细信息"""
