@@ -298,12 +298,12 @@ def render_product_analysis_step(state_manager):
                     # 转换分析结果为字典格式
                     analysis_data = {
                         'product_type': analysis_result_obj.product_category.value if analysis_result_obj.product_category else '未识别',
-                        'target_audience': analysis_result_obj.target_demographics or '未分析',
-                        'key_features': analysis_result_obj.key_selling_points or [],
+                        'target_audience': analysis_result_obj.target_audience or '未分析',
+                        'key_features': analysis_result_obj.key_features or [],
                         'confidence_score': analysis_result_obj.confidence_score,
-                        'materials': analysis_result_obj.technical_specifications.get('materials', []) if analysis_result_obj.technical_specifications else [],
-                        'use_cases': analysis_result_obj.competitive_advantages or [],
-                        'marketing_angles': analysis_result_obj.emotional_triggers or [],
+                        'materials': analysis_result_obj.materials or [],
+                        'use_cases': analysis_result_obj.use_cases or [],
+                        'marketing_angles': analysis_result_obj.marketing_angles or [],
                         'product_name': product_info.name or '产品',
                         'product_description': product_info.description or '',
                         'analysis_timestamp': datetime.now().isoformat()
