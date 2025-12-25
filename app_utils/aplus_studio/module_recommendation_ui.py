@@ -414,8 +414,8 @@ class ModuleRecommendationUI:
             if not config:
                 continue
                 
-            reason = recommendation_reasons.get(module_type, "AI推荐此模块")
-            confidence = confidence_scores.get(module_type, 0.8)
+            reason = recommendation_reasons.get(module_type, recommendation_reasons.get(module_type.value, "AI推荐此模块"))
+            confidence = confidence_scores.get(module_type, confidence_scores.get(module_type.value, 0.8))
             
             with st.container():
                 # 模块卡片
@@ -586,8 +586,8 @@ class ModuleRecommendationUI:
             if not config:
                 continue
                 
-            reason = recommendation_reasons.get(module_type, "AI推荐此模块")
-            confidence = confidence_scores.get(module_type, 0.8)
+            reason = recommendation_reasons.get(module_type, recommendation_reasons.get(module_type.value, "AI推荐此模块"))
+            confidence = confidence_scores.get(module_type, confidence_scores.get(module_type.value, 0.8))
             
             col1, col2, col3 = st.columns([1, 5, 1])
             
@@ -674,8 +674,23 @@ class ModuleRecommendationUI:
                     module_idx = row * cols_per_row + col_idx
                     
                     if module_idx < len(alternative_modules):
-                        module_type = alternative_modules[module_idx]
-                        config = self.module_configs[module_type]
+                        module_item = alternative_modules[module_idx]
+                        
+                        # 处理模块类型（可能是字符串或ModuleType对象）
+                        if isinstance(module_item, str):
+                            try:
+                                from services.aplus_studio.models import ModuleType
+                                module_type = ModuleType(module_item)
+                            except ValueError:
+                                st.error(f"未知模块类型: {module_item}")
+                                continue
+                        else:
+                            module_type = module_item
+                        
+                        config = self.module_configs.get(module_type)
+                        if not config:
+                            st.error(f"找不到模块配置: {module_type}")
+                            continue
                         
                         with cols[col_idx]:
                             # 模块卡片展示
