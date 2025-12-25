@@ -538,17 +538,33 @@ def render_module_recommendation_step(state_manager):
             
             logger.info(f"Processing confirm_selection: {len(selected_modules)} modules, mode: {mode}")
             
-            # 保存选择结果
-            selection_data = {
-                'selected_modules': selected_modules,
-                'selection_mode': mode,
-                'selection_timestamp': datetime.now().isoformat(),
-                'total_modules': len(selected_modules)
-            }
-            
             try:
-                # 先保存模块推荐数据
-                state_manager.set_module_recommendation(selection_data)
+                # 获取现有的推荐数据
+                existing_recommendation = state_manager.get_module_recommendation()
+                
+                if existing_recommendation:
+                    # 更新现有推荐数据中的选择信息
+                    existing_recommendation['selected_modules'] = selected_modules
+                    existing_recommendation['selection_mode'] = mode
+                    existing_recommendation['selection_timestamp'] = datetime.now().isoformat()
+                    existing_recommendation['selection_confirmed'] = True
+                    
+                    # 保存更新后的推荐数据
+                    state_manager.set_module_recommendation(existing_recommendation)
+                else:
+                    # 如果没有现有推荐数据，创建新的
+                    selection_data = {
+                        'recommended_modules': selected_modules,  # 使用推荐格式
+                        'selected_modules': selected_modules,
+                        'selection_mode': mode,
+                        'selection_timestamp': datetime.now().isoformat(),
+                        'selection_confirmed': True,
+                        'total_modules': len(selected_modules),
+                        'confidence_scores': {module: 0.8 for module in selected_modules},  # 默认置信度
+                        'recommendation_reasons': {module: f"用户手动选择的{module}" for module in selected_modules}
+                    }
+                    state_manager.set_module_recommendation(selection_data)
+                
                 logger.info(f"Module recommendation saved: {len(selected_modules)} modules")
                 
                 st.success(f"✅ 已确认选择 {len(selected_modules)} 个模块！")
