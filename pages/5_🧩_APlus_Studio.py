@@ -1,7 +1,7 @@
 import streamlit as st
 import sys
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from PIL import Image
 from datetime import datetime
 import google.generativeai as genai
@@ -267,6 +267,8 @@ def render_product_analysis_step(state_manager):
                             file_id=f"uploaded_{i}",
                             filename=f"product_image_{i+1}.png",
                             file_size=len(img_bytes),
+                            format='PNG',
+                            dimensions=(pil_image.width, pil_image.height),
                             image_data=img_bytes,
                             pil_image=pil_image,
                             upload_timestamp=datetime.now(),
