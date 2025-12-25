@@ -199,9 +199,9 @@ class ModuleRecommendationUI:
             return {"action": None}
         
         # 如果已有推荐结果，显示推荐界面
-        session = self.workflow_controller.state_manager.get_current_session()
-        if session and session.module_recommendation:
-            return self._render_recommendation_results(session.module_recommendation)
+        existing_recommendation = self.workflow_controller.state_manager.get_module_recommendation()
+        if existing_recommendation:
+            return self._render_recommendation_results(existing_recommendation)
         
         # 否则显示推荐生成界面
         return self._render_recommendation_generation(analysis_result)
@@ -210,6 +210,9 @@ class ModuleRecommendationUI:
         """渲染推荐生成界面"""
         
         st.write("**🤖 AI正在分析您的产品，生成最佳模块推荐...**")
+        
+        # 调试信息
+        logger.debug(f"Rendering recommendation generation interface with analysis_result keys: {list(analysis_result.keys()) if analysis_result else 'None'}")
         
         # 显示分析摘要
         with st.expander("📋 产品分析摘要", expanded=True):
@@ -267,8 +270,19 @@ class ModuleRecommendationUI:
         # 生成推荐按钮
         col1, col2, col3 = st.columns([2, 1, 1])
         
+        # 调试信息
+        if st.checkbox("显示调试信息", value=False):
+            st.write("**调试信息:**")
+            st.write(f"- recommendation_count: {recommendation_count}")
+            st.write(f"- include_alternatives: {include_alternatives}")
+            st.write(f"- recommendation_style: {recommendation_style}")
+            st.write(f"- prioritize_simplicity: {prioritize_simplicity}")
+            st.write(f"- analysis_result keys: {list(analysis_result.keys()) if analysis_result else 'None'}")
+        
         with col1:
             if st.button("🚀 生成AI推荐", type="primary", use_container_width=True):
+                logger.debug("Generate AI recommendation button clicked")
+                st.write("🔄 按钮已点击，正在处理...")  # 临时调试信息
                 return {
                     "action": "generate_recommendation",
                     "analysis_result": analysis_result,
