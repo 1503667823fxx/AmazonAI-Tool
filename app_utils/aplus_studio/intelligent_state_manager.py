@@ -171,16 +171,27 @@ class IntelligentWorkflowStateManager:
         """获取当前会话"""
         try:
             session = st.session_state.get('intelligent_workflow_session')
+            logger.debug(f"get_current_session: session from st.session_state: {session is not None}")
+            
+            if session:
+                logger.debug(f"Found session: {session.session_id}, state: {session.current_state.value}")
             
             # 如果没有会话但有备份，尝试恢复
             if not session:
+                logger.debug("No session found, checking for backup")
                 backup_data = st.session_state.get('intelligent_workflow_backup')
                 if backup_data:
+                    logger.debug("Backup data found, attempting recovery")
                     session = self._deserialize_session(backup_data)
                     if session and self._validate_recovered_session(session):
+                        logger.info(f"Auto-recovered session from backup: {session.session_id}")
                         st.session_state.intelligent_workflow_session = session
                         self.workflow_controller.load_session(session)
                         logger.info("Auto-recovered intelligent workflow session from backup")
+                    else:
+                        logger.warning("Session recovery from backup failed")
+                else:
+                    logger.debug("No backup data available")
             
             # 验证会话完整性
             if session and not self._validate_session_integrity(session):
@@ -224,9 +235,12 @@ class IntelligentWorkflowStateManager:
         try:
             session = self.get_current_session()
             if session:
-                return session.current_state
+                current_state = session.current_state
+                logger.debug(f"get_current_state returning: {current_state.value}")
+                return current_state
             else:
                 # 如果没有会话，返回初始状态
+                logger.debug("get_current_state: no session found, returning INITIAL")
                 return WorkflowState.INITIAL
         except Exception as e:
             logger.error(f"Failed to get current workflow state: {str(e)}")
@@ -538,26 +552,42 @@ class IntelligentWorkflowStateManager:
     def transition_workflow_state(self, target_state: WorkflowState) -> bool:
         """转换工作流状态"""
         try:
+            logger.info(f"Starting workflow state transition to: {target_state.value}")
+            
             session = self.get_current_session()
             if not session:
                 logger.error("No active session for workflow state transition")
                 return False
             
+            logger.debug(f"Current session state: {session.current_state.value}")
+            logger.debug(f"Session ID: {session.session_id}")
+            
             success = self.workflow_controller.transition_to_state(target_state)
+            logger.debug(f"Workflow controller transition result: {success}")
+            
             if success:
                 # 更新会话状态
+                logger.debug("Updating session state in st.session_state")
                 st.session_state.intelligent_workflow_session = self.workflow_controller.current_session
+                
+                logger.debug("Saving session")
                 self._save_session(session)
                 
                 # 触发自动保存（如果启用）
                 if hasattr(self, 'save_on_state_change') and getattr(self, 'save_on_state_change', True):
+                    logger.debug("Creating session backup")
                     self._create_session_backup()
                     logger.debug(f"Auto-save triggered by state transition to {target_state.value}")
+                
+                logger.info(f"Workflow state transition completed successfully: {target_state.value}")
+            else:
+                logger.error(f"Workflow controller transition failed for: {target_state.value}")
             
             return success
             
         except Exception as e:
             logger.error(f"Failed to transition workflow state: {str(e)}")
+            logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
             return False
     
     def save_user_edit(self, edit_key: str, edit_value: Any):
@@ -602,10 +632,21 @@ class IntelligentWorkflowStateManager:
     def _save_session(self, session: IntelligentWorkflowSession):
         """保存会话到状态"""
         try:
+            logger.debug(f"Saving session to st.session_state: {session.session_id}")
+            logger.debug(f"Session state being saved: {session.current_state.value}")
+            
             st.session_state.intelligent_workflow_session = session
+            
+            # 验证保存是否成功
+            saved_session = st.session_state.get('intelligent_workflow_session')
+            if saved_session:
+                logger.debug(f"Session saved successfully, state: {saved_session.current_state.value}")
+            else:
+                logger.error("Session save failed - session not found in st.session_state")
             
             # 自动备份
             if self.auto_save_enabled:
+                logger.debug("Creating automatic backup")
                 self._create_session_backup()
                 
         except Exception as e:
