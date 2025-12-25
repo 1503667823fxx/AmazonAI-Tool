@@ -11,7 +11,7 @@
 # 开发模式设置
 # false: 生产模式，隐藏调试信息，提升性能
 # true: 开发模式，显示详细错误信息，便于调试
-developmentMode = false
+developmentMode = true
 
 # 数据框序列化方式
 # "legacy": 使用传统序列化方式，兼容性更好
