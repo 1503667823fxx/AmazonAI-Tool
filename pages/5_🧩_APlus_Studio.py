@@ -162,6 +162,9 @@ def render_intelligent_workflow():
     
     with col2:
         if st.button("设置为内容生成状态"):
+            from services.aplus_studio.models import WorkflowState
+            from datetime import datetime
+            
             session = st.session_state.get('intelligent_workflow_session')
             if session:
                 session.current_state = WorkflowState.CONTENT_GENERATION
@@ -198,6 +201,8 @@ def render_intelligent_workflow():
     # 渲染工作流导航
     try:
         from app_utils.aplus_studio.workflow_navigation_ui import WorkflowNavigationUI
+        from services.aplus_studio.models import WorkflowState  # 确保导入WorkflowState
+        
         nav_ui = WorkflowNavigationUI(state_manager)
         
         # 显示当前步骤和进度
