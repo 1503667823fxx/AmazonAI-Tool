@@ -759,10 +759,6 @@ class IntelligentWorkflowStateManager:
                                 ]
                             except:
                                 deserialized_recommendation[rec_key] = rec_value
-                                    ModuleType(m) for m in rec_value
-                                ]
-                            except:
-                                deserialized_recommendation[rec_key] = rec_value
                         elif rec_key in ['recommendation_reasons', 'confidence_scores'] and isinstance(rec_value, dict):
                             # 转换以字符串为键的字典为以ModuleType为键的字典
                             try:
