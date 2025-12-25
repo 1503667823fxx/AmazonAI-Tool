@@ -6,6 +6,8 @@ from PIL import Image
 from datetime import datetime
 import google.generativeai as genai
 import json
+import uuid
+import io
 
 # 添加项目根目录到路径
 sys.path.append(os.path.abspath('.'))
@@ -214,55 +216,120 @@ def render_product_analysis_step(state_manager):
             # 设置分析进度状态
             st.session_state['analysis_in_progress'] = True
             
-            # 开始分析
+            # 开始真正的AI分析
             with st.spinner("🤖 AI正在分析您的产品..."):
                 try:
-                    # 模拟分析过程
+                    # 获取产品信息和图片
+                    product_info = analysis_result['product_info']
+                    uploaded_images = product_info.uploaded_images
+                    
+                    if not uploaded_images:
+                        st.error("❌ 请先上传产品图片")
+                        st.session_state['analysis_in_progress'] = False
+                        return
+                    
+                    # 检查API配置
+                    if "GOOGLE_API_KEY" not in st.secrets and "GEMINI_API_KEY" not in st.secrets:
+                        st.session_state['analysis_in_progress'] = False
+                        st.error("❌ 未配置Gemini API密钥")
+                        st.info("💡 请在云端后台配置GOOGLE_API_KEY或GEMINI_API_KEY")
+                        st.info("🔧 配置完成后请刷新页面重试")
+                        return
+                    
+                    # 使用ProductAnalysisService进行真正的AI分析
+                    from services.aplus_studio.product_analysis_service import ProductAnalysisService
+                    
+                    analysis_service = ProductAnalysisService()
+                    
+                    # 创建进度显示
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    import time
-                    
-                    status_text.text("正在处理图片...")
+                    status_text.text("正在处理和验证图片...")
                     progress_bar.progress(0.2)
-                    time.sleep(1)
                     
-                    status_text.text("正在分析产品特征...")
-                    progress_bar.progress(0.5)
-                    time.sleep(1)
+                    # 准备图片数据
+                    from services.aplus_studio.product_analysis_service import ProductImageSet, UploadedProductImage
                     
-                    status_text.text("正在识别目标用户...")
-                    progress_bar.progress(0.8)
-                    time.sleep(1)
+                    # 转换PIL图片为UploadedProductImage格式
+                    processed_images = []
+                    for i, pil_image in enumerate(uploaded_images):
+                        # 将PIL图片转换为字节
+                        img_byte_arr = io.BytesIO()
+                        pil_image.save(img_byte_arr, format='PNG')
+                        img_bytes = img_byte_arr.getvalue()
+                        
+                        uploaded_img = UploadedProductImage(
+                            file_id=f"uploaded_{i}",
+                            filename=f"product_image_{i+1}.png",
+                            file_size=len(img_bytes),
+                            image_data=img_bytes,
+                            pil_image=pil_image,
+                            upload_timestamp=datetime.now(),
+                            validation_status=ValidationStatus.PASSED
+                        )
+                        processed_images.append(uploaded_img)
+                    
+                    # 创建图片集合
+                    image_set = ProductImageSet(
+                        set_id=str(uuid.uuid4()),
+                        images=processed_images,
+                        total_size=sum(img.file_size for img in processed_images),
+                        upload_session_id=str(uuid.uuid4())
+                    )
+                    
+                    status_text.text("正在调用AI进行产品分析...")
+                    progress_bar.progress(0.6)
+                    
+                    # 执行AI分析
+                    analysis_result_obj = analysis_service.analyze_product_images(
+                        image_set=image_set,
+                        language="zh"
+                    )
                     
                     status_text.text("正在生成分析报告...")
-                    progress_bar.progress(1.0)
-                    time.sleep(0.5)
+                    progress_bar.progress(0.9)
                     
-                    # 创建模拟分析结果
-                    product_info = analysis_result['product_info']
-                    mock_analysis_data = {
-                        'product_type': '电子产品',
-                        'target_audience': '科技爱好者和专业用户',
-                        'key_features': ['高性能', '便携设计', '多功能'],
-                        'confidence_score': 0.92,
-                        'materials': ['金属外壳', '高质量塑料'],
-                        'use_cases': ['办公', '娱乐', '专业工作'],
-                        'marketing_angles': ['性能优势', '设计美学', '实用性']
+                    # 转换分析结果为字典格式
+                    analysis_data = {
+                        'product_type': analysis_result_obj.product_category.value if analysis_result_obj.product_category else '未识别',
+                        'target_audience': analysis_result_obj.target_demographics or '未分析',
+                        'key_features': analysis_result_obj.key_selling_points or [],
+                        'confidence_score': analysis_result_obj.confidence_score,
+                        'materials': analysis_result_obj.technical_specifications.get('materials', []) if analysis_result_obj.technical_specifications else [],
+                        'use_cases': analysis_result_obj.competitive_advantages or [],
+                        'marketing_angles': analysis_result_obj.emotional_triggers or [],
+                        'product_name': product_info.name or '产品',
+                        'product_description': product_info.description or '',
+                        'analysis_timestamp': datetime.now().isoformat()
                     }
                     
+                    progress_bar.progress(1.0)
+                    status_text.text("分析完成！")
+                    
                     # 保存分析结果
-                    state_manager.set_analysis_result(mock_analysis_data)
+                    state_manager.set_analysis_result(analysis_data)
                     
                     # 清除进度状态
                     st.session_state['analysis_in_progress'] = False
                     
-                    st.success("✅ 产品分析完成！")
+                    st.success("✅ AI产品分析完成！")
                     st.rerun()
                     
                 except Exception as e:
                     st.session_state['analysis_in_progress'] = False
-                    st.error(f"分析失败: {str(e)}")
+                    st.error(f"AI分析失败: {str(e)}")
+                    
+                    # 显示详细错误信息
+                    with st.expander("🔧 错误详情", expanded=False):
+                        st.code(str(e))
+                        st.write("**可能的解决方案：**")
+                        st.write("1. 检查网络连接是否稳定")
+                        st.write("2. 确保上传的图片清晰且包含产品信息")
+                        st.write("3. 稍后重试或联系技术支持")
+                    
+                    if st.button("🔄 重新分析", type="primary"):
+                        st.rerun()
         
         elif analysis_result and analysis_result.get('status') == 'completed':
             # 保存分析结果
