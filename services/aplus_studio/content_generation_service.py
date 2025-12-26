@@ -484,31 +484,6 @@ class ContentGenerationService:
             # 构建生成提示词
             prompt = self._build_content_generation_prompt(context)
             
-            # 在Streamlit页面上显示调试信息
-            if 'st' in globals():
-                import streamlit as st
-                with st.expander(f"🔍 调试信息 - {context.module_type.value}", expanded=False):
-                    st.write("**模块类型:**", context.module_type.value)
-                    st.write("**产品类型:**", context.product_analysis.product_type)
-                    st.write("**关键特征:**", context.product_analysis.key_features)
-                    st.write("**材料信息:**", context.product_analysis.materials)
-                    st.write("**目标用户:**", context.product_analysis.target_audience)
-                    st.write("**完整提示词:**")
-                    st.code(prompt, language="text")
-            
-            # 添加调试日志 - 打印完整的提示词内容
-            logger.info(f"=== AI PROMPT DEBUG START ===")
-            logger.info(f"Module Type: {context.module_type.value}")
-            logger.info(f"Product Type: {context.product_analysis.product_type}")
-            logger.info(f"Key Features: {context.product_analysis.key_features}")
-            logger.info(f"Materials: {context.product_analysis.materials}")
-            logger.info(f"Target Audience: {context.product_analysis.target_audience}")
-            logger.info(f"Full Prompt Content:")
-            logger.info(f"--- PROMPT START ---")
-            logger.info(prompt)
-            logger.info(f"--- PROMPT END ---")
-            logger.info(f"=== AI PROMPT DEBUG END ===")
-            
             # 调用AI生成
             response = model.generate_content(
                 prompt,
@@ -518,27 +493,6 @@ class ContentGenerationService:
                     top_p=0.8,  # 添加top_p参数，进一步控制输出
                 )
             )
-            
-            # 在Streamlit页面上显示响应调试信息
-            if 'st' in globals():
-                with st.expander(f"📡 AI响应信息 - {context.module_type.value}", expanded=False):
-                    st.write("**候选结果数量:**", len(response.candidates) if response.candidates else 0)
-                    if response.candidates:
-                        candidate = response.candidates[0]
-                        st.write("**完成原因:**", candidate.finish_reason)
-                        if hasattr(candidate, 'safety_ratings') and candidate.safety_ratings:
-                            st.write("**安全评级:**")
-                            for rating in candidate.safety_ratings:
-                                st.write(f"- {rating.category}: {rating.probability}")
-            
-            # 添加响应调试日志
-            logger.info(f"=== AI RESPONSE DEBUG START ===")
-            logger.info(f"Response candidates count: {len(response.candidates) if response.candidates else 0}")
-            if response.candidates:
-                candidate = response.candidates[0]
-                logger.info(f"Finish reason: {candidate.finish_reason}")
-                logger.info(f"Safety ratings: {candidate.safety_ratings if hasattr(candidate, 'safety_ratings') else 'None'}")
-            logger.info(f"=== AI RESPONSE DEBUG END ===")
             
             # 检查响应状态
             if not response.candidates:
@@ -712,14 +666,6 @@ Content Requirements:
             cleaned_text = "产品" if any(ord(c) > 127 for c in original_text) else "product"
         
         final_text = cleaned_text[:100]  # 增加长度限制
-        
-        # 在Streamlit页面上显示文本清理信息（如果有变化）
-        if removed_words:
-            logger.debug(f"Text sanitization: '{original_text}' -> '{final_text}' (removed: {removed_words})")
-            if 'st' in globals():
-                import streamlit as st
-                if hasattr(st, '_get_script_run_ctx') and st._get_script_run_ctx():
-                    st.info(f"🧹 文本清理: '{original_text}' → '{final_text}' (移除词汇: {removed_words})")
         
         return final_text
     
