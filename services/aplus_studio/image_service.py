@@ -189,19 +189,34 @@ AMAZON A+ COMPLIANCE:
             suggestions = []
             quality_metrics = {}
             
-            # 检查尺寸
+            # 检查尺寸和宽高比
             expected_size = APLUS_IMAGE_SPECS["dimensions"]
             actual_size = image.size
             quality_metrics["dimensions"] = actual_size
             quality_metrics["expected_dimensions"] = expected_size
             
+            # 计算宽高比
+            expected_ratio = expected_size[0] / expected_size[1]  # 600/450 = 1.333...
+            actual_ratio = actual_size[0] / actual_size[1] if actual_size[1] > 0 else 1.0
+            quality_metrics["aspect_ratio"] = actual_ratio
+            quality_metrics["expected_aspect_ratio"] = expected_ratio
+            
+            # 检查宽高比是否正确（允许小的误差）
+            ratio_tolerance = 0.05  # 5% 误差容忍度
+            if abs(actual_ratio - expected_ratio) > ratio_tolerance:
+                issues.append(f"Aspect ratio {actual_ratio:.3f} differs significantly from expected {expected_ratio:.3f}")
+                suggestions.append("Adjust image composition to match 4:3 aspect ratio")
+            
+            # 如果宽高比正确但尺寸不匹配，这是可以接受的（可以自动调整）
             if actual_size != expected_size:
-                issues.append(
-                    f"Image size {actual_size} does not match required {expected_size}"
-                )
-                suggestions.append(
-                    f"Resize image to exactly {expected_size[0]}x{expected_size[1]} pixels"
-                )
+                if abs(actual_ratio - expected_ratio) <= ratio_tolerance:
+                    # 宽高比正确，只是尺寸不同，这是可以接受的
+                    suggestions.append(f"Image will be automatically resized from {actual_size} to {expected_size}")
+                    # 不将此视为严重问题
+                else:
+                    # 宽高比和尺寸都不对
+                    issues.append(f"Image size {actual_size} does not match required {expected_size} and has incorrect aspect ratio")
+                    suggestions.append(f"Resize image to exactly {expected_size[0]}x{expected_size[1]} pixels with 4:3 aspect ratio")
             
             # 检查文件大小
             file_size = len(image_data)
@@ -233,25 +248,29 @@ AMAZON A+ COMPLIANCE:
                 issues.append(f"Color mode {color_mode} may not be optimal for web display")
                 suggestions.append("Convert to RGB color mode for best compatibility")
             
-            # 计算宽高比
-            aspect_ratio = actual_size[0] / actual_size[1] if actual_size[1] > 0 else 1.0
-            expected_ratio = expected_size[0] / expected_size[1]
-            quality_metrics["aspect_ratio"] = aspect_ratio
-            quality_metrics["expected_aspect_ratio"] = expected_ratio
-            
-            if abs(aspect_ratio - expected_ratio) > 0.01:  # Allow small tolerance
-                issues.append(f"Aspect ratio {aspect_ratio:.3f} differs from expected {expected_ratio:.3f}")
-                suggestions.append("Adjust image composition to match 4:3 aspect ratio")
+            # 计算宽高比（移除重复计算）
+            # aspect_ratio 已在上面计算过了
             
             # 整体质量评分
             quality_score = 1.0
             if issues:
-                quality_score = max(0.0, 1.0 - (len(issues) * 0.2))  # Reduce score for each issue
+                # 根据问题的严重程度调整评分
+                critical_issues = [issue for issue in issues if "aspect ratio" in issue.lower() and "significantly" in issue.lower()]
+                minor_issues = [issue for issue in issues if issue not in critical_issues]
+                
+                # 严重问题（宽高比错误）扣更多分
+                quality_score -= len(critical_issues) * 0.4
+                # 轻微问题（只是尺寸需要调整）扣少量分
+                quality_score -= len(minor_issues) * 0.1
+                
+                quality_score = max(0.0, quality_score)
             
             quality_metrics["overall_quality_score"] = quality_score
             
-            # 确定验证状态
-            is_valid = len(issues) == 0
+            # 确定验证状态 - 更宽松的标准
+            # 只有严重问题（如宽高比错误）才标记为需要审查
+            critical_issues_exist = any("significantly" in issue.lower() for issue in issues)
+            is_valid = not critical_issues_exist  # 只要没有严重问题就认为有效
             validation_status = ValidationStatus.PASSED if is_valid else ValidationStatus.NEEDS_REVIEW
             
             return ValidationResult(
