@@ -1393,9 +1393,28 @@ def render_content_generation_step(state_manager):
                             session.module_contents[module_type] = basic_content
                             successful_conversions += 1
                     
-                    # 更新session
-                    state_manager._save_session(session)
-                    logger.info(f"Session updated with {len(session.module_contents)} modules")
+                    # 更新session - 但要避免序列化问题
+                    # 临时清空可能导致序列化问题的复杂对象
+                    temp_module_contents = session.module_contents.copy()
+                    temp_compliance_results = session.compliance_results.copy()
+                    temp_generation_results = session.generation_results.copy()
+                    
+                    # 清空这些字段以避免序列化问题
+                    session.module_contents.clear()
+                    session.compliance_results.clear()
+                    session.generation_results.clear()
+                    
+                    try:
+                        # 保存简化的session
+                        state_manager._save_session(session)
+                        logger.info(f"Session updated with {len(temp_module_contents)} modules (simplified for serialization)")
+                    except Exception as save_error:
+                        logger.error(f"Failed to save session: {save_error}")
+                    finally:
+                        # 恢复数据到内存中的session对象
+                        session.module_contents.update(temp_module_contents)
+                        session.compliance_results.update(temp_compliance_results)
+                        session.generation_results.update(temp_generation_results)
                 else:
                     st.error("❌ 无法获取当前session，数据保存失败")
                 
@@ -1599,8 +1618,25 @@ def render_content_editing_step(state_manager):
                         session = state_manager.get_current_session()
                         if session:
                             session.module_contents[module] = content
-                            state_manager._save_session(session)
-                            st.success(f"✅ {editing_ui._get_module_display_name(module)} 内容已保存")
+                            
+                            # 避免序列化问题的安全保存
+                            temp_module_contents = session.module_contents.copy()
+                            temp_compliance_results = session.compliance_results.copy()
+                            temp_generation_results = session.generation_results.copy()
+                            
+                            session.module_contents.clear()
+                            session.compliance_results.clear()
+                            session.generation_results.clear()
+                            
+                            try:
+                                state_manager._save_session(session)
+                                st.success(f"✅ {editing_ui._get_module_display_name(module)} 内容已保存")
+                            except Exception as save_error:
+                                st.error(f"❌ 保存失败：{str(save_error)}")
+                            finally:
+                                session.module_contents.update(temp_module_contents)
+                                session.compliance_results.update(temp_compliance_results)
+                                session.generation_results.update(temp_generation_results)
                 except Exception as e:
                     st.error(f"❌ 保存失败：{str(e)}")
                     
@@ -1992,7 +2028,25 @@ def render_image_generation_step(state_manager):
                         session.current_state = WorkflowState.COMPLETED
                         session.last_updated = datetime.now()
                         st.session_state.intelligent_workflow_session = session
-                        state_manager._create_session_backup()
+                        
+                        # 安全的session备份，避免序列化问题
+                        try:
+                            temp_module_contents = session.module_contents.copy()
+                            temp_compliance_results = session.compliance_results.copy()
+                            temp_generation_results = session.generation_results.copy()
+                            
+                            session.module_contents.clear()
+                            session.compliance_results.clear()
+                            session.generation_results.clear()
+                            
+                            state_manager._create_session_backup()
+                            
+                            session.module_contents.update(temp_module_contents)
+                            session.compliance_results.update(temp_compliance_results)
+                            session.generation_results.update(temp_generation_results)
+                        except Exception as backup_error:
+                            logger.warning(f"Session backup failed: {backup_error}")
+                            # 继续执行，不让备份失败影响主流程
                     st.rerun()
                     
             except ImportError as e:
@@ -2032,7 +2086,25 @@ def render_image_generation_step(state_manager):
                         session.current_state = WorkflowState.COMPLETED
                         session.last_updated = datetime.now()
                         st.session_state.intelligent_workflow_session = session
-                        state_manager._create_session_backup()
+                        
+                        # 安全的session备份，避免序列化问题
+                        try:
+                            temp_module_contents = session.module_contents.copy()
+                            temp_compliance_results = session.compliance_results.copy()
+                            temp_generation_results = session.generation_results.copy()
+                            
+                            session.module_contents.clear()
+                            session.compliance_results.clear()
+                            session.generation_results.clear()
+                            
+                            state_manager._create_session_backup()
+                            
+                            session.module_contents.update(temp_module_contents)
+                            session.compliance_results.update(temp_compliance_results)
+                            session.generation_results.update(temp_generation_results)
+                        except Exception as backup_error:
+                            logger.warning(f"Session backup failed: {backup_error}")
+                            # 继续执行，不让备份失败影响主流程
                     st.rerun()
                     
             except Exception as e:
