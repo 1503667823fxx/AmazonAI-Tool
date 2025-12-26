@@ -488,7 +488,7 @@ class ContentGenerationService:
             response = model.generate_content(
                 prompt,
                 generation_config=genai.types.GenerationConfig(
-                    temperature=0.4,  # 适中的创造性
+                    temperature=0.8,  # 提高创造性，增加内容多样性
                     max_output_tokens=1500,
                 )
             )
