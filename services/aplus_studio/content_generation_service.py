@@ -518,9 +518,9 @@ class ContentGenerationService:
             return content
             
         except Exception as e:
-            logger.error(f"AI content generation failed: {str(e)}")
+            logger.warning(f"AI content generation failed for {context.module_type.value}: {str(e)}")
             # 回退到模板生成
-            logger.info("Falling back to template generation")
+            logger.info(f"Falling back to template generation for {context.module_type.value}")
             return self._generate_with_template(context)
     
     def _build_content_generation_prompt(self, context: GenerationContext) -> str:
