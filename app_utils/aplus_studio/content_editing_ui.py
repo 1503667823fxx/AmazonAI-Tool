@@ -639,7 +639,7 @@ class ContentEditingUI:
                             st.image(uploaded_file, width=200)
                             st.success("图片已上传")
                     
-                    elif request.material_type.value == "TEXT":
+                    elif material_type_str == "TEXT":
                         text_input = st.text_area(
                             "输入文本内容",
                             placeholder="请输入相关文本内容...",
@@ -649,7 +649,7 @@ class ContentEditingUI:
                         if text_input:
                             st.success("文本已输入")
                     
-                    elif request.material_type.value == "DOCUMENT":
+                    elif material_type_str == "DOCUMENT":
                         uploaded_doc = st.file_uploader(
                             "上传文档",
                             type=["pdf", "doc", "docx", "txt"],
