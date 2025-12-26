@@ -1147,6 +1147,7 @@ def render_content_generation_step(state_manager):
         with col2:
             if st.button("📝 继续到内容编辑", type="primary", use_container_width=True):
                 # 清除URL参数并设置状态
+                from services.aplus_studio.models import WorkflowState
                 st.query_params.clear()
                 session = state_manager.get_current_session()
                 if session:
@@ -1310,6 +1311,7 @@ def render_content_generation_step(state_manager):
                 
                 if st.button("📝 继续到内容编辑", type="primary", use_container_width=True):
                     # 清除URL参数并设置状态
+                    from services.aplus_studio.models import WorkflowState
                     st.query_params.clear()
                     session = state_manager.get_current_session()
                     if session:
