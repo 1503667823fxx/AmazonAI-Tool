@@ -1512,6 +1512,31 @@ def render_content_editing_step(state_manager):
                 # 审核通过，继续到下一步
                 st.success("✅ 内容审核通过！")
                 
+                # 保存最终内容
+                try:
+                    session = state_manager.get_current_session()
+                    if session and session.module_contents:
+                        # 将module_contents转换为final_content格式并保存
+                        final_content = {}
+                        for module_type, content in session.module_contents.items():
+                            final_content[module_type] = {
+                                'title': getattr(content, 'title', ''),
+                                'description': getattr(content, 'description', ''),
+                                'key_points': getattr(content, 'key_points', []),
+                                'generated_text': getattr(content, 'generated_text', {}),
+                                'material_requests': getattr(content, 'material_requests', [])
+                            }
+                        
+                        state_manager.set_final_content(final_content)
+                        logger.info(f"Final content saved with {len(final_content)} modules")
+                    else:
+                        st.error("❌ 没有找到内容数据")
+                        return
+                except Exception as e:
+                    st.error(f"❌ 保存最终内容失败：{str(e)}")
+                    logger.error(f"Failed to save final content: {str(e)}")
+                    return
+                
                 # 清除URL参数并设置状态
                 from services.aplus_studio.models import WorkflowState
                 st.query_params.clear()
@@ -1672,12 +1697,89 @@ def render_image_generation_step(state_manager):
     st.subheader("🖼️ 第六步：图片生成")
     st.markdown("AI正在为您生成专业的A+模块图片")
     
+    # 添加调试信息
+    with st.expander("🔍 调试信息", expanded=False):
+        session = state_manager.get_current_session()
+        if session:
+            st.write(f"**Session ID**: {session.session_id}")
+            st.write(f"**当前状态**: {session.current_state}")
+            st.write(f"**Module Contents**: {len(session.module_contents) if session.module_contents else 0} 个模块")
+            if session.module_contents:
+                for module_type, content in session.module_contents.items():
+                    st.write(f"  - {module_type.value}: {getattr(content, 'title', 'No title')}")
+            
+            final_content = state_manager.get_final_content()
+            st.write(f"**Final Content**: {'存在' if final_content else '不存在'}")
+            if final_content:
+                st.write(f"  - 模块数量: {len(final_content)}")
+            
+            style_theme = state_manager.get_style_theme()
+            st.write(f"**Style Theme**: {'存在' if style_theme else '不存在'}")
+            if style_theme:
+                st.write(f"  - 主题名称: {style_theme.get('theme_name', 'Unknown')}")
+        else:
+            st.write("**Session**: 不存在")
+    
     # 检查前置条件
     final_content = state_manager.get_final_content()
     style_theme = state_manager.get_style_theme()
     
-    if not final_content or not style_theme:
-        st.warning("⚠️ 请先完成内容编辑和风格选择")
+    # 如果没有final_content但有module_contents，尝试自动转换
+    if not final_content:
+        try:
+            session = state_manager.get_current_session()
+            if session and session.module_contents:
+                st.info("🔄 正在准备内容数据...")
+                
+                # 将module_contents转换为final_content格式
+                final_content = {}
+                for module_type, content in session.module_contents.items():
+                    final_content[module_type] = {
+                        'title': getattr(content, 'title', ''),
+                        'description': getattr(content, 'description', ''),
+                        'key_points': getattr(content, 'key_points', []),
+                        'generated_text': getattr(content, 'generated_text', {}),
+                        'material_requests': getattr(content, 'material_requests', [])
+                    }
+                
+                # 保存转换后的final_content
+                state_manager.set_final_content(final_content)
+                st.success(f"✅ 内容数据已准备完成 ({len(final_content)} 个模块)")
+                logger.info(f"Auto-converted module_contents to final_content with {len(final_content)} modules")
+            else:
+                st.warning("⚠️ 请先完成内容编辑")
+                if st.button("🔙 返回内容编辑"):
+                    # 返回内容编辑步骤
+                    from services.aplus_studio.models import WorkflowState
+                    st.query_params.clear()
+                    session = state_manager.get_current_session()
+                    if session:
+                        session.current_state = WorkflowState.CONTENT_EDITING
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                        state_manager._create_session_backup()
+                    st.rerun()
+                return
+        except Exception as e:
+            st.error(f"❌ 内容数据转换失败：{str(e)}")
+            logger.error(f"Failed to convert module_contents to final_content: {str(e)}")
+            return
+    
+    # 检查风格主题
+    if not style_theme:
+        st.warning("⚠️ 请先完成风格选择")
+        if st.button("🔙 返回风格选择"):
+            # 返回风格选择步骤
+            from services.aplus_studio.models import WorkflowState
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = WorkflowState.STYLE_SELECTION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+                state_manager._create_session_backup()
+            st.rerun()
+        return
         return
     
     # 显示生成配置
