@@ -659,7 +659,7 @@ class ContentEditingUI:
                     material_type_str = request.material_type.value if hasattr(request.material_type, 'value') else str(request.material_type)
                     
                     # 根据素材类型显示不同的上传界面
-                    if material_type_str == "IMAGE":
+                    if material_type_str.lower() == "image":
                         st.markdown("🖼️ **上传图片文件**")
                         uploaded_file = st.file_uploader(
                             "选择图片文件",
@@ -678,7 +678,7 @@ class ContentEditingUI:
                         else:
                             st.info("👆 请点击上方按钮选择图片文件")
                     
-                    elif material_type_str == "TEXT":
+                    elif material_type_str.lower() == "text":
                         st.markdown("📝 **输入文本内容**")
                         text_input = st.text_area(
                             "文本内容",
@@ -694,7 +694,7 @@ class ContentEditingUI:
                         else:
                             st.info("👆 请在上方文本框中输入内容")
                     
-                    elif material_type_str == "DOCUMENT":
+                    elif material_type_str.lower() == "document":
                         st.markdown("📄 **上传文档文件**")
                         uploaded_doc = st.file_uploader(
                             "选择文档文件",
@@ -715,6 +715,19 @@ class ContentEditingUI:
                     else:
                         st.markdown(f"📎 **{material_type_str} 类型素材**")
                         st.info(f"请提供 {material_type_str} 类型的素材")
+                        
+                        # 为未知类型提供通用上传器
+                        st.markdown("**通用文件上传**")
+                        uploaded_generic = st.file_uploader(
+                            f"上传 {material_type_str} 类型文件",
+                            key=f"material_{module_type.value}_{i}_generic",
+                            help=f"上传与 {material_type_str} 相关的文件"
+                        )
+                        
+                        if uploaded_generic:
+                            st.success(f"✅ 文件已上传: {uploaded_generic.name}")
+                            file_size = len(uploaded_generic.getvalue()) / 1024  # KB
+                            st.caption(f"文件大小: {file_size:.1f} KB")
                     
                     # 跳过选项
                     st.markdown("---")
