@@ -1274,22 +1274,15 @@ def render_content_generation_step(state_manager):
                 progress_bar.progress(0.8)
                 status_text.text("正在处理生成结果...")
                 
-                # 添加调试信息
-                st.info(f"🔍 批量生成结果: 共{len(batch_results)}个模块")
-                for module_type, content in batch_results.items():
-                    st.write(f"- {module_type.value}: {content.title}")
-                
                 # 转换结果格式并保存到session.module_contents
                 session = state_manager.get_current_session()
                 if session:
-                    st.info(f"📝 当前session存在，开始保存数据...")
                     from services.aplus_studio.intelligent_workflow import ModuleContent, MaterialRequest
                     from services.aplus_studio.models import Priority
                     
                     # 确保selected_modules包含所有生成内容的模块
                     if not session.selected_modules:
                         session.selected_modules = list(batch_results.keys())
-                        st.info(f"🔧 修复selected_modules: {[m.value for m in session.selected_modules]}")
                     
                     successful_conversions = 0
                     for module_type, intelligent_content in batch_results.items():
@@ -1344,7 +1337,6 @@ def render_content_generation_step(state_manager):
                             logger.info(f"Successfully saved content for module: {module_type.value}")
                             
                         except Exception as module_error:
-                            st.error(f"❌ 转换模块 {module_type.value} 时出错: {module_error}")
                             logger.error(f"Failed to convert content for {module_type.value}: {module_error}")
                             # 创建一个基本的ModuleContent
                             basic_content = ModuleContent(
@@ -1361,8 +1353,6 @@ def render_content_generation_step(state_manager):
                     
                     # 更新session
                     state_manager._save_session(session)
-                    st.success(f"✅ 成功保存 {successful_conversions} 个模块到session")
-                    st.info(f"📊 Session中现有模块数量: {len(session.module_contents)}")
                     logger.info(f"Session updated with {len(session.module_contents)} modules")
                 else:
                     st.error("❌ 无法获取当前session，数据保存失败")
