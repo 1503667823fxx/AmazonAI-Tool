@@ -192,9 +192,16 @@ class ContentEditingUI:
             "🔍 审核模式": EditMode.REVIEW_MODE
         }
         
+        # 检查session state中的模式设置
+        if 'content_editing_mode' in st.session_state and st.session_state.content_editing_mode == 'edit':
+            default_index = 1  # 编辑模式
+        else:
+            default_index = 0  # 预览模式
+        
         selected_mode = st.radio(
             "选择模式",
             list(mode_options.keys()),
+            index=default_index,
             horizontal=True,
             help="预览：查看生成内容\n编辑：修改和完善内容\n审核：检查合规性和质量",
             label_visibility="collapsed"
@@ -607,8 +614,11 @@ class ContentEditingUI:
                 
                 with col1:
                     st.write("**需求详情**")
-                    st.write(f"类型: {request.material_type.value}")
-                    st.write(f"重要性: {request.importance.value}")
+                    # 安全地访问属性，处理字符串和枚举两种情况
+                    material_type_display = request.material_type.value if hasattr(request.material_type, 'value') else str(request.material_type)
+                    importance_display = request.importance.value if hasattr(request.importance, 'value') else str(request.importance)
+                    st.write(f"类型: {material_type_display}")
+                    st.write(f"重要性: {importance_display}")
                     st.write(request.description)
                     
                     if request.help_text:
@@ -617,7 +627,8 @@ class ContentEditingUI:
                 with col2:
                     st.write("**素材上传**")
                     
-                    if request.material_type.value == "IMAGE":
+                    material_type_str = request.material_type.value if hasattr(request.material_type, 'value') else str(request.material_type)
+                    if material_type_str == "IMAGE":
                         uploaded_file = st.file_uploader(
                             "上传图片",
                             type=["jpg", "jpeg", "png", "webp"],
