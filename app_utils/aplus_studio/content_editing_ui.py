@@ -78,12 +78,24 @@ class ContentEditingUI:
         # 检查前置条件
         session = self.workflow_controller.state_manager.get_current_session()
         
+        # 添加调试信息
+        st.info(f"🔍 ContentEditingUI调试信息:")
+        st.write(f"- Session存在: {session is not None}")
+        if session:
+            st.write(f"- Selected modules: {len(session.selected_modules) if session.selected_modules else 0}")
+            st.write(f"- Module contents: {len(session.module_contents) if session.module_contents else 0}")
+            if session.module_contents:
+                st.write("- 模块内容详情:")
+                for module_type, content in session.module_contents.items():
+                    st.write(f"  - {module_type.value}: {content.title}")
+        
         if not session or not session.selected_modules:
             st.warning("⚠️ 请先完成模块选择")
             return {"action": None}
         
         # 如果内容还未生成，显示生成界面
         if not session.module_contents or len(session.module_contents) == 0:
+            st.warning("⚠️ 请先完成内容生成")
             return self._render_content_generation_interface()
         
         # 显示内容编辑界面
