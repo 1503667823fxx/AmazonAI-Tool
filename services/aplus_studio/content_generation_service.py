@@ -531,77 +531,63 @@ class ContentGenerationService:
         
         # 清理和过滤产品信息，避免敏感内容
         safe_product_type = self._sanitize_text(analysis.product_type)
-        safe_key_features = [self._sanitize_text(f) for f in analysis.key_features[:3]]  # 限制数量
-        safe_materials = [self._sanitize_text(m) for m in analysis.materials[:3]]  # 限制数量
+        safe_key_features = [self._sanitize_text(f) for f in analysis.key_features[:2]]  # 进一步限制数量
+        safe_materials = [self._sanitize_text(m) for m in analysis.materials[:2]]  # 进一步限制数量
         safe_target_audience = self._sanitize_text(analysis.target_audience)
-        safe_use_cases = [self._sanitize_text(u) for u in analysis.use_cases[:3]]  # 限制数量
         
-        # 基础提示词 - 使用更安全的表达
+        # 使用更简单和安全的提示词
         if language == "zh":
-            base_prompt = f"""请为{safe_product_type}创建{self._get_module_display_name(module_type, language)}模块的产品介绍内容。
+            base_prompt = f"""请为{safe_product_type}创建产品介绍内容。
 
-产品基本信息：
-- 产品类型：{safe_product_type}
-- 主要特点：{', '.join(safe_key_features) if safe_key_features else '待补充'}
-- 材质信息：{', '.join(safe_materials) if safe_materials else '待补充'}
-- 适用人群：{safe_target_audience if safe_target_audience else '一般用户'}
-- 应用场景：{', '.join(safe_use_cases) if safe_use_cases else '日常使用'}
+基本信息：
+- 产品：{safe_product_type}
+- 特点：{', '.join(safe_key_features) if safe_key_features else '实用功能'}
+- 材质：{', '.join(safe_materials) if safe_materials else '优质材料'}
+- 用户：{safe_target_audience if safe_target_audience else '用户'}
 
-请以JSON格式返回内容，包含以下字段：
+请返回JSON格式：
 {{
-  "title": "模块标题",
-  "description": "模块描述",
-  "key_points": ["特点1", "特点2", "特点3", "特点4"],
+  "title": "产品标题",
+  "description": "产品描述",
+  "key_points": ["特点1", "特点2", "特点3"],
   "sections": {{
     "main_content": "主要内容",
     "highlight": "重点信息",
-    "summary": "内容总结"
+    "summary": "总结"
   }}
 }}
 
-内容创建要求：
-1. 内容客观、准确，避免夸大表述
-2. 重点介绍产品的实用功能和特性
-3. 使用专业但易懂的语言
-4. 内容简洁明了，信息丰富
-5. 确保内容与{self._get_module_display_name(module_type, language)}主题相关
-
-请返回标准JSON格式。"""
+要求：
+1. 内容客观准确
+2. 语言简洁明了
+3. 重点介绍功能
+4. 返回标准JSON格式"""
         else:
-            base_prompt = f"""Please create product introduction content for the {self._get_module_display_name(module_type, language)} module for {safe_product_type}.
+            base_prompt = f"""Please create product introduction content for {safe_product_type}.
 
-Basic Product Information:
-- Product Type: {safe_product_type}
-- Key Features: {', '.join(safe_key_features) if safe_key_features else 'To be specified'}
-- Materials: {', '.join(safe_materials) if safe_materials else 'To be specified'}
-- Target Users: {safe_target_audience if safe_target_audience else 'General users'}
-- Use Cases: {', '.join(safe_use_cases) if safe_use_cases else 'Daily use'}
+Basic Information:
+- Product: {safe_product_type}
+- Features: {', '.join(safe_key_features) if safe_key_features else 'Practical functions'}
+- Materials: {', '.join(safe_materials) if safe_materials else 'Quality materials'}
+- Users: {safe_target_audience if safe_target_audience else 'Users'}
 
-Please return content in JSON format with the following fields:
+Please return JSON format:
 {{
-  "title": "Module Title",
-  "description": "Module Description", 
-  "key_points": ["Feature 1", "Feature 2", "Feature 3", "Feature 4"],
+  "title": "Product Title",
+  "description": "Product Description", 
+  "key_points": ["Feature 1", "Feature 2", "Feature 3"],
   "sections": {{
     "main_content": "Main Content",
     "highlight": "Key Information",
-    "summary": "Content Summary"
+    "summary": "Summary"
   }}
 }}
 
-Content Creation Requirements:
-1. Content should be objective and accurate, avoid exaggeration
-2. Focus on practical functions and characteristics
-3. Use professional yet understandable language
-4. Content should be concise and informative
-5. Ensure content is relevant to {self._get_module_display_name(module_type, language)} theme
-
-Please return standard JSON format."""
-        
-        # 添加模块特定要求
-        module_specific_prompt = self._get_module_specific_prompt(module_type, language)
-        if module_specific_prompt:
-            base_prompt += f"\n\n补充要求：{module_specific_prompt}"
+Requirements:
+1. Objective and accurate content
+2. Clear and concise language
+3. Focus on functionality
+4. Return standard JSON format"""
         
         return base_prompt
     
@@ -612,21 +598,29 @@ Please return standard JSON format."""
         
         # 移除可能敏感的词汇
         sensitive_words = [
-            "营销", "推广", "销售", "广告", "宣传",
-            "marketing", "promotion", "advertising", "sales",
-            "最好", "最佳", "第一", "顶级", "完美",
-            "best", "perfect", "top", "ultimate", "supreme"
+            "营销", "推广", "销售", "广告", "宣传", "竞争", "对手", "击败",
+            "marketing", "promotion", "advertising", "sales", "compete", "beat",
+            "最好", "最佳", "第一", "顶级", "完美", "无敌", "超越",
+            "best", "perfect", "top", "ultimate", "supreme", "unbeatable",
+            "痛点", "问题", "缺陷", "不足", "劣势", "弱点",
+            "pain", "problem", "defect", "weakness", "disadvantage",
+            "赚钱", "盈利", "利润", "收益", "投资", "回报",
+            "money", "profit", "investment", "return", "revenue"
         ]
         
-        cleaned_text = text
+        cleaned_text = text.lower()
         for word in sensitive_words:
-            cleaned_text = cleaned_text.replace(word, "")
+            cleaned_text = cleaned_text.replace(word.lower(), "")
         
         # 清理多余的空格和标点
         cleaned_text = ' '.join(cleaned_text.split())
-        cleaned_text = cleaned_text.strip(" ,-，、")
+        cleaned_text = cleaned_text.strip(" ,-，、。！？")
         
-        return cleaned_text if cleaned_text else "通用产品"
+        # 如果清理后为空，返回通用词汇
+        if not cleaned_text or len(cleaned_text) < 2:
+            return "产品" if any(ord(c) > 127 for c in text) else "product"
+        
+        return cleaned_text[:50]  # 限制长度
     
     def _get_module_display_name(self, module_type: ModuleType, language: str) -> str:
         """获取模块显示名称"""
