@@ -394,7 +394,7 @@ class ContentGenerationService:
         
         return requirements
     
-    @performance_monitor("generate_module_content", cache_key_params={"context": 0}, cache_ttl=1800)
+    # @performance_monitor("generate_module_content", cache_key_params={"context.module_type": 0, "context.language": 1}, cache_ttl=1800)
     @error_handler("generate_module_content", max_retries=3, enable_recovery=True)
     def generate_module_content(self, context: GenerationContext) -> IntelligentModuleContent:
         """生成模块内容
