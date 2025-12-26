@@ -146,6 +146,17 @@ def render_intelligent_workflow():
                 session.current_state = WorkflowState.CONTENT_GENERATION
                 session.last_updated = datetime.now()
                 st.session_state.intelligent_workflow_session = session
+        elif url_step == "content_editing":
+            from services.aplus_studio.models import WorkflowState
+            logger.info("URL parameter indicates content_editing step")
+            current_state = WorkflowState.CONTENT_EDITING
+            
+            # 确保session状态也是正确的
+            session = state_manager.get_current_session()
+            if session and session.current_state != WorkflowState.CONTENT_EDITING:
+                session.current_state = WorkflowState.CONTENT_EDITING
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
         
         logger.info(f"Rendering intelligent workflow, current state: {current_state.value}")
         
@@ -1095,50 +1106,152 @@ def render_content_generation_step(state_manager):
     if st.button("🤖 开始AI内容生成", type="primary", use_container_width=True):
         with st.spinner("AI正在为您生成专业内容..."):
             try:
-                # 模拟内容生成过程
+                # 检查API配置
+                if "GOOGLE_API_KEY" not in st.secrets and "GEMINI_API_KEY" not in st.secrets:
+                    st.error("❌ 未配置Gemini API密钥")
+                    st.info("💡 请在云端后台配置GOOGLE_API_KEY或GEMINI_API_KEY")
+                    return
+                
+                # 获取产品分析结果
+                analysis_result = state_manager.get_analysis_result()
+                if not analysis_result:
+                    st.error("❌ 缺少产品分析结果")
+                    return
+                
+                # 使用现有的内容生成服务
+                from services.aplus_studio.content_generation_service import ContentGenerationService, GenerationContext
+                from services.aplus_studio.intelligent_workflow import ProductAnalysis
+                from services.aplus_studio.models import ProductCategory
+                
+                # 创建内容生成服务实例
+                content_service = ContentGenerationService()
+                
+                # 转换分析结果为ProductAnalysis对象
+                try:
+                    product_category = ProductCategory(analysis_result.get('product_type', 'ELECTRONICS'))
+                except ValueError:
+                    product_category = ProductCategory.ELECTRONICS
+                
+                product_analysis = ProductAnalysis(
+                    product_category=product_category,
+                    target_audience=analysis_result.get('target_audience', ''),
+                    key_features=analysis_result.get('key_features', []),
+                    confidence_score=analysis_result.get('confidence_score', 0.8),
+                    materials=analysis_result.get('materials', []),
+                    use_cases=analysis_result.get('use_cases', []),
+                    marketing_angles=analysis_result.get('marketing_angles', [])
+                )
+                
+                # 批量生成内容
                 progress_bar = st.progress(0)
                 status_text = st.empty()
-                
-                for i, module in enumerate(selected_modules):
-                    # 获取模块名称用于显示
-                    if isinstance(module, str):
-                        try:
-                            module_type = ModuleType(module)
-                            module_name = module_configs.get(module_type, {"name": module})["name"]
-                        except ValueError:
-                            module_name = str(module)
-                    else:
-                        module_name = module_configs.get(module, {"name": str(module)})["name"]
-                    
-                    status_text.text(f"正在生成 {module_name} 内容...")
-                    progress_bar.progress((i + 1) / len(selected_modules))
-                    time.sleep(1)  # 模拟生成时间
-                
-                # 保存生成的内容（模拟）
                 generated_content = {}
+                
+                contexts = []
                 for module in selected_modules:
+                    # 处理模块类型
                     if isinstance(module, str):
                         try:
                             module_type = ModuleType(module)
-                            module_name = module_configs.get(module_type, {"name": module})["name"]
                         except ValueError:
-                            module_name = str(module)
+                            continue
                     else:
-                        module_name = module_configs.get(module, {"name": str(module)})["name"]
+                        module_type = module
                     
-                    generated_content[str(module)] = {
-                        'title': f'{module_name}标题',
-                        'description': f'{module_name}的详细描述内容...',
-                        'key_points': [f'{module_name}卖点1', f'{module_name}卖点2']
+                    # 创建生成上下文
+                    context = GenerationContext(
+                        product_analysis=product_analysis,
+                        module_type=module_type,
+                        language="zh",
+                        style_preferences={"tone": "professional", "length": "medium"}
+                    )
+                    contexts.append(context)
+                
+                # 使用批量生成方法
+                status_text.text("正在调用AI生成服务...")
+                progress_bar.progress(0.2)
+                
+                # 调用现有的批量内容生成服务
+                batch_results = content_service.generate_content_for_multiple_modules(
+                    contexts=contexts,
+                    enable_compliance_check=True
+                )
+                
+                progress_bar.progress(0.8)
+                status_text.text("正在处理生成结果...")
+                
+                # 转换结果格式
+                for module_type, intelligent_content in batch_results.items():
+                    generated_content[str(module_type)] = {
+                        'title': intelligent_content.title,
+                        'description': intelligent_content.description,
+                        'key_points': intelligent_content.key_points,
+                        'generated_text': intelligent_content.generated_text,
+                        'material_requests': [req.to_dict() for req in intelligent_content.material_requests] if intelligent_content.material_requests else []
                     }
                 
+                # 保存生成的内容
                 state_manager.set_generated_content(generated_content)
                 
-                st.success("✅ 内容生成完成！")
+                progress_bar.progress(1.0)
+                status_text.text("内容生成完成！")
+                st.success("✅ AI内容生成完成！")
+                
+                # 显示生成的内容预览
+                with st.expander("📋 生成内容预览", expanded=True):
+                    for module_key, content in generated_content.items():
+                        st.write(f"**{content['title']}**")
+                        st.write(content['description'])
+                        if content['key_points']:
+                            st.write("核心卖点：")
+                            for point in content['key_points']:
+                                st.write(f"• {point}")
+                        
+                        # 显示素材需求
+                        if content.get('material_requests'):
+                            st.write("📸 素材需求：")
+                            for req in content['material_requests']:
+                                st.write(f"• {req.get('description', '素材需求')}")
+                        
+                        st.markdown("---")
                 
                 if st.button("📝 继续到内容编辑", type="primary", use_container_width=True):
-                    state_manager.transition_workflow_state(WorkflowState.CONTENT_EDITING)
-                    st.rerun()
+                    # 使用URL参数方法进行状态转换
+                    session = state_manager.get_current_session()
+                    if session:
+                        from services.aplus_studio.models import WorkflowState
+                        session.current_state = WorkflowState.CONTENT_EDITING
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                        state_manager._create_session_backup()
+                        
+                        # 使用URL参数强制跳转
+                        st.query_params.update({"step": "content_editing", "t": str(int(datetime.now().timestamp()))})
+                        st.rerun()
+                        
+            except Exception as e:
+                st.error(f"内容生成失败: {str(e)}")
+                logger.error(f"Content generation failed: {str(e)}")
+                
+                # 显示详细错误信息
+                with st.expander("🔧 错误详情", expanded=False):
+                    st.code(str(e))
+                    st.write("**可能的解决方案：**")
+                    st.write("1. 检查网络连接是否稳定")
+                    st.write("2. 确保API密钥配置正确")
+                    st.write("3. 稍后重试或联系技术支持")
+                    # 使用URL参数方法进行状态转换
+                    session = state_manager.get_current_session()
+                    if session:
+                        from services.aplus_studio.models import WorkflowState
+                        session.current_state = WorkflowState.CONTENT_EDITING
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                        state_manager._create_session_backup()
+                        
+                        # 使用URL参数强制跳转
+                        st.query_params.update({"step": "content_editing", "t": str(int(datetime.now().timestamp()))})
+                        st.rerun()
                     
             except Exception as e:
                 st.error(f"内容生成失败: {str(e)}")
