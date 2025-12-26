@@ -111,6 +111,25 @@ def render_intelligent_workflow():
     st.header("🤖 A+ 智能工作流")
     st.caption("AI驱动的端到端A+页面创建解决方案")
     
+    # 紧急重置按钮
+    with st.sidebar:
+        st.markdown("---")
+        st.subheader("🚨 紧急控制")
+        if st.button("🔄 重置工作流", type="secondary"):
+            # 清除所有URL参数
+            st.query_params.clear()
+            # 清除会话状态
+            keys_to_clear = [k for k in st.session_state.keys() if 'intelligent' in k.lower()]
+            for key in keys_to_clear:
+                del st.session_state[key]
+            st.success("✅ 工作流已重置")
+            st.rerun()
+        
+        if st.button("🗑️ 清除URL参数", type="secondary"):
+            st.query_params.clear()
+            st.success("✅ URL参数已清除")
+            st.rerun()
+    
     # 初始化智能工作流状态管理器
     if 'intelligent_state_manager' not in st.session_state:
         try:
@@ -133,30 +152,33 @@ def render_intelligent_workflow():
         # 显示当前步骤和进度
         current_state = state_manager.get_current_state()
         
-        # 检查URL参数是否指定了特定步骤
+        # 检查URL参数是否指定了特定步骤 - 但要验证合理性
         url_step = st.query_params.get("step")
-        if url_step == "content_generation":
-            from services.aplus_studio.models import WorkflowState
-            logger.info("URL parameter indicates content_generation step")
-            current_state = WorkflowState.CONTENT_GENERATION
-            
-            # 确保session状态也是正确的
-            session = state_manager.get_current_session()
-            if session and session.current_state != WorkflowState.CONTENT_GENERATION:
-                session.current_state = WorkflowState.CONTENT_GENERATION
-                session.last_updated = datetime.now()
-                st.session_state.intelligent_workflow_session = session
-        elif url_step == "content_editing":
-            from services.aplus_studio.models import WorkflowState
-            logger.info("URL parameter indicates content_editing step")
-            current_state = WorkflowState.CONTENT_EDITING
-            
-            # 确保session状态也是正确的
-            session = state_manager.get_current_session()
-            if session and session.current_state != WorkflowState.CONTENT_EDITING:
-                session.current_state = WorkflowState.CONTENT_EDITING
-                session.last_updated = datetime.now()
-                st.session_state.intelligent_workflow_session = session
+        if url_step and current_state != WorkflowState.INITIAL:  # 只有在非初始状态时才应用URL参数
+            if url_step == "content_generation" and current_state in [WorkflowState.MODULE_RECOMMENDATION, WorkflowState.CONTENT_GENERATION]:
+                logger.info("URL parameter indicates content_generation step")
+                current_state = WorkflowState.CONTENT_GENERATION
+                
+                # 确保session状态也是正确的
+                session = state_manager.get_current_session()
+                if session and session.current_state != WorkflowState.CONTENT_GENERATION:
+                    session.current_state = WorkflowState.CONTENT_GENERATION
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+            elif url_step == "content_editing" and current_state in [WorkflowState.CONTENT_GENERATION, WorkflowState.CONTENT_EDITING]:
+                logger.info("URL parameter indicates content_editing step")
+                current_state = WorkflowState.CONTENT_EDITING
+                
+                # 确保session状态也是正确的
+                session = state_manager.get_current_session()
+                if session and session.current_state != WorkflowState.CONTENT_EDITING:
+                    session.current_state = WorkflowState.CONTENT_EDITING
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+            else:
+                # 无效的URL参数，清除它
+                st.query_params.clear()
+                logger.warning(f"Invalid URL parameter {url_step} for current state {current_state}, cleared")
         
         logger.info(f"Rendering intelligent workflow, current state: {current_state.value}")
         
@@ -474,7 +496,13 @@ def render_module_recommendation_step(state_manager):
         if not analysis_result:
             st.warning("⚠️ 请先完成产品分析")
             if st.button("🔍 返回产品分析"):
-                state_manager.transition_workflow_state(WorkflowState.PRODUCT_ANALYSIS)
+                # 清除URL参数并设置状态
+                st.query_params.clear()
+                session = state_manager.get_current_session()
+                if session:
+                    session.current_state = WorkflowState.PRODUCT_ANALYSIS
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
                 st.rerun()
             return
         
@@ -1052,7 +1080,13 @@ def render_content_generation_step(state_manager):
     if not recommendation:
         st.warning("⚠️ 请先完成模块推荐")
         if st.button("🎯 返回模块推荐"):
-            state_manager.transition_workflow_state(WorkflowState.MODULE_RECOMMENDATION)
+            # 清除URL参数并设置状态
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = WorkflowState.MODULE_RECOMMENDATION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
             st.rerun()
         return
     
@@ -1063,7 +1097,13 @@ def render_content_generation_step(state_manager):
     if not selected_modules:
         st.error("❌ 没有找到选择的模块")
         if st.button("🎯 返回模块推荐"):
-            state_manager.transition_workflow_state(WorkflowState.MODULE_RECOMMENDATION)
+            # 清除URL参数并设置状态
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = WorkflowState.MODULE_RECOMMENDATION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
             st.rerun()
         return
     
