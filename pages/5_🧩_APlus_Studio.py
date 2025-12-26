@@ -1274,11 +1274,19 @@ def render_content_generation_step(state_manager):
                 progress_bar.progress(0.8)
                 status_text.text("正在处理生成结果...")
                 
+                # 添加调试信息
+                st.info(f"🔍 批量生成结果: 共{len(batch_results)}个模块")
+                for module_type, content in batch_results.items():
+                    st.write(f"- {module_type.value}: {content.title}")
+                
                 # 转换结果格式并保存到session.module_contents
                 session = state_manager.get_current_session()
                 if session:
+                    st.info(f"📝 当前session存在，开始保存数据...")
                     from services.aplus_studio.intelligent_workflow import ModuleContent, MaterialRequest
+                    from services.aplus_studio.models import Priority
                     
+                    successful_conversions = 0
                     for module_type, intelligent_content in batch_results.items():
                         try:
                             # 转换为页面显示格式
@@ -1327,9 +1335,11 @@ def render_content_generation_step(state_manager):
                             
                             # 保存到session.module_contents
                             session.module_contents[module_type] = module_content
+                            successful_conversions += 1
                             logger.info(f"Successfully saved content for module: {module_type.value}")
                             
                         except Exception as module_error:
+                            st.error(f"❌ 转换模块 {module_type.value} 时出错: {module_error}")
                             logger.error(f"Failed to convert content for {module_type.value}: {module_error}")
                             # 创建一个基本的ModuleContent
                             basic_content = ModuleContent(
@@ -1342,10 +1352,15 @@ def render_content_generation_step(state_manager):
                                 language="zh"
                             )
                             session.module_contents[module_type] = basic_content
+                            successful_conversions += 1
                     
                     # 更新session
                     state_manager._save_session(session)
+                    st.success(f"✅ 成功保存 {successful_conversions} 个模块到session")
+                    st.info(f"📊 Session中现有模块数量: {len(session.module_contents)}")
                     logger.info(f"Session updated with {len(session.module_contents)} modules")
+                else:
+                    st.error("❌ 无法获取当前session，数据保存失败")
                 
                 # 保存生成的内容
                 state_manager.set_generated_content(generated_content)
