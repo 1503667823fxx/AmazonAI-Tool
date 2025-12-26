@@ -493,6 +493,20 @@ class ContentGenerationService:
                 )
             )
             
+            # 检查响应状态
+            if not response.candidates:
+                raise Exception("AI生成没有返回候选结果")
+            
+            candidate = response.candidates[0]
+            if candidate.finish_reason != 1:  # 1 表示正常完成
+                finish_reason_map = {
+                    2: "内容被安全过滤器阻止",
+                    3: "达到最大长度限制",
+                    4: "其他原因"
+                }
+                reason = finish_reason_map.get(candidate.finish_reason, f"未知原因 ({candidate.finish_reason})")
+                raise Exception(f"AI生成失败: {reason}")
+            
             if not response.text:
                 raise Exception("AI生成返回空响应")
             
