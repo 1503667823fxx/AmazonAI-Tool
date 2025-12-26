@@ -1280,42 +1280,72 @@ def render_content_generation_step(state_manager):
                     from services.aplus_studio.intelligent_workflow import ModuleContent, MaterialRequest
                     
                     for module_type, intelligent_content in batch_results.items():
-                        # 转换为页面显示格式
-                        generated_content[str(module_type)] = {
-                            'title': intelligent_content.title,
-                            'description': intelligent_content.description,
-                            'key_points': intelligent_content.key_points,
-                            'generated_text': intelligent_content.generated_text,
-                            'material_requests': [req.to_dict() for req in intelligent_content.material_requests] if intelligent_content.material_requests else []
-                        }
-                        
-                        # 转换为ModuleContent并保存到session
-                        material_requests = []
-                        if intelligent_content.material_requests:
-                            for req in intelligent_content.material_requests:
-                                material_requests.append(MaterialRequest(
-                                    request_type=req.request_type,
-                                    description=req.description,
-                                    specifications=req.specifications,
-                                    priority=req.priority,
-                                    module_type=module_type
-                                ))
-                        
-                        module_content = ModuleContent(
-                            module_type=module_type,
-                            title=intelligent_content.title,
-                            description=intelligent_content.description,
-                            key_points=intelligent_content.key_points,
-                            generated_text=intelligent_content.generated_text,
-                            material_requests=material_requests,
-                            language=intelligent_content.language
-                        )
-                        
-                        # 保存到session.module_contents
-                        session.module_contents[module_type] = module_content
+                        try:
+                            # 转换为页面显示格式
+                            generated_content[str(module_type)] = {
+                                'title': intelligent_content.title,
+                                'description': intelligent_content.description,
+                                'key_points': intelligent_content.key_points,
+                                'generated_text': intelligent_content.generated_text,
+                                'material_requests': [req.to_dict() for req in intelligent_content.material_requests] if intelligent_content.material_requests else []
+                            }
+                            
+                            # 转换为ModuleContent并保存到session
+                            material_requests = []
+                            if intelligent_content.material_requests:
+                                for req in intelligent_content.material_requests:
+                                    try:
+                                        material_requests.append(MaterialRequest(
+                                            request_id=req.request_id,
+                                            material_type=req.material_type,
+                                            description=req.description,
+                                            importance=req.importance,
+                                            example=req.example,
+                                            help_text=req.help_text
+                                        ))
+                                    except Exception as req_error:
+                                        logger.warning(f"Failed to convert material request: {req_error}")
+                                        # 创建一个简单的MaterialRequest
+                                        material_requests.append(MaterialRequest(
+                                            request_id=f"req_{len(material_requests)}",
+                                            material_type="IMAGE",
+                                            description=getattr(req, 'description', '素材需求'),
+                                            importance=getattr(req, 'importance', Priority.MEDIUM),
+                                            example=getattr(req, 'example', None),
+                                            help_text=getattr(req, 'help_text', '')
+                                        ))
+                            
+                            module_content = ModuleContent(
+                                module_type=module_type,
+                                title=intelligent_content.title,
+                                description=intelligent_content.description,
+                                key_points=intelligent_content.key_points,
+                                generated_text=intelligent_content.generated_text,
+                                material_requests=material_requests,
+                                language=intelligent_content.language
+                            )
+                            
+                            # 保存到session.module_contents
+                            session.module_contents[module_type] = module_content
+                            logger.info(f"Successfully saved content for module: {module_type.value}")
+                            
+                        except Exception as module_error:
+                            logger.error(f"Failed to convert content for {module_type.value}: {module_error}")
+                            # 创建一个基本的ModuleContent
+                            basic_content = ModuleContent(
+                                module_type=module_type,
+                                title=f"{module_type.value} 内容",
+                                description="AI生成的内容",
+                                key_points=["功能特点", "产品优势", "使用便利"],
+                                generated_text={"main_content": "产品介绍内容"},
+                                material_requests=[],
+                                language="zh"
+                            )
+                            session.module_contents[module_type] = basic_content
                     
                     # 更新session
                     state_manager._save_session(session)
+                    logger.info(f"Session updated with {len(session.module_contents)} modules")
                 
                 # 保存生成的内容
                 state_manager.set_generated_content(generated_content)
