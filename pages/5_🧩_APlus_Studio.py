@@ -1447,10 +1447,12 @@ def render_content_editing_step(state_manager):
         
         # 创建内容编辑UI
         editing_ui = ContentEditingUI(state_manager.workflow_controller)
-        # 检查是否需要切换到编辑模式
+        
+        # 检查是否需要切换到编辑模式（第一阶段）
         if 'switch_to_edit_mode' in st.session_state and st.session_state.switch_to_edit_mode:
             st.session_state.content_editing_mode = 'edit'
             st.session_state.switch_to_edit_mode = False  # 重置标志
+            st.success("✅ 已切换到编辑模式")
             st.rerun()
         
         editing_result = editing_ui.render_content_editing_interface()
@@ -1459,8 +1461,9 @@ def render_content_editing_step(state_manager):
             action = editing_result.get('action')
             
             if action == 'switch_to_edit_mode':
-                # 设置切换标志，下次运行时会切换模式
+                # 设置切换标志，下次运行时会切换模式（第二阶段）
                 st.session_state.switch_to_edit_mode = True
+                st.info("🔄 正在切换到编辑模式...")
                 st.rerun()
                 
             elif action == 'confirm':
