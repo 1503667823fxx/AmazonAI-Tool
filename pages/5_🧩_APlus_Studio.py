@@ -1107,6 +1107,57 @@ def render_content_generation_step(state_manager):
             st.rerun()
         return
     
+    # 检查是否已有生成的内容
+    existing_content = state_manager.get_generated_content()
+    
+    if existing_content:
+        # 显示已生成的内容
+        st.success("✅ AI内容已生成完成！")
+        
+        # 显示生成的内容预览
+        with st.expander("📋 生成内容预览", expanded=True):
+            for module_key, content in existing_content.items():
+                st.write(f"**{content.get('title', '标题')}**")
+                st.write(content.get('description', '描述'))
+                if content.get('key_points'):
+                    st.write("核心卖点：")
+                    for point in content['key_points']:
+                        st.write(f"• {point}")
+                
+                # 显示素材需求
+                if content.get('material_requests'):
+                    st.write("📸 素材需求：")
+                    for req in content['material_requests']:
+                        if isinstance(req, dict):
+                            st.write(f"• {req.get('description', '素材需求')}")
+                        else:
+                            st.write(f"• {req}")
+                
+                st.markdown("---")
+        
+        # 操作按钮
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 重新生成内容", use_container_width=True):
+                # 清除现有内容，重新生成
+                state_manager.set_generated_content(None)
+                st.rerun()
+        
+        with col2:
+            if st.button("📝 继续到内容编辑", type="primary", use_container_width=True):
+                # 清除URL参数并设置状态
+                st.query_params.clear()
+                session = state_manager.get_current_session()
+                if session:
+                    session.current_state = WorkflowState.CONTENT_EDITING
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                    state_manager._create_session_backup()
+                st.rerun()
+        
+        return
+    
     # 处理模块显示（兼容字符串和ModuleType对象）
     from services.aplus_studio.models import ModuleType
     
@@ -1173,13 +1224,15 @@ def render_content_generation_step(state_manager):
                     product_category = ProductCategory.ELECTRONICS
                 
                 product_analysis = ProductAnalysis(
+                    product_id=f"product_{int(datetime.now().timestamp())}",  # 生成临时ID
                     product_category=product_category,
+                    product_type=analysis_result.get('product_type', '电子产品'),
                     target_audience=analysis_result.get('target_audience', ''),
                     key_features=analysis_result.get('key_features', []),
-                    confidence_score=analysis_result.get('confidence_score', 0.8),
                     materials=analysis_result.get('materials', []),
                     use_cases=analysis_result.get('use_cases', []),
-                    marketing_angles=analysis_result.get('marketing_angles', [])
+                    marketing_angles=analysis_result.get('marketing_angles', []),
+                    confidence_score=analysis_result.get('confidence_score', 0.8)
                 )
                 
                 # 批量生成内容
@@ -1256,18 +1309,15 @@ def render_content_generation_step(state_manager):
                         st.markdown("---")
                 
                 if st.button("📝 继续到内容编辑", type="primary", use_container_width=True):
-                    # 使用URL参数方法进行状态转换
+                    # 清除URL参数并设置状态
+                    st.query_params.clear()
                     session = state_manager.get_current_session()
                     if session:
-                        from services.aplus_studio.models import WorkflowState
                         session.current_state = WorkflowState.CONTENT_EDITING
                         session.last_updated = datetime.now()
                         st.session_state.intelligent_workflow_session = session
                         state_manager._create_session_backup()
-                        
-                        # 使用URL参数强制跳转
-                        st.query_params.update({"step": "content_editing", "t": str(int(datetime.now().timestamp()))})
-                        st.rerun()
+                    st.rerun()
                         
             except Exception as e:
                 st.error(f"内容生成失败: {str(e)}")
@@ -1310,7 +1360,13 @@ def render_content_editing_step(state_manager):
         if not generated_content:
             st.warning("⚠️ 请先完成内容生成")
             if st.button("✍️ 返回内容生成"):
-                state_manager.transition_workflow_state(WorkflowState.CONTENT_GENERATION)
+                # 清除URL参数并设置状态
+                st.query_params.clear()
+                session = state_manager.get_current_session()
+                if session:
+                    session.current_state = WorkflowState.CONTENT_GENERATION
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
                 st.rerun()
             return
         
