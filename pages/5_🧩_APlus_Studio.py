@@ -1373,7 +1373,7 @@ def render_content_editing_step(state_manager):
             return
         
         # 创建内容编辑UI
-        editing_ui = ContentEditingUI()
+        editing_ui = ContentEditingUI(state_manager.workflow_controller)
         editing_result = editing_ui.render_content_editing_interface(generated_content)
         
         if editing_result and editing_result.get('action') == 'confirm':
