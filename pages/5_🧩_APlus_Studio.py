@@ -1447,17 +1447,37 @@ def render_content_editing_step(state_manager):
         
         # 创建内容编辑UI
         editing_ui = ContentEditingUI(state_manager.workflow_controller)
+        # 检查是否需要切换到编辑模式
+        if 'switch_to_edit_mode' in st.session_state and st.session_state.switch_to_edit_mode:
+            st.session_state.content_editing_mode = 'edit'
+            st.session_state.switch_to_edit_mode = False  # 重置标志
+            st.rerun()
+        
         editing_result = editing_ui.render_content_editing_interface()
         
-        if editing_result and editing_result.get('action') == 'confirm':
-            # 保存编辑后的内容
-            state_manager.set_final_content(editing_result['content'])
+        if editing_result and editing_result.get('action'):
+            action = editing_result.get('action')
             
-            st.success("✅ 内容编辑完成！")
-            
-            if st.button("🎨 继续到风格选择", type="primary", use_container_width=True):
-                state_manager.transition_workflow_state(WorkflowState.STYLE_SELECTION)
+            if action == 'switch_to_edit_mode':
+                # 设置切换标志，下次运行时会切换模式
+                st.session_state.switch_to_edit_mode = True
                 st.rerun()
+                
+            elif action == 'confirm':
+                # 保存编辑后的内容
+                state_manager.set_final_content(editing_result['content'])
+                
+                st.success("✅ 内容编辑完成！")
+                
+                if st.button("🎨 继续到风格选择", type="primary", use_container_width=True):
+                    state_manager.transition_workflow_state(WorkflowState.STYLE_SELECTION)
+                    st.rerun()
+                    
+            elif action == 'export_content':
+                st.info("� 导出功能开发开中...")
+                
+            elif action == 'regenerate_content':
+                st.info("🔄 重新生成功能开发中...")
                 
     except ImportError:
         st.error("内容编辑组件未找到，使用简化编辑界面")
