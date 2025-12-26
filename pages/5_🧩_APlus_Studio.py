@@ -1374,7 +1374,7 @@ def render_content_editing_step(state_manager):
         
         # 创建内容编辑UI
         editing_ui = ContentEditingUI(state_manager.workflow_controller)
-        editing_result = editing_ui.render_content_editing_interface(generated_content)
+        editing_result = editing_ui.render_content_editing_interface()
         
         if editing_result and editing_result.get('action') == 'confirm':
             # 保存编辑后的内容
