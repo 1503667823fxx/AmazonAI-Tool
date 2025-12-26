@@ -274,11 +274,26 @@ def render_workflow_start(state_manager):
         """)
         
         if st.button("🚀 开始智能工作流", type="primary", use_container_width=True):
-            success = state_manager.transition_workflow_state(WorkflowState.PRODUCT_ANALYSIS)
-            if success:
+            # 清除URL参数并设置状态
+            from services.aplus_studio.models import WorkflowState
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = WorkflowState.PRODUCT_ANALYSIS
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+                state_manager._create_session_backup()
                 st.rerun()
             else:
-                st.error("❌ 启动工作流失败，请重试")
+                # 如果没有session，尝试创建新的工作流
+                try:
+                    success = state_manager.transition_workflow_state(WorkflowState.PRODUCT_ANALYSIS)
+                    if success:
+                        st.rerun()
+                    else:
+                        st.error("❌ 启动工作流失败，请重试")
+                except Exception as e:
+                    st.error(f"❌ 启动工作流失败：{str(e)}")
     
     with col2:
         st.info("""
@@ -447,7 +462,15 @@ def render_product_analysis_step(state_manager):
                     st.write(f"**分析置信度**: {data.get('confidence_score', 0):.1%}")
             
             if st.button("🎯 继续到模块推荐", type="primary", use_container_width=True):
-                state_manager.transition_workflow_state(WorkflowState.MODULE_RECOMMENDATION)
+                # 清除URL参数并设置状态
+                from services.aplus_studio.models import WorkflowState
+                st.query_params.clear()
+                session = state_manager.get_current_session()
+                if session:
+                    session.current_state = WorkflowState.MODULE_RECOMMENDATION
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                    state_manager._create_session_backup()
                 st.rerun()
         
         # 检查是否已有分析结果
@@ -476,7 +499,15 @@ def render_product_analysis_step(state_manager):
             
             with col2:
                 if st.button("🎯 继续到模块推荐", type="primary", use_container_width=True):
-                    state_manager.transition_workflow_state(WorkflowState.MODULE_RECOMMENDATION)
+                    # 清除URL参数并设置状态
+                    from services.aplus_studio.models import WorkflowState
+                    st.query_params.clear()
+                    session = state_manager.get_current_session()
+                    if session:
+                        session.current_state = WorkflowState.MODULE_RECOMMENDATION
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                        state_manager._create_session_backup()
                     st.rerun()
                 
     except ImportError:
@@ -667,6 +698,17 @@ def render_module_recommendation_step(state_manager):
                 
                 if st.button("✍️ 继续到内容生成", type="primary", use_container_width=True):
                     logger.info("User clicked '继续到内容生成' button")
+                    
+                    # 清除URL参数并设置状态
+                    from services.aplus_studio.models import WorkflowState
+                    st.query_params.clear()
+                    session = state_manager.get_current_session()
+                    if session:
+                        session.current_state = WorkflowState.CONTENT_GENERATION
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                        state_manager._create_session_backup()
+                    st.rerun()
                     
                     # 使用简单直接的状态转换方法
                     session = state_manager.get_current_session()
@@ -1466,6 +1508,53 @@ def render_content_editing_step(state_manager):
                 st.info("🔄 正在切换到编辑模式...")
                 st.rerun()
                 
+            elif action == 'approve_all_content':
+                # 审核通过，继续到下一步
+                st.success("✅ 内容审核通过！")
+                
+                # 清除URL参数并设置状态
+                from services.aplus_studio.models import WorkflowState
+                st.query_params.clear()
+                session = state_manager.get_current_session()
+                if session:
+                    session.current_state = WorkflowState.STYLE_SELECTION
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                    state_manager._create_session_backup()
+                st.rerun()
+                
+            elif action == 'continue_editing':
+                # 继续编辑，切换到编辑模式
+                st.session_state.switch_to_edit_mode = True
+                st.info("🔄 正在切换到编辑模式...")
+                st.rerun()
+                
+            elif action == 'save_draft':
+                # 保存草稿
+                try:
+                    session = state_manager.get_current_session()
+                    if session:
+                        state_manager._create_session_backup()
+                        st.success("✅ 草稿已保存")
+                    else:
+                        st.error("❌ 保存失败：无活跃会话")
+                except Exception as e:
+                    st.error(f"❌ 保存失败：{str(e)}")
+                    
+            elif action == 'content_edited':
+                # 内容已编辑，自动保存
+                try:
+                    module = editing_result.get('module')
+                    content = editing_result.get('content')
+                    if module and content:
+                        session = state_manager.get_current_session()
+                        if session:
+                            session.module_contents[module] = content
+                            state_manager._save_session(session)
+                            st.success(f"✅ {editing_ui._get_module_display_name(module)} 内容已保存")
+                except Exception as e:
+                    st.error(f"❌ 保存失败：{str(e)}")
+                    
             elif action == 'confirm':
                 # 保存编辑后的内容
                 state_manager.set_final_content(editing_result['content'])
@@ -1473,7 +1562,15 @@ def render_content_editing_step(state_manager):
                 st.success("✅ 内容编辑完成！")
                 
                 if st.button("🎨 继续到风格选择", type="primary", use_container_width=True):
-                    state_manager.transition_workflow_state(WorkflowState.STYLE_SELECTION)
+                    # 清除URL参数并设置状态
+                    from services.aplus_studio.models import WorkflowState
+                    st.query_params.clear()
+                    session = state_manager.get_current_session()
+                    if session:
+                        session.current_state = WorkflowState.STYLE_SELECTION
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                        state_manager._create_session_backup()
                     st.rerun()
                     
             elif action == 'export_content':
@@ -1558,7 +1655,15 @@ def render_style_selection_step(state_manager):
             'theme_config': style_info
         })
         
-        state_manager.transition_workflow_state(WorkflowState.IMAGE_GENERATION)
+        # 清除URL参数并设置状态
+        from services.aplus_studio.models import WorkflowState
+        st.query_params.clear()
+        session = state_manager.get_current_session()
+        if session:
+            session.current_state = WorkflowState.IMAGE_GENERATION
+            session.last_updated = datetime.now()
+            st.session_state.intelligent_workflow_session = session
+            state_manager._create_session_backup()
         st.rerun()
 
 
@@ -1616,7 +1721,15 @@ def render_image_generation_step(state_manager):
                 st.success("✅ 所有模块图片生成完成！")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    state_manager.transition_workflow_state(WorkflowState.COMPLETED)
+                    # 清除URL参数并设置状态
+                    from services.aplus_studio.models import WorkflowState
+                    st.query_params.clear()
+                    session = state_manager.get_current_session()
+                    if session:
+                        session.current_state = WorkflowState.COMPLETED
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                        state_manager._create_session_backup()
                     st.rerun()
                     
             except Exception as e:
@@ -1657,7 +1770,15 @@ def render_workflow_completed_step(state_manager):
         
         with col2:
             if st.button("🔄 重新生成", use_container_width=True):
-                state_manager.transition_workflow_state(WorkflowState.IMAGE_GENERATION)
+                # 清除URL参数并设置状态
+                from services.aplus_studio.models import WorkflowState
+                st.query_params.clear()
+                session = state_manager.get_current_session()
+                if session:
+                    session.current_state = WorkflowState.IMAGE_GENERATION
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                    state_manager._create_session_backup()
                 st.rerun()
         
         with col3:
@@ -1704,7 +1825,15 @@ def render_simplified_content_editing(state_manager):
         
         if st.button("✅ 确认编辑", type="primary", use_container_width=True):
             state_manager.set_final_content(generated_content)
-            state_manager.transition_workflow_state(WorkflowState.STYLE_SELECTION)
+            # 清除URL参数并设置状态
+            from services.aplus_studio.models import WorkflowState
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = WorkflowState.STYLE_SELECTION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+                state_manager._create_session_backup()
             st.rerun()
 
 
@@ -1716,12 +1845,28 @@ def handle_navigation_action(state_manager, action):
     if action.action_type == 'jump':
         target_state = action.target_state
         if target_state:
-            state_manager.transition_workflow_state(target_state)
+            # 清除URL参数并设置状态
+            from services.aplus_studio.models import WorkflowState
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = target_state
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+                state_manager._create_session_backup()
             st.rerun()
     elif action.action_type == 'start_new':
         target_state = action.target_state
         if target_state:
-            state_manager.transition_workflow_state(target_state)
+            # 清除URL参数并设置状态
+            from services.aplus_studio.models import WorkflowState
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = target_state
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+                state_manager._create_session_backup()
             st.rerun()
     elif action.action_type == 'next':
         # 处理下一步操作
