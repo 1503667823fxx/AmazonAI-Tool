@@ -1519,12 +1519,36 @@ def render_content_editing_step(state_manager):
                         # 将module_contents转换为final_content格式并保存
                         final_content = {}
                         for module_type, content in session.module_contents.items():
-                            final_content[module_type] = {
+                            # 转换MaterialRequest对象为字典
+                            material_requests = []
+                            if hasattr(content, 'material_requests') and content.material_requests:
+                                for req in content.material_requests:
+                                    if hasattr(req, '__dict__'):
+                                        # 如果是对象，转换为字典
+                                        req_dict = {
+                                            'request_id': getattr(req, 'request_id', ''),
+                                            'material_type': getattr(req, 'material_type', ''),
+                                            'description': getattr(req, 'description', ''),
+                                            'importance': getattr(req, 'importance', ''),
+                                            'help_text': getattr(req, 'help_text', ''),
+                                            'example': getattr(req, 'example', '')
+                                        }
+                                        # 处理枚举类型
+                                        if hasattr(req.material_type, 'value'):
+                                            req_dict['material_type'] = req.material_type.value
+                                        if hasattr(req.importance, 'value'):
+                                            req_dict['importance'] = req.importance.value
+                                        material_requests.append(req_dict)
+                                    else:
+                                        # 如果已经是字典，直接使用
+                                        material_requests.append(req)
+                            
+                            final_content[module_type.value] = {
                                 'title': getattr(content, 'title', ''),
                                 'description': getattr(content, 'description', ''),
                                 'key_points': getattr(content, 'key_points', []),
                                 'generated_text': getattr(content, 'generated_text', {}),
-                                'material_requests': getattr(content, 'material_requests', [])
+                                'material_requests': material_requests
                             }
                         
                         state_manager.set_final_content(final_content)
@@ -1734,12 +1758,36 @@ def render_image_generation_step(state_manager):
                 # 将module_contents转换为final_content格式
                 final_content = {}
                 for module_type, content in session.module_contents.items():
-                    final_content[module_type] = {
+                    # 转换MaterialRequest对象为字典
+                    material_requests = []
+                    if hasattr(content, 'material_requests') and content.material_requests:
+                        for req in content.material_requests:
+                            if hasattr(req, '__dict__'):
+                                # 如果是对象，转换为字典
+                                req_dict = {
+                                    'request_id': getattr(req, 'request_id', ''),
+                                    'material_type': getattr(req, 'material_type', ''),
+                                    'description': getattr(req, 'description', ''),
+                                    'importance': getattr(req, 'importance', ''),
+                                    'help_text': getattr(req, 'help_text', ''),
+                                    'example': getattr(req, 'example', '')
+                                }
+                                # 处理枚举类型
+                                if hasattr(req.material_type, 'value'):
+                                    req_dict['material_type'] = req.material_type.value
+                                if hasattr(req.importance, 'value'):
+                                    req_dict['importance'] = req.importance.value
+                                material_requests.append(req_dict)
+                            else:
+                                # 如果已经是字典，直接使用
+                                material_requests.append(req)
+                    
+                    final_content[module_type.value] = {
                         'title': getattr(content, 'title', ''),
                         'description': getattr(content, 'description', ''),
                         'key_points': getattr(content, 'key_points', []),
                         'generated_text': getattr(content, 'generated_text', {}),
-                        'material_requests': getattr(content, 'material_requests', [])
+                        'material_requests': material_requests
                     }
                 
                 # 保存转换后的final_content
@@ -1798,7 +1846,160 @@ def render_image_generation_step(state_manager):
     if st.button("🚀 开始批量生成", type="primary", use_container_width=True):
         with st.spinner("AI正在生成A+模块图片..."):
             try:
-                # 模拟批量生成过程
+                # 导入真实的批量图片生成服务
+                # 使用增强版批量生成服务 - 结合先进技术但完全兼容当前架构
+                from services.aplus_studio.enhanced_batch_image_service import EnhancedAPlusBatchService, BatchGenerationMode
+                
+                # 创建增强批量生成服务
+                batch_service = EnhancedAPlusBatchService()
+                
+                # 创建进度显示
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                # 进度回调函数 - 兼容增强服务的接口
+                def update_progress(module_name, progress):
+                    progress_bar.progress(progress)
+                    status_text.text(f"正在生成 {module_name} 模块图片... ({int(progress * 100)}%)")
+                
+                # 生成模式选择（可选的高级配置）
+                generation_mode = BatchGenerationMode.PARALLEL  # 默认并行模式
+                max_parallel_jobs = 3  # 限制并发数避免API限制
+                retry_attempts = 2     # 重试次数
+                quality_threshold = 0.7  # 质量阈值
+                
+                # 显示生成配置信息
+                with st.expander("🔧 生成配置", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.info(f"生成模式: {generation_mode.value}")
+                        st.info(f"并行任务数: {max_parallel_jobs}")
+                    with col2:
+                        st.info(f"重试次数: {retry_attempts}")
+                        st.info(f"质量阈值: {quality_threshold:.1%}")
+                
+                # 估算生成时间
+                estimated_time = batch_service.estimate_batch_time(final_content)
+                st.info(f"⏱️ 预计生成时间: {estimated_time:.0f} 秒")
+                
+                # 执行增强批量生成 - 使用当前数据格式，但功能完整
+                batch_results = batch_service.generate_batch_sync(
+                    final_content=final_content,  # 直接使用当前格式
+                    style_theme=style_theme,      # 直接使用当前格式
+                    progress_callback=update_progress,
+                    generation_mode=generation_mode,
+                    max_parallel_jobs=max_parallel_jobs,
+                    retry_attempts=retry_attempts,
+                    quality_threshold=quality_threshold
+                )
+                
+                # 处理生成结果 - 结果已经是期望的格式
+                generated_images = {}
+                success_count = 0
+                failure_count = 0
+                total_time = 0.0
+                total_quality = 0.0
+                
+                for module_key, result in batch_results.items():
+                    generated_images[module_key] = result
+                    
+                    if result.get('success', False):
+                        success_count += 1
+                        total_quality += result.get('quality_score', 0.0)
+                    else:
+                        failure_count += 1
+                    
+                    total_time += result.get('generation_time', 0.0)
+                
+                # 保存生成结果
+                state_manager.set_generated_images(generated_images)
+                
+                # 计算统计信息
+                total_modules = len(batch_results)
+                success_rate = success_count / total_modules if total_modules > 0 else 0
+                avg_quality = total_quality / success_count if success_count > 0 else 0
+                
+                # 显示生成摘要
+                st.success(f"✅ 批量生成完成！成功: {success_count}, 失败: {failure_count}")
+                
+                if failure_count > 0:
+                    st.warning(f"⚠️ {failure_count} 个模块生成失败，请检查详细信息")
+                
+                # 显示质量统计
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("成功率", f"{success_rate:.1%}")
+                with col2:
+                    st.metric("平均质量", f"{avg_quality:.1%}")
+                with col3:
+                    st.metric("总用时", f"{total_time:.1f}s")
+                
+                # 显示生成统计详情 - 增强版统计信息
+                stats = batch_service.get_generation_stats()
+                with st.expander("📊 详细生成统计", expanded=False):
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("总生成数", stats["total_modules"])
+                        st.metric("成功生成", stats["successful_generations"])
+                        st.metric("平均质量", f"{stats.get('average_quality_score', 0):.1%}")
+                    with col2:
+                        st.metric("失败生成", stats["failed_generations"])
+                        st.metric("平均用时", f"{stats['average_generation_time']:.1f}s")
+                        st.metric("总批次数", stats["total_batches"])
+                    with col3:
+                        st.metric("整体成功率", f"{stats['success_rate']:.1%}")
+                        st.metric("总用时", f"{stats['total_generation_time']:.1f}s")
+                        
+                        # 显示模块复杂度信息
+                        complexity_info = batch_service.get_module_complexity_info()
+                        complex_modules = sum(1 for k in final_content.keys() if complexity_info.get(k) == "complex")
+                        st.metric("复杂模块数", complex_modules)
+                
+                # 显示质量分析
+                if success_count > 0:
+                    quality_scores = [result.get('quality_score', 0.0) for result in batch_results.values() if result.get('success', False)]
+                    if quality_scores:
+                        with st.expander("🎯 质量分析", expanded=False):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("最高质量", f"{max(quality_scores):.1%}")
+                                st.metric("最低质量", f"{min(quality_scores):.1%}")
+                            with col2:
+                                high_quality_count = sum(1 for score in quality_scores if score >= quality_threshold)
+                                st.metric("高质量模块", f"{high_quality_count}/{len(quality_scores)}")
+                                st.metric("质量达标率", f"{high_quality_count/len(quality_scores):.1%}")
+                
+                # 显示生成时间分析
+                generation_times = [result.get('generation_time', 0.0) for result in batch_results.values()]
+                if generation_times:
+                    with st.expander("⏱️ 性能分析", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("最快生成", f"{min(generation_times):.1f}s")
+                            st.metric("最慢生成", f"{max(generation_times):.1f}s")
+                        with col2:
+                            avg_time = sum(generation_times) / len(generation_times)
+                            st.metric("平均时间", f"{avg_time:.1f}s")
+                            efficiency = len(generation_times) / total_time if total_time > 0 else 0
+                            st.metric("生成效率", f"{efficiency:.2f} 模块/秒")
+                
+                if st.button("📊 查看生成结果", type="primary", use_container_width=True):
+                    # 清除URL参数并设置状态
+                    from services.aplus_studio.models import WorkflowState
+                    st.query_params.clear()
+                    session = state_manager.get_current_session()
+                    if session:
+                        session.current_state = WorkflowState.COMPLETED
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                        state_manager._create_session_backup()
+                    st.rerun()
+                    
+            except ImportError as e:
+                st.error(f"❌ 图片生成服务导入失败: {str(e)}")
+                st.info("🔄 使用模拟生成模式...")
+                
+                # 回退到模拟生成
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
@@ -1806,21 +2007,21 @@ def render_image_generation_step(state_manager):
                 modules = list(final_content.keys())
                 
                 for i, module in enumerate(modules):
-                    status_text.text(f"正在生成 {module.value} 模块图片...")
+                    status_text.text(f"正在生成 {module} 模块图片...")
                     progress_bar.progress((i + 1) / len(modules))
                     time.sleep(2)  # 模拟生成时间
                     
                     # 模拟生成结果
                     generated_images[module] = {
-                        'image_path': f'generated/{module.value}_{int(time.time())}.png',
+                        'image_path': f'generated/{module}_{int(time.time())}.png',
                         'generation_time': 2.0,
-                        'quality_score': 0.85 + (i * 0.02)
+                        'quality_score': 0.85 + (i * 0.02),
+                        'is_simulated': True
                     }
                 
                 # 保存生成结果
                 state_manager.set_generated_images(generated_images)
-                
-                st.success("✅ 所有模块图片生成完成！")
+                st.success("✅ 模拟生成完成！")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
                     # 清除URL参数并设置状态
@@ -1835,7 +2036,17 @@ def render_image_generation_step(state_manager):
                     st.rerun()
                     
             except Exception as e:
-                st.error(f"图片生成失败: {str(e)}")
+                st.error(f"❌ 图片生成失败: {str(e)}")
+                logger.error(f"Image generation failed: {str(e)}")
+                
+                # 显示详细错误信息
+                with st.expander("🔧 错误详情", expanded=False):
+                    st.code(str(e))
+                    st.write("**可能的解决方案：**")
+                    st.write("1. 检查API密钥配置是否正确")
+                    st.write("2. 确保网络连接稳定")
+                    st.write("3. 检查图片生成服务是否正常运行")
+                    st.write("4. 稍后重试或联系技术支持")
 
 
 def render_workflow_completed_step(state_manager):
