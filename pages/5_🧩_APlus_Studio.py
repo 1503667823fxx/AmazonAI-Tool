@@ -1286,6 +1286,11 @@ def render_content_generation_step(state_manager):
                     from services.aplus_studio.intelligent_workflow import ModuleContent, MaterialRequest
                     from services.aplus_studio.models import Priority
                     
+                    # 确保selected_modules包含所有生成内容的模块
+                    if not session.selected_modules:
+                        session.selected_modules = list(batch_results.keys())
+                        st.info(f"🔧 修复selected_modules: {[m.value for m in session.selected_modules]}")
+                    
                     successful_conversions = 0
                     for module_type, intelligent_content in batch_results.items():
                         try:
