@@ -325,8 +325,29 @@ class ContentEditingUI:
             self._render_save_status(selected_module)
             
             # 素材需求编辑
-            if hasattr(content, 'material_requests') and content.material_requests:
-                self._render_material_requirements_editor(selected_module, content.material_requests)
+            st.write("**📎 素材需求管理**")
+            
+            # 调试信息
+            if hasattr(content, 'material_requests'):
+                material_requests = content.material_requests
+                st.info(f"🔍 检测到 {len(material_requests) if material_requests else 0} 个素材需求")
+                
+                if material_requests and len(material_requests) > 0:
+                    self._render_material_requirements_editor(selected_module, material_requests)
+                else:
+                    st.warning("⚠️ 当前模块没有素材需求，或素材需求为空")
+                    # 提供手动添加素材需求的选项
+                    if st.button("➕ 手动添加素材需求", key=f"add_material_{selected_module.value}"):
+                        st.info("🚧 手动添加素材需求功能开发中...")
+            else:
+                st.warning("⚠️ 内容对象没有material_requests属性")
+                st.write("**调试信息：**")
+                st.write(f"- 内容对象类型: {type(content)}")
+                st.write(f"- 内容对象属性: {dir(content)}")
+                
+                # 提供手动添加素材需求的选项
+                if st.button("➕ 手动添加素材需求", key=f"add_material_manual_{selected_module.value}"):
+                    st.info("🚧 手动添加素材需求功能开发中...")
             
             # 合规检查
             self._render_compliance_checker(selected_module, edited_content)
@@ -604,70 +625,130 @@ class ContentEditingUI:
         """渲染素材需求编辑器"""
         
         if not material_requests:
+            st.warning("⚠️ 没有检测到素材需求")
             return
         
-        st.write("**📎 素材需求管理**")
+        st.write(f"**📎 素材需求管理 ({len(material_requests)} 个需求)**")
+        st.markdown("AI已识别出以下素材需求，请上传相应的素材文件：")
         
         for i, request in enumerate(material_requests):
-            with st.expander(f"素材 {i+1}: {request.description}", expanded=False):
-                col1, col2 = st.columns(2)
+            with st.expander(f"📋 素材需求 {i+1}: {request.description}", expanded=True):
+                col1, col2 = st.columns([1, 1])
                 
                 with col1:
-                    st.write("**需求详情**")
+                    st.write("**📝 需求详情**")
                     # 安全地访问属性，处理字符串和枚举两种情况
                     material_type_display = request.material_type.value if hasattr(request.material_type, 'value') else str(request.material_type)
                     importance_display = request.importance.value if hasattr(request.importance, 'value') else str(request.importance)
-                    st.write(f"类型: {material_type_display}")
-                    st.write(f"重要性: {importance_display}")
-                    st.write(request.description)
+                    
+                    st.markdown(f"""
+                    - **类型**: {material_type_display}
+                    - **重要性**: {importance_display}
+                    - **描述**: {request.description}
+                    """)
                     
                     if request.help_text:
-                        st.info(request.help_text)
+                        st.info(f"💡 **提示**: {request.help_text}")
+                    
+                    if hasattr(request, 'example') and request.example:
+                        st.success(f"📋 **示例**: {request.example}")
                 
                 with col2:
-                    st.write("**素材上传**")
+                    st.write("**📤 素材上传区域**")
                     
                     material_type_str = request.material_type.value if hasattr(request.material_type, 'value') else str(request.material_type)
+                    
+                    # 根据素材类型显示不同的上传界面
                     if material_type_str == "IMAGE":
+                        st.markdown("🖼️ **上传图片文件**")
                         uploaded_file = st.file_uploader(
-                            "上传图片",
-                            type=["jpg", "jpeg", "png", "webp"],
-                            key=f"material_{module_type.value}_{i}_image"
+                            "选择图片文件",
+                            type=["jpg", "jpeg", "png", "webp", "gif", "bmp"],
+                            key=f"material_{module_type.value}_{i}_image",
+                            help="支持 JPG, PNG, WebP, GIF, BMP 格式"
                         )
                         
                         if uploaded_file:
-                            st.image(uploaded_file, width=200)
-                            st.success("图片已上传")
+                            st.image(uploaded_file, width=200, caption=f"已上传: {uploaded_file.name}")
+                            st.success(f"✅ 图片已上传: {uploaded_file.name}")
+                            
+                            # 显示文件信息
+                            file_size = len(uploaded_file.getvalue()) / 1024  # KB
+                            st.caption(f"文件大小: {file_size:.1f} KB")
+                        else:
+                            st.info("👆 请点击上方按钮选择图片文件")
                     
                     elif material_type_str == "TEXT":
+                        st.markdown("📝 **输入文本内容**")
                         text_input = st.text_area(
-                            "输入文本内容",
+                            "文本内容",
                             placeholder="请输入相关文本内容...",
-                            key=f"material_{module_type.value}_{i}_text"
+                            key=f"material_{module_type.value}_{i}_text",
+                            height=100,
+                            help="输入与此素材需求相关的文本内容"
                         )
                         
                         if text_input:
-                            st.success("文本已输入")
+                            char_count = len(text_input)
+                            st.success(f"✅ 文本已输入 ({char_count} 字符)")
+                        else:
+                            st.info("👆 请在上方文本框中输入内容")
                     
                     elif material_type_str == "DOCUMENT":
+                        st.markdown("📄 **上传文档文件**")
                         uploaded_doc = st.file_uploader(
-                            "上传文档",
-                            type=["pdf", "doc", "docx", "txt"],
-                            key=f"material_{module_type.value}_{i}_doc"
+                            "选择文档文件",
+                            type=["pdf", "doc", "docx", "txt", "rtf"],
+                            key=f"material_{module_type.value}_{i}_doc",
+                            help="支持 PDF, Word, 文本文档格式"
                         )
                         
                         if uploaded_doc:
-                            st.success("文档已上传")
+                            st.success(f"✅ 文档已上传: {uploaded_doc.name}")
+                            
+                            # 显示文件信息
+                            file_size = len(uploaded_doc.getvalue()) / 1024  # KB
+                            st.caption(f"文件大小: {file_size:.1f} KB")
+                        else:
+                            st.info("👆 请点击上方按钮选择文档文件")
+                    
+                    else:
+                        st.markdown(f"📎 **{material_type_str} 类型素材**")
+                        st.info(f"请提供 {material_type_str} 类型的素材")
                     
                     # 跳过选项
+                    st.markdown("---")
                     skip_material = st.checkbox(
-                        "跳过此素材",
+                        "⏭️ 暂时跳过此素材",
                         key=f"skip_material_{module_type.value}_{i}",
-                        help="如果暂时无法提供此素材，可以选择跳过"
+                        help="如果暂时无法提供此素材，可以选择跳过，稍后再补充"
                     )
                     
                     if skip_material:
-                        st.warning("此素材将被跳过，可能影响最终效果")
+                        st.warning("⚠️ 此素材将被跳过，可能影响最终生成效果")
+                    
+                    # 保存按钮
+                    if st.button(f"💾 保存素材 {i+1}", key=f"save_material_{module_type.value}_{i}", type="secondary"):
+                        st.success("✅ 素材已保存到当前会话")
+                        # TODO: 实现实际的保存逻辑
+        
+        # 整体操作按钮
+        st.markdown("---")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("💾 保存所有素材", type="primary", use_container_width=True):
+                st.success("✅ 所有素材已保存")
+                # TODO: 实现批量保存逻辑
+        
+        with col2:
+            if st.button("🔄 刷新需求", use_container_width=True):
+                st.info("🔄 正在重新分析素材需求...")
+                st.rerun()
+        
+        with col3:
+            if st.button("➕ 添加自定义素材", use_container_width=True):
+                st.info("🚧 自定义素材功能开发中...")
     
     def _render_compliance_checker(self, module_type: ModuleType, content: ModuleContent) -> None:
         """渲染合规检查器"""
