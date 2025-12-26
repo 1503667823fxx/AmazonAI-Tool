@@ -583,7 +583,7 @@ class ContentGenerationService:
         
         # 使用更简单和安全的提示词
         if language == "zh":
-            base_prompt = f"""请为{safe_product_type}创建产品介绍内容。
+            base_prompt = f"""请为{safe_product_type}创建{self._get_module_display_name(module_type, language)}的产品介绍内容。
 
 基本信息：
 - 产品：{safe_product_type}
@@ -603,13 +603,14 @@ class ContentGenerationService:
   }}
 }}
 
-要求：
+内容要求：
 1. 内容客观准确
 2. 语言简洁明了
-3. 重点介绍功能
-4. 返回标准JSON格式"""
+3. 重点介绍功能特性
+4. 适合{self._get_module_display_name(module_type, language)}展示
+5. 返回标准JSON格式"""
         else:
-            base_prompt = f"""Please create product introduction content for {safe_product_type}.
+            base_prompt = f"""Please create {self._get_module_display_name(module_type, language)} content for {safe_product_type}.
 
 Basic Information:
 - Product: {safe_product_type}
@@ -629,13 +630,54 @@ Please return JSON format:
   }}
 }}
 
-Requirements:
+Content Requirements:
 1. Objective and accurate content
 2. Clear and concise language
-3. Focus on functionality
-4. Return standard JSON format"""
+3. Focus on functionality and features
+4. Suitable for {self._get_module_display_name(module_type, language)} display
+5. Return standard JSON format"""
+        
+        # 添加简单的模块特定要求
+        module_focus = self._get_simple_module_focus(module_type, language)
+        if module_focus:
+            base_prompt += f"\n\n特别注意：{module_focus}"
         
         return base_prompt
+    
+    def _get_simple_module_focus(self, module_type: ModuleType, language: str) -> str:
+        """获取简单的模块焦点要求"""
+        if language == "zh":
+            focus_map = {
+                ModuleType.PRODUCT_OVERVIEW: "重点介绍产品的整体特性和核心功能",
+                ModuleType.PROBLEM_SOLUTION: "说明产品如何满足用户需求",
+                ModuleType.FEATURE_ANALYSIS: "详细介绍产品的功能特点",
+                ModuleType.SPECIFICATION_COMPARISON: "提供清晰的技术规格信息",
+                ModuleType.USAGE_SCENARIOS: "展示产品的实际使用场景",
+                ModuleType.INSTALLATION_GUIDE: "提供安装和使用指导",
+                ModuleType.SIZE_COMPATIBILITY: "说明产品的尺寸和兼容性",
+                ModuleType.MAINTENANCE_CARE: "提供维护保养建议",
+                ModuleType.MATERIAL_CRAFTSMANSHIP: "介绍产品的材质和工艺",
+                ModuleType.QUALITY_ASSURANCE: "说明产品的质量保证",
+                ModuleType.CUSTOMER_REVIEWS: "整理用户使用体验",
+                ModuleType.PACKAGE_CONTENTS: "详细列出包装内容"
+            }
+        else:
+            focus_map = {
+                ModuleType.PRODUCT_OVERVIEW: "Focus on overall characteristics and core functions",
+                ModuleType.PROBLEM_SOLUTION: "Explain how the product meets user needs",
+                ModuleType.FEATURE_ANALYSIS: "Detail the product's functional features",
+                ModuleType.SPECIFICATION_COMPARISON: "Provide clear technical specifications",
+                ModuleType.USAGE_SCENARIOS: "Show practical usage scenarios",
+                ModuleType.INSTALLATION_GUIDE: "Provide installation and usage guidance",
+                ModuleType.SIZE_COMPATIBILITY: "Explain size and compatibility",
+                ModuleType.MAINTENANCE_CARE: "Provide maintenance advice",
+                ModuleType.MATERIAL_CRAFTSMANSHIP: "Describe materials and craftsmanship",
+                ModuleType.QUALITY_ASSURANCE: "Explain quality assurance",
+                ModuleType.CUSTOMER_REVIEWS: "Organize user experience",
+                ModuleType.PACKAGE_CONTENTS: "Detail package contents"
+            }
+        
+        return focus_map.get(module_type, "")
     
     def _sanitize_text(self, text: str) -> str:
         """清理文本，移除可能触发安全过滤器的内容"""
@@ -643,39 +685,36 @@ Requirements:
             return ""
         
         original_text = text
-        logger.debug(f"Sanitizing text: '{original_text}'")
         
-        # 移除可能敏感的词汇
+        # 只移除最明显的敏感词汇，保留更多原始信息
         sensitive_words = [
-            "营销", "推广", "销售", "广告", "宣传", "竞争", "对手", "击败",
-            "marketing", "promotion", "advertising", "sales", "compete", "beat",
-            "最好", "最佳", "第一", "顶级", "完美", "无敌", "超越",
-            "best", "perfect", "top", "ultimate", "supreme", "unbeatable",
-            "痛点", "问题", "缺陷", "不足", "劣势", "弱点",
-            "pain", "problem", "defect", "weakness", "disadvantage",
-            "赚钱", "盈利", "利润", "收益", "投资", "回报",
-            "money", "profit", "investment", "return", "revenue"
+            "最好", "最佳", "第一", "顶级", "完美", "无敌", "超越", "史上最好",
+            "best", "perfect", "top", "ultimate", "supreme", "unbeatable", "#1", "number one",
+            "营销", "推广", "广告", "宣传", 
+            "marketing", "promotion", "advertising",
+            "赚钱", "盈利", "利润", 
+            "money", "profit", "revenue"
         ]
         
-        cleaned_text = text.lower()
+        cleaned_text = text
         removed_words = []
         for word in sensitive_words:
-            if word.lower() in cleaned_text:
+            if word in cleaned_text:
                 removed_words.append(word)
-                cleaned_text = cleaned_text.replace(word.lower(), "")
+                cleaned_text = cleaned_text.replace(word, "")
         
-        # 清理多余的空格和标点
+        # 轻度清理多余的空格
         cleaned_text = ' '.join(cleaned_text.split())
-        cleaned_text = cleaned_text.strip(" ,-，、。！？")
+        cleaned_text = cleaned_text.strip(" ,-，、")
         
-        # 如果清理后为空，返回通用词汇
-        if not cleaned_text or len(cleaned_text) < 2:
-            cleaned_text = "产品" if any(ord(c) > 127 for c in text) else "product"
+        # 只有在完全为空时才返回通用词汇
+        if not cleaned_text.strip():
+            cleaned_text = "产品" if any(ord(c) > 127 for c in original_text) else "product"
         
-        final_text = cleaned_text[:50]  # 限制长度
+        final_text = cleaned_text[:100]  # 增加长度限制
         
         # 在Streamlit页面上显示文本清理信息（如果有变化）
-        if removed_words or original_text != final_text:
+        if removed_words:
             logger.debug(f"Text sanitization: '{original_text}' -> '{final_text}' (removed: {removed_words})")
             if 'st' in globals():
                 import streamlit as st
