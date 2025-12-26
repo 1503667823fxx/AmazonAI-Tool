@@ -484,6 +484,19 @@ class ContentGenerationService:
             # 构建生成提示词
             prompt = self._build_content_generation_prompt(context)
             
+            # 添加调试日志 - 打印完整的提示词内容
+            logger.info(f"=== AI PROMPT DEBUG START ===")
+            logger.info(f"Module Type: {context.module_type.value}")
+            logger.info(f"Product Type: {context.product_analysis.product_type}")
+            logger.info(f"Key Features: {context.product_analysis.key_features}")
+            logger.info(f"Materials: {context.product_analysis.materials}")
+            logger.info(f"Target Audience: {context.product_analysis.target_audience}")
+            logger.info(f"Full Prompt Content:")
+            logger.info(f"--- PROMPT START ---")
+            logger.info(prompt)
+            logger.info(f"--- PROMPT END ---")
+            logger.info(f"=== AI PROMPT DEBUG END ===")
+            
             # 调用AI生成
             response = model.generate_content(
                 prompt,
@@ -493,6 +506,15 @@ class ContentGenerationService:
                     top_p=0.8,  # 添加top_p参数，进一步控制输出
                 )
             )
+            
+            # 添加响应调试日志
+            logger.info(f"=== AI RESPONSE DEBUG START ===")
+            logger.info(f"Response candidates count: {len(response.candidates) if response.candidates else 0}")
+            if response.candidates:
+                candidate = response.candidates[0]
+                logger.info(f"Finish reason: {candidate.finish_reason}")
+                logger.info(f"Safety ratings: {candidate.safety_ratings if hasattr(candidate, 'safety_ratings') else 'None'}")
+            logger.info(f"=== AI RESPONSE DEBUG END ===")
             
             # 检查响应状态
             if not response.candidates:
@@ -596,6 +618,9 @@ Requirements:
         if not text:
             return ""
         
+        original_text = text
+        logger.debug(f"Sanitizing text: '{original_text}'")
+        
         # 移除可能敏感的词汇
         sensitive_words = [
             "营销", "推广", "销售", "广告", "宣传", "竞争", "对手", "击败",
@@ -609,8 +634,11 @@ Requirements:
         ]
         
         cleaned_text = text.lower()
+        removed_words = []
         for word in sensitive_words:
-            cleaned_text = cleaned_text.replace(word.lower(), "")
+            if word.lower() in cleaned_text:
+                removed_words.append(word)
+                cleaned_text = cleaned_text.replace(word.lower(), "")
         
         # 清理多余的空格和标点
         cleaned_text = ' '.join(cleaned_text.split())
@@ -618,9 +646,14 @@ Requirements:
         
         # 如果清理后为空，返回通用词汇
         if not cleaned_text or len(cleaned_text) < 2:
-            return "产品" if any(ord(c) > 127 for c in text) else "product"
+            cleaned_text = "产品" if any(ord(c) > 127 for c in text) else "product"
         
-        return cleaned_text[:50]  # 限制长度
+        final_text = cleaned_text[:50]  # 限制长度
+        
+        if removed_words or original_text != final_text:
+            logger.debug(f"Text sanitization: '{original_text}' -> '{final_text}' (removed: {removed_words})")
+        
+        return final_text
     
     def _get_module_display_name(self, module_type: ModuleType, language: str) -> str:
         """获取模块显示名称"""
