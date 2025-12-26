@@ -1274,15 +1274,48 @@ def render_content_generation_step(state_manager):
                 progress_bar.progress(0.8)
                 status_text.text("正在处理生成结果...")
                 
-                # 转换结果格式
-                for module_type, intelligent_content in batch_results.items():
-                    generated_content[str(module_type)] = {
-                        'title': intelligent_content.title,
-                        'description': intelligent_content.description,
-                        'key_points': intelligent_content.key_points,
-                        'generated_text': intelligent_content.generated_text,
-                        'material_requests': [req.to_dict() for req in intelligent_content.material_requests] if intelligent_content.material_requests else []
-                    }
+                # 转换结果格式并保存到session.module_contents
+                session = state_manager.get_current_session()
+                if session:
+                    from services.aplus_studio.intelligent_workflow import ModuleContent, MaterialRequest
+                    
+                    for module_type, intelligent_content in batch_results.items():
+                        # 转换为页面显示格式
+                        generated_content[str(module_type)] = {
+                            'title': intelligent_content.title,
+                            'description': intelligent_content.description,
+                            'key_points': intelligent_content.key_points,
+                            'generated_text': intelligent_content.generated_text,
+                            'material_requests': [req.to_dict() for req in intelligent_content.material_requests] if intelligent_content.material_requests else []
+                        }
+                        
+                        # 转换为ModuleContent并保存到session
+                        material_requests = []
+                        if intelligent_content.material_requests:
+                            for req in intelligent_content.material_requests:
+                                material_requests.append(MaterialRequest(
+                                    request_type=req.request_type,
+                                    description=req.description,
+                                    specifications=req.specifications,
+                                    priority=req.priority,
+                                    module_type=module_type
+                                ))
+                        
+                        module_content = ModuleContent(
+                            module_type=module_type,
+                            title=intelligent_content.title,
+                            description=intelligent_content.description,
+                            key_points=intelligent_content.key_points,
+                            generated_text=intelligent_content.generated_text,
+                            material_requests=material_requests,
+                            language=intelligent_content.language
+                        )
+                        
+                        # 保存到session.module_contents
+                        session.module_contents[module_type] = module_content
+                    
+                    # 更新session
+                    state_manager._save_session(session)
                 
                 # 保存生成的内容
                 state_manager.set_generated_content(generated_content)
