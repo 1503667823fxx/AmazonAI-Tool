@@ -232,8 +232,8 @@ def render_intelligent_workflow():
             
     except ImportError as e:
         st.error(f"智能工作流界面组件加载失败: {str(e)}")
-        st.info("正在使用简化版智能工作流...")
-        render_simplified_intelligent_workflow()
+        st.info("💡 请检查相关组件是否正确安装")
+        st.stop()
 
 
 def render_workflow_start(state_manager):
@@ -1665,8 +1665,9 @@ def render_content_editing_step(state_manager):
                 st.info("🔄 重新生成功能开发中...")
                 
     except ImportError:
-        st.error("内容编辑组件未找到，使用简化编辑界面")
-        render_simplified_content_editing(state_manager)
+        st.error("内容编辑组件未找到")
+        st.info("💡 请检查 app_utils.aplus_studio.content_editing_ui 模块是否存在")
+        st.stop()
 
 
 def render_style_selection_step(state_manager):
@@ -2228,146 +2229,8 @@ def render_workflow_completed_step(state_manager):
             st.rerun()
 
 
-def render_simplified_intelligent_workflow():
-    """渲染简化版智能工作流（当组件加载失败时使用）"""
-    st.info("🔧 正在使用简化版智能工作流")
-    
-    st.markdown("""
-    ### 智能工作流功能正在完善中
-    
-    当前可用功能：
-    - ✅ 产品卖点分析
-    - ✅ 模块化A+制作
-    - 🚧 完整智能工作流（开发中）
-    
-    建议您使用"模块化A+制作"功能来创建A+页面。
-    """)
-
-
-def render_simplified_content_editing(state_manager):
-    """渲染简化版内容编辑界面"""
-    st.info("使用简化版内容编辑界面")
-    
-    generated_content = state_manager.get_generated_content()
-    
-    if generated_content:
-        for module, content in generated_content.items():
-            with st.expander(f"📝 编辑 {module.value}", expanded=True):
-                title = st.text_input("标题", value=content.get('title', ''), key=f"title_{module.value}")
-                description = st.text_area("描述", value=content.get('description', ''), key=f"desc_{module.value}")
-                
-                # 更新内容
-                generated_content[module]['title'] = title
-                generated_content[module]['description'] = description
-        
-        if st.button("✅ 确认编辑", type="primary", use_container_width=True):
-            state_manager.set_final_content(generated_content)
-            # 清除URL参数并设置状态
-            from services.aplus_studio.models import WorkflowState
-            st.query_params.clear()
-            session = state_manager.get_current_session()
-            if session:
-                session.current_state = WorkflowState.STYLE_SELECTION
-                session.last_updated = datetime.now()
-                st.session_state.intelligent_workflow_session = session
-                state_manager._create_session_backup()
-            st.rerun()
-
-
-def handle_navigation_action(state_manager, action):
-    """处理导航操作"""
-    if not action:
-        return
-        
-    if action.action_type == 'jump':
-        target_state = action.target_state
-        if target_state:
-            # 清除URL参数并设置状态
-            from services.aplus_studio.models import WorkflowState
-            st.query_params.clear()
-            session = state_manager.get_current_session()
-            if session:
-                session.current_state = target_state
-                session.last_updated = datetime.now()
-                st.session_state.intelligent_workflow_session = session
-                state_manager._create_session_backup()
-            st.rerun()
-    elif action.action_type == 'start_new':
-        target_state = action.target_state
-        if target_state:
-            # 清除URL参数并设置状态
-            from services.aplus_studio.models import WorkflowState
-            st.query_params.clear()
-            session = state_manager.get_current_session()
-            if session:
-                session.current_state = target_state
-                session.last_updated = datetime.now()
-                st.session_state.intelligent_workflow_session = session
-                state_manager._create_session_backup()
-            st.rerun()
-    elif action.action_type == 'next':
-        # 处理下一步操作
-        current_state = state_manager.get_current_state()
-        # 这里可以添加下一步的逻辑
-        pass
-    elif action.action_type == 'previous':
-        # 处理上一步操作
-        current_state = state_manager.get_current_state()
-        # 这里可以添加上一步的逻辑
-        pass
-
-
 if __name__ == "__main__":
     main()
-        ("module_selection", "🧩 选择模块"),
-        ("material_upload", "📁 上传素材"),
-        ("generation", "🎨 生成内容"),
-        ("preview", "🖼️ 预览管理")
-    ]
-    
-    # 创建面包屑
-    breadcrumb_items = []
-    
-    for i, (step_key, step_name) in enumerate(steps):
-        if step_key == current_step:
-            # 当前步骤 - 高亮显示
-            breadcrumb_items.append(f"**{step_name}**")
-            break
-        elif _is_step_completed(step_key):
-            # 已完成步骤 - 可点击
-            breadcrumb_items.append(step_name)
-        else:
-            # 未完成步骤 - 不显示
-            break
-    
-    if len(breadcrumb_items) > 1:
-        # 显示面包屑导航
-        st.markdown("**导航**: " + " → ".join(breadcrumb_items))
-        
-        # 快速返回按钮（只在非第一步时显示）
-        if current_step != "module_selection":
-            col1, col2, col3 = st.columns([1, 1, 4])
-            
-            with col1:
-                if st.button("⬅️ 上一步", use_container_width=True):
-                    # 返回到上一个步骤
-                    current_index = next(i for i, (key, _) in enumerate(steps) if key == current_step)
-                    if current_index > 0:
-                        prev_step = steps[current_index - 1][0]
-                        st.session_state.current_step = prev_step
-                        st.rerun()
-            
-            with col2:
-                if st.button("🏠 重新开始", use_container_width=True):
-                    # 清理会话状态，重新开始
-                    keys_to_clear = ['selected_modules', 'module_materials', 'generated_modules']
-                    for key in keys_to_clear:
-                        if key in st.session_state:
-                            del st.session_state[key]
-                    st.session_state.current_step = "module_selection"
-                    st.rerun()
-        
-        st.markdown("---")
 
 
 def render_selling_points_analysis():
@@ -3313,7 +3176,3 @@ def generate_fallback_selling_points() -> Dict[str, Any]:
             "recommendations_reliability": 0.7
         }
     }
-
-
-if __name__ == "__main__":
-    main()
