@@ -207,16 +207,17 @@ AMAZON A+ COMPLIANCE:
                 issues.append(f"Aspect ratio {actual_ratio:.3f} differs significantly from expected {expected_ratio:.3f}")
                 suggestions.append("Adjust image composition to match 4:3 aspect ratio")
             
-            # 如果宽高比正确但尺寸不匹配，这是可以接受的（可以自动调整）
+            # 改进的尺寸检查逻辑 - 更宽松的标准
             if actual_size != expected_size:
                 if abs(actual_ratio - expected_ratio) <= ratio_tolerance:
-                    # 宽高比正确，只是尺寸不同，这是可以接受的
+                    # 宽高比正确，只是尺寸不同，这是完全可以接受的
+                    # 例如：1200x896 (4:3) 应该被接受，只需要调整尺寸
                     suggestions.append(f"Image will be automatically resized from {actual_size} to {expected_size}")
-                    # 不将此视为严重问题
+                    # 不将此视为问题，只是建议
                 else:
-                    # 宽高比和尺寸都不对
-                    issues.append(f"Image size {actual_size} does not match required {expected_size} and has incorrect aspect ratio")
-                    suggestions.append(f"Resize image to exactly {expected_size[0]}x{expected_size[1]} pixels with 4:3 aspect ratio")
+                    # 只有宽高比严重错误时才标记为问题
+                    issues.append(f"Aspect ratio differs significantly - expected 4:3 ratio but got {actual_ratio:.3f}")
+                    suggestions.append(f"Adjust image to 4:3 aspect ratio, then resize to {expected_size[0]}x{expected_size[1]} pixels")
             
             # 检查文件大小
             file_size = len(image_data)
