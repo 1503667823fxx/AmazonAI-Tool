@@ -2227,24 +2227,6 @@ def render_workflow_completed_step(state_manager):
 
 if __name__ == "__main__":
     main()
-    st.header("💡 产品卖点分析")
-    st.caption("上传产品图片，让AI智能分析产品卖点并生成营销建议")
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.subheader("📸 图片上传")
-        
-        # 图片上传组件
-        uploaded_files = st.file_uploader(
-            "上传产品图片进行卖点分析",
-            type=["jpg", "jpeg", "png", "webp"],
-            accept_multiple_files=True,
-            help="支持多张图片，AI将分析产品的视觉卖点和特征",
-            key="selling_points_images"
-        )
-        
-        if uploaded_files:
             # 图片预览 - 默认收起
             with st.expander(f"📷 已上传 {len(uploaded_files)} 张图片", expanded=False):
                 # 显示上传的图片预览 - 紧凑布局
