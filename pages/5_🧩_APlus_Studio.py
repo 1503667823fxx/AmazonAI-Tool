@@ -197,6 +197,15 @@ def render_intelligent_workflow():
         
         nav_action = nav_ui.render_navigation_header()
         
+        # 处理导航操作
+        if nav_action:
+            nav_ui.handle_navigation_action(nav_action)
+        
+        # 渲染导航操作按钮并处理
+        nav_button_action = nav_ui.render_navigation_actions()
+        if nav_button_action:
+            nav_ui.handle_navigation_action(nav_button_action)
+        
         # 根据当前状态渲染对应的界面
         if current_state == WorkflowState.INITIAL:
             logger.debug("Rendering workflow start")
@@ -2050,6 +2059,9 @@ def render_image_generation_step(state_manager):
                     else:
                         logger.error("No current session found!")
                     
+                    # 触发页面重新加载
+                    st.rerun()
+                    
                     logger.info("Triggering page rerun...")
                     st.success("✅ 正在跳转到结果页面...")
                     st.rerun()
@@ -2116,6 +2128,8 @@ def render_image_generation_step(state_manager):
                     else:
                         logger.error("No current session found!")
                     
+                    # 触发页面重新加载
+                    st.rerun()
                     logger.info("Triggering page rerun...")
                     st.success("✅ 正在跳转到结果页面...")
                     st.rerun()
@@ -2139,10 +2153,15 @@ def render_workflow_completed_step(state_manager):
     st.subheader("🎉 智能工作流完成！")
     st.markdown("恭喜！您的A+页面已经生成完成")
     
+    # 调试信息
+    logger.info("Rendering workflow completed step")
+    
     # 显示完成摘要
     generated_images = state_manager.get_generated_images()
+    logger.info(f"Retrieved generated images: {generated_images is not None}")
     
     if generated_images:
+        logger.info(f"Found {len(generated_images)} generated images")
         st.write(f"**生成结果**: 成功生成 {len(generated_images)} 个A+模块")
         
         # 显示生成的模块列表
@@ -2204,7 +2223,18 @@ def render_workflow_completed_step(state_manager):
                 st.rerun()
     
     else:
+        logger.warning("No generated images found")
         st.warning("没有找到生成的图片")
+        
+        # 调试信息：显示当前会话状态
+        session = state_manager.get_current_session()
+        if session:
+            st.info(f"当前会话状态: {session.current_state.value}")
+            if hasattr(session, 'workflow_metadata'):
+                st.info(f"工作流元数据键: {list(session.workflow_metadata.keys())}")
+            if hasattr(session, '_temp_generated_images'):
+                st.info(f"临时图片数据: {session._temp_generated_images is not None}")
+        
         st.info("请返回上一步重新生成图片")
         
         if st.button("🔙 返回图片生成", use_container_width=True):
