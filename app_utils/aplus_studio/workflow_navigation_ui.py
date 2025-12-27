@@ -368,6 +368,8 @@ class WorkflowNavigationUI:
                                     confirmation_required=True,
                                     confirmation_message=f"确定要跳转到\"{step.name}\"步骤吗？当前进度将被保存。"
                                 )
+                                # 立即返回action，不要继续循环
+                                return action
                         
                         # 显示步骤详细信息
                         if self.show_step_details and step.key_data:
