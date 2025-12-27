@@ -155,6 +155,8 @@ def render_intelligent_workflow():
         # 检查URL参数是否指定了特定步骤 - 但要验证合理性
         url_step = st.query_params.get("step")
         if url_step and current_state != WorkflowState.INITIAL:  # 只有在非初始状态时才应用URL参数
+            logger.info(f"URL parameter detected: {url_step}, current_state: {current_state.value}")
+            
             if url_step == "content_generation" and current_state in [WorkflowState.MODULE_RECOMMENDATION, WorkflowState.CONTENT_GENERATION]:
                 logger.info("URL parameter indicates content_generation step")
                 current_state = WorkflowState.CONTENT_GENERATION
@@ -175,22 +177,49 @@ def render_intelligent_workflow():
                     session.current_state = WorkflowState.CONTENT_EDITING
                     session.last_updated = datetime.now()
                     st.session_state.intelligent_workflow_session = session
-            elif url_step == "completed" and current_state in [WorkflowState.IMAGE_GENERATION, WorkflowState.COMPLETED]:
-                logger.info("URL parameter indicates completed step")
+            elif url_step == "completed":
+                # 更宽松的条件 - 只要不是初始状态就允许跳转到完成状态
+                logger.info(f"URL parameter indicates completed step, forcing transition from {current_state.value}")
                 current_state = WorkflowState.COMPLETED
                 
                 # 确保session状态也是正确的
                 session = state_manager.get_current_session()
-                if session and session.current_state != WorkflowState.COMPLETED:
+                if session:
                     session.current_state = WorkflowState.COMPLETED
                     session.last_updated = datetime.now()
                     st.session_state.intelligent_workflow_session = session
+                    logger.info(f"Session state updated to COMPLETED")
             else:
-                # 无效的URL参数，清除它
-                st.query_params.clear()
-                logger.warning(f"Invalid URL parameter {url_step} for current state {current_state}, cleared")
+                # 只有在URL参数完全无效时才清除
+                logger.warning(f"Invalid URL parameter {url_step} for current state {current_state.value}")
+                # 不要立即清除，给一次机会
+                if url_step not in ["content_generation", "content_editing", "completed"]:
+                    st.query_params.clear()
+                    logger.warning(f"Cleared invalid URL parameter: {url_step}")
         
         logger.info(f"Rendering intelligent workflow, current state: {current_state.value}")
+        
+        # 临时调试面板 - 帮助诊断状态转换问题
+        with st.expander("🔧 状态调试信息", expanded=False):
+            st.write(f"**当前状态**: {current_state.value}")
+            st.write(f"**URL参数**: {dict(st.query_params)}")
+            
+            session = state_manager.get_current_session()
+            if session:
+                st.write(f"**Session状态**: {session.current_state.value}")
+                st.write(f"**Session ID**: {session.session_id}")
+                st.write(f"**最后更新**: {session.last_updated}")
+                
+                # 显示生成的图片信息
+                generated_images = state_manager.get_generated_images()
+                if generated_images:
+                    st.write(f"**生成的图片**: {len(generated_images)} 个模块")
+                    for module_key, result in generated_images.items():
+                        st.write(f"  - {module_key}: {'有数据' if result else '无数据'}")
+                else:
+                    st.write("**生成的图片**: 无")
+            else:
+                st.write("**Session**: 不存在")
         
         # 添加状态验证和恢复机制
         session = state_manager.get_current_session()
@@ -2033,8 +2062,17 @@ def render_image_generation_step(state_manager):
                     # 使用URL参数强制状态转换（参考方案6的成功实现）
                     from services.aplus_studio.models import WorkflowState
                     
+                    logger.info("User clicked '查看生成结果' button")
+                    
+                    # 获取当前状态信息用于调试
+                    current_session = state_manager.get_current_session()
+                    if current_session:
+                        logger.info(f"Current session state before transition: {current_session.current_state.value}")
+                    
                     # 设置URL参数强制跳转到完成状态
-                    st.query_params.update({"step": "completed", "t": str(int(datetime.now().timestamp()))})
+                    timestamp = str(int(datetime.now().timestamp()))
+                    st.query_params.update({"step": "completed", "t": timestamp})
+                    logger.info(f"Set URL params: step=completed, t={timestamp}")
                     
                     # 同时更新session状态
                     session = state_manager.get_current_session()
@@ -2042,15 +2080,19 @@ def render_image_generation_step(state_manager):
                         session.current_state = WorkflowState.COMPLETED
                         session.last_updated = datetime.now()
                         st.session_state.intelligent_workflow_session = session
+                        logger.info("Updated session state to COMPLETED")
                         
                         # 安全的session备份，避免序列化问题
                         try:
                             state_manager._safe_save_session(session)
+                            logger.info("Session backup completed successfully")
                         except Exception as backup_error:
                             logger.warning(f"Session backup failed: {backup_error}")
                             # 继续执行，不让备份失败影响主流程
+                    else:
+                        logger.error("No current session found!")
                     
-                    logger.info("State set to COMPLETED with URL params, triggering rerun")
+                    logger.info("Triggering page rerun...")
                     st.success("✅ 正在跳转到结果页面...")
                     st.rerun()
                     
@@ -2086,8 +2128,17 @@ def render_image_generation_step(state_manager):
                     # 使用URL参数强制状态转换（参考方案6的成功实现）
                     from services.aplus_studio.models import WorkflowState
                     
+                    logger.info("User clicked '查看生成结果' button (simulated)")
+                    
+                    # 获取当前状态信息用于调试
+                    current_session = state_manager.get_current_session()
+                    if current_session:
+                        logger.info(f"Current session state before transition: {current_session.current_state.value}")
+                    
                     # 设置URL参数强制跳转到完成状态
-                    st.query_params.update({"step": "completed", "t": str(int(datetime.now().timestamp()))})
+                    timestamp = str(int(datetime.now().timestamp()))
+                    st.query_params.update({"step": "completed", "t": timestamp})
+                    logger.info(f"Set URL params: step=completed, t={timestamp}")
                     
                     # 同时更新session状态
                     session = state_manager.get_current_session()
@@ -2095,15 +2146,19 @@ def render_image_generation_step(state_manager):
                         session.current_state = WorkflowState.COMPLETED
                         session.last_updated = datetime.now()
                         st.session_state.intelligent_workflow_session = session
+                        logger.info("Updated session state to COMPLETED")
                         
                         # 安全的session备份，避免序列化问题
                         try:
                             state_manager._safe_save_session(session)
+                            logger.info("Session backup completed successfully")
                         except Exception as backup_error:
                             logger.warning(f"Session backup failed: {backup_error}")
                             # 继续执行，不让备份失败影响主流程
+                    else:
+                        logger.error("No current session found!")
                     
-                    logger.info("State set to COMPLETED with URL params (simulated), triggering rerun")
+                    logger.info("Triggering page rerun...")
                     st.success("✅ 正在跳转到结果页面...")
                     st.rerun()
                     
