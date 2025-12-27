@@ -636,6 +636,12 @@ class IntelligentWorkflowStateManager:
             logger.debug(f"Current session state: {session.current_state.value}")
             logger.debug(f"Session ID: {session.session_id}")
             
+            # 保存当前会话的重要数据，防止状态转换时丢失
+            temp_generated_images = None
+            if hasattr(session, '_temp_generated_images'):
+                temp_generated_images = session._temp_generated_images
+                logger.debug(f"Preserving temp generated images: {temp_generated_images is not None}")
+            
             # 确保工作流控制器有当前会话
             if not self.workflow_controller.current_session:
                 logger.info("Workflow controller has no current session, setting it")
@@ -645,12 +651,20 @@ class IntelligentWorkflowStateManager:
             logger.debug(f"Workflow controller transition result: {success}")
             
             if success:
+                # 获取更新后的会话
+                updated_session = self.workflow_controller.current_session
+                
+                # 恢复临时数据
+                if temp_generated_images and updated_session:
+                    updated_session._temp_generated_images = temp_generated_images
+                    logger.debug("Restored temp generated images after state transition")
+                
                 # 更新会话状态
                 logger.debug("Updating session state in st.session_state")
-                st.session_state.intelligent_workflow_session = self.workflow_controller.current_session
+                st.session_state.intelligent_workflow_session = updated_session
                 
                 logger.debug("Saving session")
-                self._save_session(self.workflow_controller.current_session)
+                self._save_session(updated_session)
                 
                 # 触发自动保存（如果启用）
                 if hasattr(self, 'save_on_state_change') and getattr(self, 'save_on_state_change', True):
