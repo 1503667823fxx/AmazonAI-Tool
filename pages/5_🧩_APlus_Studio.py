@@ -175,6 +175,16 @@ def render_intelligent_workflow():
                     session.current_state = WorkflowState.CONTENT_EDITING
                     session.last_updated = datetime.now()
                     st.session_state.intelligent_workflow_session = session
+            elif url_step == "completed" and current_state in [WorkflowState.IMAGE_GENERATION, WorkflowState.COMPLETED]:
+                logger.info("URL parameter indicates completed step")
+                current_state = WorkflowState.COMPLETED
+                
+                # 确保session状态也是正确的
+                session = state_manager.get_current_session()
+                if session and session.current_state != WorkflowState.COMPLETED:
+                    session.current_state = WorkflowState.COMPLETED
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
             else:
                 # 无效的URL参数，清除它
                 st.query_params.clear()
@@ -2020,9 +2030,13 @@ def render_image_generation_step(state_manager):
                             st.metric("生成效率", f"{efficiency:.2f} 模块/秒")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 清除URL参数并设置状态
+                    # 使用URL参数强制状态转换（参考方案6的成功实现）
                     from services.aplus_studio.models import WorkflowState
-                    st.query_params.clear()
+                    
+                    # 设置URL参数强制跳转到完成状态
+                    st.query_params.update({"step": "completed", "t": str(int(datetime.now().timestamp()))})
+                    
+                    # 同时更新session状态
                     session = state_manager.get_current_session()
                     if session:
                         session.current_state = WorkflowState.COMPLETED
@@ -2035,6 +2049,9 @@ def render_image_generation_step(state_manager):
                         except Exception as backup_error:
                             logger.warning(f"Session backup failed: {backup_error}")
                             # 继续执行，不让备份失败影响主流程
+                    
+                    logger.info("State set to COMPLETED with URL params, triggering rerun")
+                    st.success("✅ 正在跳转到结果页面...")
                     st.rerun()
                     
             except ImportError as e:
@@ -2066,9 +2083,13 @@ def render_image_generation_step(state_manager):
                 st.success("✅ 模拟生成完成！")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 清除URL参数并设置状态
+                    # 使用URL参数强制状态转换（参考方案6的成功实现）
                     from services.aplus_studio.models import WorkflowState
-                    st.query_params.clear()
+                    
+                    # 设置URL参数强制跳转到完成状态
+                    st.query_params.update({"step": "completed", "t": str(int(datetime.now().timestamp()))})
+                    
+                    # 同时更新session状态
                     session = state_manager.get_current_session()
                     if session:
                         session.current_state = WorkflowState.COMPLETED
@@ -2081,6 +2102,9 @@ def render_image_generation_step(state_manager):
                         except Exception as backup_error:
                             logger.warning(f"Session backup failed: {backup_error}")
                             # 继续执行，不让备份失败影响主流程
+                    
+                    logger.info("State set to COMPLETED with URL params (simulated), triggering rerun")
+                    st.success("✅ 正在跳转到结果页面...")
                     st.rerun()
                     
             except Exception as e:
