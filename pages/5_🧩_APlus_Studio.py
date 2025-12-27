@@ -2061,5 +2061,35 @@ def render_simplified_content_editing(state_manager):
             st.rerun()
 
 
+def render_simplified_content_editing(state_manager):
+    """渲染简化版内容编辑界面"""
+    st.info("使用简化版内容编辑界面")
+    
+    generated_content = state_manager.get_generated_content()
+    
+    if generated_content:
+        for module, content in generated_content.items():
+            with st.expander(f"📝 编辑 {module}", expanded=True):
+                title = st.text_input("标题", value=content.get('title', ''), key=f"title_{module}")
+                description = st.text_area("描述", value=content.get('description', ''), key=f"desc_{module}")
+                
+                # 更新内容
+                generated_content[module]['title'] = title
+                generated_content[module]['description'] = description
+        
+        if st.button("✅ 确认编辑", type="primary", use_container_width=True):
+            state_manager.set_final_content(generated_content)
+            # 清除URL参数并设置状态
+            from services.aplus_studio.models import WorkflowState
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = WorkflowState.STYLE_SELECTION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+                state_manager._create_session_backup()
+            st.rerun()
+
+
 if __name__ == "__main__":
     main()
