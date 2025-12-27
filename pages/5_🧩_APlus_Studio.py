@@ -226,10 +226,6 @@ def render_intelligent_workflow():
             logger.error(f"Unknown workflow state: {current_state}")
             st.error(f"未知的工作流状态: {current_state}")
             
-        # 处理导航操作
-        if nav_action:
-            handle_navigation_action(state_manager, nav_action)
-            
     except ImportError as e:
         st.error(f"智能工作流界面组件加载失败: {str(e)}")
         st.info("💡 请检查相关组件是否正确安装")
@@ -2231,10 +2227,6 @@ def render_workflow_completed_step(state_manager):
 
 if __name__ == "__main__":
     main()
-
-
-def render_selling_points_analysis():
-    """渲染产品卖点分析功能"""
     st.header("💡 产品卖点分析")
     st.caption("上传产品图片，让AI智能分析产品卖点并生成营销建议")
     
