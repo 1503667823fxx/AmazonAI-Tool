@@ -783,9 +783,9 @@ def render_module_recommendation_step(state_manager):
         st.error("模块推荐组件未找到，请检查系统配置")
 
 
-if __name__ == "__main__":
-    main()
-
+# ============================================================================
+# 智能推荐辅助函数
+# ============================================================================
 
 def _generate_intelligent_recommendation(analysis_result: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
     """生成智能模块推荐"""
@@ -2053,3 +2053,13 @@ def render_simplified_content_editing(state_manager):
                 st.session_state.intelligent_workflow_session = session
                 state_manager._create_session_backup()
             st.rerun()
+                # 安全的session备份
+                try:
+                    state_manager._create_session_backup()
+                except Exception as backup_error:
+                    logger.warning(f"Session backup failed: {backup_error}")
+            st.rerun()
+
+
+if __name__ == "__main__":
+    main()
