@@ -404,16 +404,77 @@ class IntelligentWorkflowStateManager:
         try:
             session = self.get_current_session()
             if session:
-                session.workflow_metadata['generated_images'] = images
-                self._save_session(session)
+                # 创建可序列化的图片数据副本，移除bytes数据
+                serializable_images = {}
+                for module_key, image_data in images.items():
+                    if isinstance(image_data, dict):
+                        # 复制所有非bytes字段
+                        serializable_data = {}
+                        for key, value in image_data.items():
+                            if key == 'image_data' and isinstance(value, bytes):
+                                # 不保存bytes数据，只记录是否存在
+                                serializable_data['has_image_data'] = True
+                                serializable_data['image_data_size'] = len(value)
+                            elif isinstance(value, bytes):
+                                # 处理其他可能的bytes字段
+                                serializable_data[f'{key}_size'] = len(value)
+                                serializable_data[f'has_{key}'] = True
+                            else:
+                                serializable_data[key] = value
+                        serializable_images[module_key] = serializable_data
+                    else:
+                        serializable_images[module_key] = image_data
+                
+                # 保存可序列化的数据到workflow_metadata
+                session.workflow_metadata['generated_images'] = serializable_images
+                
+                # 同时在内存中保存完整数据（包含bytes）
+                if not hasattr(session, '_temp_generated_images'):
+                    session._temp_generated_images = {}
+                session._temp_generated_images = images
+                
+                # 使用安全的序列化保存session
+                self._safe_save_session(session)
+                logger.info(f"Generated images saved: {len(images)} modules")
         except Exception as e:
             logger.error(f"Failed to set generated images: {str(e)}")
+    
+    def _safe_save_session(self, session):
+        """安全的session保存，避免序列化问题"""
+        try:
+            # 临时移除不可序列化的对象
+            temp_module_contents = session.module_contents.copy()
+            temp_compliance_results = session.compliance_results.copy()
+            temp_generation_results = session.generation_results.copy()
+            
+            # 清空不可序列化的对象
+            session.module_contents.clear()
+            session.compliance_results.clear()
+            session.generation_results.clear()
+            
+            try:
+                # 保存session（只包含可序列化的数据）
+                self._save_session(session)
+            finally:
+                # 恢复数据到内存
+                session.module_contents.update(temp_module_contents)
+                session.compliance_results.update(temp_compliance_results)
+                session.generation_results.update(temp_generation_results)
+                
+        except Exception as e:
+            logger.error(f"Safe session save failed: {str(e)}")
+            raise
     
     def get_generated_images(self):
         """获取生成的图片"""
         try:
             session = self.get_current_session()
             if session:
+                # 优先返回内存中的完整数据
+                if hasattr(session, '_temp_generated_images') and session._temp_generated_images:
+                    return session._temp_generated_images
+                
+                # 否则返回序列化的数据（不包含image_data bytes）
                 return session.workflow_metadata.get('generated_images')
             return None
         except Exception as e:
