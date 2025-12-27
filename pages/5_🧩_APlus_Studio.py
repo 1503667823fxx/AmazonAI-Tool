@@ -2031,19 +2031,7 @@ def render_image_generation_step(state_manager):
                         
                         # 安全的session备份，避免序列化问题
                         try:
-                            temp_module_contents = session.module_contents.copy()
-                            temp_compliance_results = session.compliance_results.copy()
-                            temp_generation_results = session.generation_results.copy()
-                            
-                            session.module_contents.clear()
-                            session.compliance_results.clear()
-                            session.generation_results.clear()
-                            
-                            state_manager._create_session_backup()
-                            
-                            session.module_contents.update(temp_module_contents)
-                            session.compliance_results.update(temp_compliance_results)
-                            session.generation_results.update(temp_generation_results)
+                            state_manager._safe_save_session(session)
                         except Exception as backup_error:
                             logger.warning(f"Session backup failed: {backup_error}")
                             # 继续执行，不让备份失败影响主流程
@@ -2089,19 +2077,7 @@ def render_image_generation_step(state_manager):
                         
                         # 安全的session备份，避免序列化问题
                         try:
-                            temp_module_contents = session.module_contents.copy()
-                            temp_compliance_results = session.compliance_results.copy()
-                            temp_generation_results = session.generation_results.copy()
-                            
-                            session.module_contents.clear()
-                            session.compliance_results.clear()
-                            session.generation_results.clear()
-                            
-                            state_manager._create_session_backup()
-                            
-                            session.module_contents.update(temp_module_contents)
-                            session.compliance_results.update(temp_compliance_results)
-                            session.generation_results.update(temp_generation_results)
+                            state_manager._safe_save_session(session)
                         except Exception as backup_error:
                             logger.warning(f"Session backup failed: {backup_error}")
                             # 继续执行，不让备份失败影响主流程
@@ -2133,17 +2109,30 @@ def render_workflow_completed_step(state_manager):
         st.write(f"**生成结果**: 成功生成 {len(generated_images)} 个A+模块")
         
         # 显示生成的模块列表
-        for module, result in generated_images.items():
+        for module_key, result in generated_images.items():
             col1, col2, col3 = st.columns([2, 1, 1])
             
             with col1:
-                st.write(f"📋 {module.value}")
+                # 处理module_key，可能是字符串或ModuleType对象
+                if hasattr(module_key, 'value'):
+                    display_name = module_key.value.replace('_', ' ').title()
+                else:
+                    display_name = str(module_key).replace('_', ' ').title()
+                st.write(f"📋 {display_name}")
             
             with col2:
-                st.write(f"质量: {result['quality_score']:.1%}")
+                quality_score = result.get('quality_score', 0.0) if isinstance(result, dict) else 0.0
+                st.write(f"质量: {quality_score:.1%}")
             
             with col3:
-                st.button(f"下载", key=f"download_{module.value}")
+                # 使用字符串形式的module_key作为按钮key
+                button_key = str(module_key) if hasattr(module_key, 'value') else module_key
+                if st.button(f"下载", key=f"download_{button_key}"):
+                    # 检查是否有图片数据
+                    if isinstance(result, dict) and (result.get('has_image_data') or result.get('image_data')):
+                        st.success(f"开始下载 {display_name}")
+                    else:
+                        st.warning("图片数据不可用")
         
         # 批量操作
         st.markdown("---")
@@ -2163,7 +2152,12 @@ def render_workflow_completed_step(state_manager):
                     session.current_state = WorkflowState.IMAGE_GENERATION
                     session.last_updated = datetime.now()
                     st.session_state.intelligent_workflow_session = session
-                    state_manager._create_session_backup()
+                    
+                    # 安全的session备份
+                    try:
+                        state_manager._create_session_backup()
+                    except Exception as backup_error:
+                        logger.warning(f"Session backup failed: {backup_error}")
                 st.rerun()
         
         with col3:
@@ -2174,6 +2168,24 @@ def render_workflow_completed_step(state_manager):
     
     else:
         st.warning("没有找到生成的图片")
+        st.info("请返回上一步重新生成图片")
+        
+        if st.button("🔙 返回图片生成", use_container_width=True):
+            # 返回图片生成步骤
+            from services.aplus_studio.models import WorkflowState
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = WorkflowState.IMAGE_GENERATION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+                
+                # 安全的session备份
+                try:
+                    state_manager._create_session_backup()
+                except Exception as backup_error:
+                    logger.warning(f"Session backup failed: {backup_error}")
+            st.rerun()
 
 
 def render_simplified_intelligent_workflow():
