@@ -19,6 +19,9 @@ from .models import (
 from .error_handler import (
     SimpleErrorHandler, error_handler, get_global_error_handler
 )
+from .performance_monitor import (
+    get_global_performance_monitor
+)
 
 logger = logging.getLogger(__name__)
 
