@@ -26,9 +26,9 @@ from .intelligent_workflow import (
     ProductAnalysis, ModuleContent, MaterialRequest,
     IntelligentModuleContent, IntelligentMaterialRequest
 )
-from .error_handler import ErrorHandler, get_global_error_handler
+from .error_handler import SimpleErrorHandler, get_global_error_handler
 from .error_handler import (
-    ErrorHandler, error_handler, get_global_error_handler
+    SimpleErrorHandler, error_handler, get_global_error_handler
 )
 
 logger = logging.getLogger(__name__)
