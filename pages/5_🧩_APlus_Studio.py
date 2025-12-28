@@ -27,7 +27,7 @@ except ImportError:
 # 导入核心模型（必需）
 from services.aplus_studio.models import (
     ModuleType, GenerationStatus, get_new_professional_modules,
-    GeneratedModule, ComplianceStatus, ValidationStatus, WorkflowState
+    GeneratedModule, ValidationStatus, WorkflowState
 )
 
 # 页面配置
@@ -80,29 +80,17 @@ def render_intelligent_workflow():
             st.success("✅ URL参数已清除")
             st.rerun()
     
-    # 初始化简化工作流状态管理器
-    if 'simple_workflow_session' not in st.session_state:
-        try:
-            from services.aplus_studio.simple_workflow import SimpleWorkflow
-            st.session_state.simple_workflow_session = SimpleWorkflow.create_simple_session()
-            logger.info("Simple workflow session created")
-        except ImportError as e:
-            st.error(f"简化工作流组件加载失败: {str(e)}")
-            return
-    
-    # 同时保持原有的复杂state_manager作为备用（但不依赖它）
+    # 初始化智能工作流状态管理器
     if 'intelligent_state_manager' not in st.session_state:
         try:
             from app_utils.aplus_studio.intelligent_state_manager import IntelligentWorkflowStateManager
             st.session_state.intelligent_state_manager = IntelligentWorkflowStateManager()
-            logger.info("Complex state manager created as backup")
         except ImportError as e:
-            logger.warning(f"Complex state manager failed to load: {str(e)}")
-            # 不阻塞，继续使用简化版本
+            st.error(f"智能工作流组件加载失败: {str(e)}")
+            st.info("请检查系统配置或使用模块化A+制作功能")
+            return
     
-    # 优先使用简化工作流
-    simple_session = st.session_state.simple_workflow_session
-    state_manager = st.session_state.get('intelligent_state_manager')  # 备用
+    state_manager = st.session_state.intelligent_state_manager
     
     # 渲染工作流导航
     try:
@@ -111,22 +99,8 @@ def render_intelligent_workflow():
         
         nav_ui = WorkflowNavigationUI(state_manager)
         
-        # 显示当前步骤和进度 - 优先使用简化工作流
-        from services.aplus_studio.simple_workflow import SimpleWorkflow
-        current_state_str = SimpleWorkflow.get_current_state(simple_session)
-        
-        # 转换为WorkflowState枚举（兼容原有逻辑）
-        state_mapping = {
-            'INITIAL': WorkflowState.INITIAL,
-            'ANALYSIS_COMPLETED': WorkflowState.PRODUCT_ANALYSIS,
-            'RECOMMENDATION_COMPLETED': WorkflowState.MODULE_RECOMMENDATION,
-            'CONTENT_GENERATED': WorkflowState.CONTENT_GENERATION,
-            'CONTENT_FINALIZED': WorkflowState.CONTENT_EDITING,
-            'STYLE_SELECTED': WorkflowState.STYLE_SELECTION,
-            'IMAGES_GENERATED': WorkflowState.IMAGE_GENERATION,
-            'COMPLETED': WorkflowState.COMPLETED
-        }
-        current_state = state_mapping.get(current_state_str, WorkflowState.INITIAL)
+        # 显示当前步骤和进度
+        current_state = state_manager.get_current_state()
         
         # 检查URL参数是否指定了特定步骤 - 但要验证合理性
         url_step = st.query_params.get("step")
@@ -211,47 +185,27 @@ def render_intelligent_workflow():
         
         logger.info(f"Rendering intelligent workflow, current state: {current_state.value}")
         
-        # 临时调试面板 - 显示简化工作流状态
+        # 临时调试面板 - 帮助诊断状态转换问题
         with st.expander("🔧 状态调试信息", expanded=False):
             st.write(f"**当前状态**: {current_state.value}")
             st.write(f"**URL参数**: {dict(st.query_params)}")
             
-            # 显示简化工作流信息
-            st.write("**简化工作流状态**:")
-            st.write(f"- Session ID: {simple_session.get('session_id', 'Unknown')}")
-            st.write(f"- 当前状态: {current_state_str}")
-            st.write(f"- 创建时间: {simple_session.get('created_at', 'Unknown')}")
-            
-            # 显示数据状态
-            session_data = simple_session.get('data', {})
-            st.write(f"- 分析结果: {'存在' if session_data.get('analysis_result') else '不存在'}")
-            st.write(f"- 模块推荐: {'存在' if session_data.get('module_recommendation') else '不存在'}")
-            st.write(f"- 生成内容: {'存在' if session_data.get('generated_content') else '不存在'}")
-            st.write(f"- 最终内容: {'存在' if session_data.get('final_content') else '不存在'}")
-            st.write(f"- 风格主题: {'存在' if session_data.get('style_theme') else '不存在'}")
-            st.write(f"- 生成图片: {'存在' if session_data.get('generated_images') else '不存在'}")
-            
-            # 显示生成的图片信息
-            generated_images = session_data.get('generated_images')
-            if generated_images:
-                st.write(f"- 图片数量: {len(generated_images)}")
-                for module_key, result in generated_images.items():
-                    st.write(f"  - {module_key}: {'有数据' if result else '无数据'}")
-            
-            # 显示复杂state_manager状态（如果存在）
-            if state_manager:
-                st.write("**复杂状态管理器（备用）**:")
-                try:
-                    complex_session = state_manager.get_current_session()
-                    if complex_session:
-                        st.write(f"- 复杂Session ID: {complex_session.session_id}")
-                        st.write(f"- 复杂状态: {complex_session.current_state.value}")
-                    else:
-                        st.write("- 复杂Session: 不存在")
-                except Exception as e:
-                    st.write(f"- 复杂状态管理器错误: {str(e)}")
+            session = state_manager.get_current_session()
+            if session:
+                st.write(f"**Session状态**: {session.current_state.value}")
+                st.write(f"**Session ID**: {session.session_id}")
+                st.write(f"**最后更新**: {session.last_updated}")
+                
+                # 显示生成的图片信息
+                generated_images = state_manager.get_generated_images()
+                if generated_images:
+                    st.write(f"**生成的图片**: {len(generated_images)} 个模块")
+                    for module_key, result in generated_images.items():
+                        st.write(f"  - {module_key}: {'有数据' if result else '无数据'}")
+                else:
+                    st.write("**生成的图片**: 无")
             else:
-                st.write("**复杂状态管理器**: 未加载")
+                st.write("**Session**: 不存在")
         
         # 添加状态验证和恢复机制
         session = state_manager.get_current_session()
@@ -1385,8 +1339,7 @@ def render_content_generation_step(state_manager):
                 
                 # 调用现有的批量内容生成服务
                 batch_results = content_service.generate_content_for_multiple_modules(
-                    contexts=contexts,
-                    enable_compliance_check=True
+                    contexts=contexts
                 )
                 
                 progress_bar.progress(0.8)
