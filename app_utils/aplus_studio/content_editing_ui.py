@@ -776,30 +776,6 @@ class ContentEditingUI:
         else:
             st.warning("⚠️ 建议检查内容是否符合平台政策")
             st.info("请确保内容不包含夸大宣传、医疗声明或时效性表述")
-                with st.expander(f"⚠️ {issue.issue_type} 问题", expanded=True):
-                    st.write(f"**问题文本:** {issue.flagged_text}")
-                    st.write(f"**严重程度:** {issue.severity}")
-                    st.write(f"**说明:** {issue.explanation}")
-                    
-                    if issue.suggested_alternatives:
-                        st.write("**建议替换:**")
-                        for alt in issue.suggested_alternatives:
-                            if st.button(f"使用: {alt}", key=f"alt_{module_type.value}_{issue.flagged_text}_{alt}"):
-                                self._apply_compliance_fix(module_type, issue.flagged_text, alt)
-        
-        # 合规评分
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("合规评分", f"{compliance_result.compliance_score:.0%}")
-        
-        with col2:
-            st.metric("问题数量", len(compliance_result.flagged_issues))
-        
-        with col3:
-            if compliance_result.flagged_issues:
-                high_severity = sum(1 for issue in compliance_result.flagged_issues if issue.severity == "HIGH")
-                st.metric("高风险问题", high_severity)
     
     def _render_save_status(self, module_type: ModuleType) -> None:
         """渲染保存状态"""
