@@ -52,12 +52,22 @@ class SimpleErrorHandler:
     
     def __init__(self):
         self.error_count = 0
+        self.fallback_handlers = {}
     
     def handle_error(self, operation_name: str, error: Exception, context: Optional[Dict[str, Any]] = None) -> str:
         """处理错误并返回用户友好消息"""
         self.error_count += 1
         log_error(operation_name, error, context)
         return get_user_friendly_message(error)
+    
+    def register_fallback_handler(self, operation_name: str, handler: Callable):
+        """注册回退处理器"""
+        self.fallback_handlers[operation_name] = handler
+        logger.debug(f"Registered fallback handler for {operation_name}")
+    
+    def get_fallback_handler(self, operation_name: str) -> Optional[Callable]:
+        """获取回退处理器"""
+        return self.fallback_handlers.get(operation_name)
     
     def reset_error_count(self):
         """重置错误计数"""
