@@ -17,7 +17,7 @@ from .models import (
     WorkflowState, ProductCategory, StyleTheme, Priority
 )
 from .error_handler import (
-    ErrorHandler, error_handler, get_global_error_handler, ErrorContext
+    SimpleErrorHandler, error_handler, get_global_error_handler
 )
 
 logger = logging.getLogger(__name__)
