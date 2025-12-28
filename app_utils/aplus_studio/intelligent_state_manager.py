@@ -463,12 +463,10 @@ class IntelligentWorkflowStateManager:
         try:
             # 临时移除不可序列化的对象
             temp_module_contents = session.module_contents.copy()
-            temp_compliance_results = session.compliance_results.copy()
             temp_generation_results = session.generation_results.copy()
             
             # 清空不可序列化的对象
             session.module_contents.clear()
-            session.compliance_results.clear()
             session.generation_results.clear()
             
             try:
@@ -477,7 +475,6 @@ class IntelligentWorkflowStateManager:
             finally:
                 # 恢复数据到内存
                 session.module_contents.update(temp_module_contents)
-                session.compliance_results.update(temp_compliance_results)
                 session.generation_results.update(temp_generation_results)
                 
         except Exception as e:
@@ -585,19 +582,6 @@ class IntelligentWorkflowStateManager:
                 logger.info(f"Style theme updated: {style_theme.theme_name}")
         except Exception as e:
             logger.error(f"Failed to update style theme: {str(e)}")
-            raise
-    
-    def update_compliance_result(self, module_type: ModuleType, compliance_result: ComplianceResult):
-        """更新合规检查结果"""
-        try:
-            session = self.get_current_session()
-            if session:
-                session.compliance_results[module_type] = compliance_result
-                session.last_updated = datetime.now()
-                self._save_session(session)
-                logger.info(f"Compliance result updated for {module_type.value}")
-        except Exception as e:
-            logger.error(f"Failed to update compliance result: {str(e)}")
             raise
     
     def update_generation_status(self, module_type: ModuleType, status: GenerationStatus):
@@ -806,7 +790,6 @@ class IntelligentWorkflowStateManager:
                 'has_module_recommendation': session.module_recommendation is not None,
                 'has_style_theme': session.selected_style_theme is not None,
                 'module_contents_count': len(session.module_contents),
-                'compliance_results_count': len(session.compliance_results),
                 'generation_results_count': len(session.generation_results),
                 'user_edits_count': len(session.user_edits),
                 'workflow_metadata': self._serialize_workflow_metadata(session.workflow_metadata)
