@@ -1425,12 +1425,10 @@ def render_content_generation_step(state_manager):
                     # 更新session - 但要避免序列化问题
                     # 临时清空可能导致序列化问题的复杂对象
                     temp_module_contents = session.module_contents.copy()
-                    temp_compliance_results = session.compliance_results.copy()
                     temp_generation_results = session.generation_results.copy()
                     
                     # 清空这些字段以避免序列化问题
                     session.module_contents.clear()
-                    session.compliance_results.clear()
                     session.generation_results.clear()
                     
                     try:
@@ -1442,7 +1440,6 @@ def render_content_generation_step(state_manager):
                     finally:
                         # 恢复数据到内存中的session对象
                         session.module_contents.update(temp_module_contents)
-                        session.compliance_results.update(temp_compliance_results)
                         session.generation_results.update(temp_generation_results)
                 else:
                     st.error("❌ 无法获取当前session，数据保存失败")
@@ -1650,11 +1647,9 @@ def render_content_editing_step(state_manager):
                             
                             # 避免序列化问题的安全保存
                             temp_module_contents = session.module_contents.copy()
-                            temp_compliance_results = session.compliance_results.copy()
                             temp_generation_results = session.generation_results.copy()
                             
                             session.module_contents.clear()
-                            session.compliance_results.clear()
                             session.generation_results.clear()
                             
                             try:
@@ -1664,7 +1659,6 @@ def render_content_editing_step(state_manager):
                                 st.error(f"❌ 保存失败：{str(save_error)}")
                             finally:
                                 session.module_contents.update(temp_module_contents)
-                                session.compliance_results.update(temp_compliance_results)
                                 session.generation_results.update(temp_generation_results)
                 except Exception as e:
                     st.error(f"❌ 保存失败：{str(e)}")
@@ -2221,7 +2215,6 @@ def render_image_generation_step(state_manager):
                 st.session_state.generation_timestamp = datetime.now().isoformat()
                 
                 logger.info("Hybrid save completed: complex data in state_manager, simple data in session_state (simulated)")
-                        logger.warning(f"Session backup failed: {backup_error}")
                 
                 logger.info("Generated images saved successfully with enhanced persistence (simulated)")
                 st.success("✅ 模拟生成完成！")
