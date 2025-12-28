@@ -404,40 +404,59 @@ class IntelligentWorkflowStateManager:
         try:
             session = self.get_current_session()
             if session:
-                # 创建可序列化的图片数据副本，移除bytes数据
+                # 创建完全可序列化的图片数据副本，彻底移除bytes数据
                 serializable_images = {}
                 for module_key, image_data in images.items():
                     if isinstance(image_data, dict):
-                        # 复制所有非bytes字段
+                        # 复制所有非bytes字段，彻底过滤bytes
                         serializable_data = {}
                         for key, value in image_data.items():
-                            if key == 'image_data' and isinstance(value, bytes):
-                                # 不保存bytes数据，只记录是否存在
-                                serializable_data['has_image_data'] = True
-                                serializable_data['image_data_size'] = len(value)
-                            elif isinstance(value, bytes):
-                                # 处理其他可能的bytes字段
-                                serializable_data[f'{key}_size'] = len(value)
+                            if isinstance(value, bytes):
+                                # 完全跳过bytes数据，只记录元信息
                                 serializable_data[f'has_{key}'] = True
-                            else:
-                                serializable_data[key] = value
-                        serializable_images[module_key] = serializable_data
+                                serializable_data[f'{key}_size'] = len(value)
+                            elif isinstance(value, (str, int, float, bool, list, dict)):
+                                # 只保存基本可序列化类型
+                                if isinstance(value, dict):
+                                    # 递归处理嵌套字典，确保没有bytes
+                                    clean_dict = {}
+                                    for nested_key, nested_value in value.items():
+                                        if not isinstance(nested_value, bytes):
+                                            clean_dict[nested_key] = nested_value
+                                    serializable_data[key] = clean_dict
+                                elif isinstance(value, list):
+                                    # 递归处理列表，确保没有bytes
+                                    clean_list = [item for item in value if not isinstance(item, bytes)]
+                                    serializable_data[key] = clean_list
+                                else:
+                                    serializable_data[key] = value
+                        serializable_images[str(module_key)] = serializable_data  # 确保key也是字符串
                     else:
-                        serializable_images[module_key] = image_data
+                        # 非字典数据，确保可序列化
+                        if not isinstance(image_data, bytes):
+                            serializable_images[str(module_key)] = image_data
                 
                 # 保存可序列化的数据到workflow_metadata
                 session.workflow_metadata['generated_images'] = serializable_images
                 
-                # 同时在内存中保存完整数据（包含bytes）
-                if not hasattr(session, '_temp_generated_images'):
-                    session._temp_generated_images = {}
+                # 在内存中保存完整数据（不序列化）
                 session._temp_generated_images = images
                 
-                # 使用安全的序列化保存session
-                self._safe_save_session(session)
-                logger.info(f"Generated images saved: {len(images)} modules")
+                # 强制更新session状态，但不创建备份（避免序列化问题）
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+                
+                logger.info(f"Generated images saved: {len(images)} modules (serialization-safe)")
         except Exception as e:
             logger.error(f"Failed to set generated images: {str(e)}")
+            # 至少保存到内存
+            try:
+                session = self.get_current_session()
+                if session:
+                    session._temp_generated_images = images
+                    logger.info("Fallback: saved to temp memory only")
+            except:
+                pass
     
     def _safe_save_session(self, session):
         """安全的session保存，避免序列化问题"""
