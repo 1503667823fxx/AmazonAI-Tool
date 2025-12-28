@@ -226,25 +226,23 @@ def render_intelligent_workflow():
                     (session and session.workflow_metadata.get('generated_images'))
                 )
 
-                if has_data:
-                    current_state = WorkflowState.COMPLETED
-                    
-                    # 确保session状态也是正确的
-                    if session:
-                        session.current_state = WorkflowState.COMPLETED
-                        session.last_updated = datetime.now()
-                        st.session_state.intelligent_workflow_session = session
-                        logger.info(f"Session state updated to COMPLETED")
+                # 🎯 强制跳转到COMPLETED状态，不管是否有数据
+                logger.info("🎯 FORCING transition to COMPLETED state regardless of data")
+                current_state = WorkflowState.COMPLETED
+                
+                # 确保session状态也是正确的
+                if session:
+                    session.current_state = WorkflowState.COMPLETED
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                    logger.info(f"Session state FORCED to COMPLETED")
                 else:
-                    logger.warning("No generated images found, staying in IMAGE_GENERATION state")
-                    # 如果没有生成数据，保持在图片生成状态
-                    current_state = WorkflowState.IMAGE_GENERATION
-                    if session:
-                        session.current_state = WorkflowState.IMAGE_GENERATION
-                        st.session_state.intelligent_workflow_session = session
-                    # 清除completed参数，避免循环
-                    st.query_params.clear()
-                    logger.info("Cleared completed parameter due to missing data")
+                    # 如果没有session，创建一个新的
+                    logger.info("No session found, creating new session for COMPLETED state")
+                    session = state_manager.create_new_session()
+                    session.current_state = WorkflowState.COMPLETED
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
             else:
                 # 只有在URL参数完全无效时才清除
                 logger.warning(f"Invalid URL parameter {url_step} for current state {current_state.value}")
