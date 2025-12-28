@@ -168,7 +168,7 @@ def render_intelligent_workflow():
         
         # 检查URL参数是否指定了特定步骤 - 但要验证合理性
         url_step = st.query_params.get("step")
-        if url_step and current_state != WorkflowState.INITIAL:  # 只有在非初始状态时才应用URL参数
+        if url_step:  # 🎯 简化条件：只要有URL参数就处理
             logger.info(f"URL parameter detected: {url_step}, current_state: {current_state.value}")
             
             if url_step == "content_generation" and current_state in [WorkflowState.MODULE_RECOMMENDATION, WorkflowState.CONTENT_GENERATION]:
@@ -192,45 +192,12 @@ def render_intelligent_workflow():
                     session.last_updated = datetime.now()
                     st.session_state.intelligent_workflow_session = session
             elif url_step == "completed":
-                # 更宽松的条件 - 只要不是初始状态就允许跳转到完成状态
-                logger.info(f"URL parameter indicates completed step, forcing transition from {current_state.value}")
-                
-                # 检查是否有生成的图片数据
-                session = state_manager.get_current_session()
-                generated_images = state_manager.get_generated_images()
-                # [关键修复] 同时检查 session_state 中的简单数据备份
-                simple_images = st.session_state.get('generated_images_data')
-                
-                logger.info(f"Checking generated images for completed step: state_mgr={generated_images is not None}, session_state={simple_images is not None}")
-                
-                if generated_images or simple_images:
-                    logger.info(f"Found generated images (Complex: {len(generated_images) if generated_images else 0}, Simple: {len(simple_images) if simple_images else 0})")
-                else:
-                    logger.warning("No generated images found in primary sources, checking session backup")
-                    
-                    # 尝试从session备份恢复数据
-                    if session and hasattr(session, 'workflow_metadata'):
-                        backup_images = session.workflow_metadata.get('generated_images')
-                        if backup_images:
-                            logger.info(f"Found backup images: {len(backup_images)}")
-                            # 恢复图片数据到内存
-                            if hasattr(session, '_temp_generated_images'):
-                                logger.info("Restoring temp generated images from backup")
-                            else:
-                                logger.info("No temp images to restore")
-                
-                # [关键修复] 只要任意一个地方有数据，就允许通过
-                has_data = (
-                    generated_images is not None or 
-                    simple_images is not None or 
-                    (session and session.workflow_metadata.get('generated_images'))
-                )
-
-                # 🎯 强制跳转到COMPLETED状态，不管是否有数据
-                logger.info("🎯 FORCING transition to COMPLETED state regardless of data")
+                # 🎯 无条件强制跳转到COMPLETED状态
+                logger.info(f"🎯 URL parameter indicates completed step, FORCING transition from {current_state.value}")
                 current_state = WorkflowState.COMPLETED
                 
                 # 确保session状态也是正确的
+                session = state_manager.get_current_session()
                 if session:
                     session.current_state = WorkflowState.COMPLETED
                     session.last_updated = datetime.now()
