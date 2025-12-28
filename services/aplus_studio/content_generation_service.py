@@ -26,10 +26,7 @@ from .intelligent_workflow import (
     ProductAnalysis, ModuleContent, MaterialRequest,
     IntelligentModuleContent, IntelligentMaterialRequest
 )
-from .amazon_compliance_service import AmazonComplianceService
-from .performance_monitor import (
-    PerformanceMonitor, performance_monitor, get_global_performance_monitor
-)
+from .error_handler import ErrorHandler, get_global_error_handler
 from .error_handler import (
     ErrorHandler, error_handler, get_global_error_handler
 )
@@ -116,11 +113,7 @@ class ContentGenerationService:
         self.material_requirements = self._initialize_material_requirements()
         self.supported_languages = ["zh", "en", "es", "de", "fr", "ja"]
         
-        # 初始化亚马逊合规检查服务
-        self.compliance_service = AmazonComplianceService()
-        
-        # 初始化性能监控和错误处理
-        self._performance_monitor = get_global_performance_monitor()
+        # 初始化错误处理
         self._error_handler = get_global_error_handler()
         
         # 注册回退处理器
@@ -394,7 +387,6 @@ class ContentGenerationService:
         
         return requirements
     
-    # @performance_monitor("generate_module_content", cache_key_params={"context.module_type": 0, "context.language": 1}, cache_ttl=1800)
     @error_handler("generate_module_content", max_retries=3, enable_recovery=True)
     def generate_module_content(self, context: GenerationContext) -> IntelligentModuleContent:
         """生成模块内容
@@ -424,9 +416,6 @@ class ContentGenerationService:
             
             # 识别素材需求
             material_requests = self._identify_material_needs(context)
-            
-            # 执行合规检查和自动修正
-            content = self._apply_compliance_check(content, context)
             
             # 创建模块内容对象
             module_content = IntelligentModuleContent(
@@ -1175,255 +1164,29 @@ Content Requirements:
             logger.error(f"Data content update failed: {str(e)}")
             return content
     
-    def _apply_compliance_check(self, content: Dict[str, Any], context: GenerationContext) -> Dict[str, Any]:
-        """应用合规检查和自动修正
-        
-        Args:
-            content: 生成的内容
-            context: 生成上下文
-            
-        Returns:
-            Dict[str, Any]: 合规检查后的内容
-        """
-        try:
-            logger.info(f"Applying compliance check for {context.module_type.value}")
-            
-            # 收集所有文本内容进行合规检查
-            all_text_content = []
-            
-            # 检查标题
-            if content.get("title"):
-                all_text_content.append(("title", content["title"]))
-            
-            # 检查描述
-            if content.get("description"):
-                all_text_content.append(("description", content["description"]))
-            
-            # 检查关键点
-            for i, point in enumerate(content.get("key_points", [])):
-                all_text_content.append((f"key_point_{i}", point))
-            
-            # 检查其他文本部分
-            for section_name, section_content in content.get("sections", {}).items():
-                if isinstance(section_content, str):
-                    all_text_content.append((f"section_{section_name}", section_content))
-            
-            # 对每个文本部分进行合规检查
-            compliance_issues = []
-            corrected_content = content.copy()
-            
-            for content_type, text_content in all_text_content:
-                if not text_content:
-                    continue
-                
-                # 执行合规检查
-                compliance_result = self.compliance_service.check_content_compliance(text_content)
-                
-                if not compliance_result.is_compliant:
-                    compliance_issues.extend(compliance_result.flagged_issues)
-                    
-                    # 应用自动修正
-                    corrected_text = self.compliance_service.sanitize_content(text_content, auto_fix=True)
-                    
-                    # 更新内容
-                    if content_type == "title":
-                        corrected_content["title"] = corrected_text
-                    elif content_type == "description":
-                        corrected_content["description"] = corrected_text
-                    elif content_type.startswith("key_point_"):
-                        point_index = int(content_type.split("_")[-1])
-                        if point_index < len(corrected_content.get("key_points", [])):
-                            corrected_content["key_points"][point_index] = corrected_text
-                    elif content_type.startswith("section_"):
-                        section_name = content_type.replace("section_", "")
-                        if "sections" not in corrected_content:
-                            corrected_content["sections"] = {}
-                        corrected_content["sections"][section_name] = corrected_text
-            
-            # 记录合规检查结果
-            if compliance_issues:
-                logger.warning(f"Found {len(compliance_issues)} compliance issues in {context.module_type.value}")
-                
-                # 将合规问题信息添加到内容的元数据中
-                if "sections" not in corrected_content:
-                    corrected_content["sections"] = {}
-                
-                corrected_content["sections"]["compliance_info"] = {
-                    "issues_found": len(compliance_issues),
-                    "auto_fixes_applied": True,
-                    "check_timestamp": datetime.now().isoformat()
-                }
-            else:
-                logger.info(f"Content passed compliance check for {context.module_type.value}")
-            
-            return corrected_content
-            
-        except Exception as e:
-            logger.error(f"Compliance check failed: {str(e)}")
-            # 如果合规检查失败，返回原始内容
-            return content
-    
-    def check_content_compliance_manual(self, content: IntelligentModuleContent) -> Dict[str, Any]:
-        """手动检查内容合规性（供用户审核使用）
-        
-        Args:
-            content: 要检查的模块内容
-            
-        Returns:
-            Dict[str, Any]: 合规检查结果
-        """
-        try:
-            logger.info(f"Manual compliance check for {content.module_type.value}")
-            
-            # 收集所有文本内容
-            all_text = []
-            all_text.append(content.title)
-            all_text.append(content.description)
-            all_text.extend(content.key_points)
-            
-            for section_content in content.generated_text.values():
-                if isinstance(section_content, str):
-                    all_text.append(section_content)
-            
-            combined_text = " ".join(filter(None, all_text))
-            
-            # 执行合规检查
-            compliance_result = self.compliance_service.check_content_compliance(combined_text)
-            
-            # 格式化结果供用户查看
-            formatted_result = {
-                "is_compliant": compliance_result.is_compliant,
-                "compliance_score": compliance_result.compliance_score,
-                "total_issues": len(compliance_result.flagged_issues),
-                "issues_by_type": {},
-                "suggested_fixes": compliance_result.suggested_fixes,
-                "check_timestamp": compliance_result.check_timestamp.isoformat()
-            }
-            
-            # 按类型分组问题
-            for issue in compliance_result.flagged_issues:
-                issue_type = issue.issue_type.value
-                if issue_type not in formatted_result["issues_by_type"]:
-                    formatted_result["issues_by_type"][issue_type] = []
-                
-                formatted_result["issues_by_type"][issue_type].append({
-                    "flagged_text": issue.flagged_text,
-                    "explanation": issue.explanation,
-                    "severity": issue.severity.value,
-                    "alternatives": issue.suggested_alternatives
-                })
-            
-            return formatted_result
-            
-        except Exception as e:
-            logger.error(f"Manual compliance check failed: {str(e)}")
-            return {
-                "is_compliant": False,
-                "compliance_score": 0.0,
-                "total_issues": 0,
-                "issues_by_type": {},
-                "suggested_fixes": {},
-                "error": str(e)
-            }
-    
-    def apply_compliance_fixes(self, content: IntelligentModuleContent, 
-                             user_approved_fixes: Dict[str, str]) -> IntelligentModuleContent:
-        """应用用户批准的合规修复
-        
-        Args:
-            content: 原始内容
-            user_approved_fixes: 用户批准的修复，格式为 {原文: 修复后文本}
-            
-        Returns:
-            IntelligentModuleContent: 修复后的内容
-        """
-        try:
-            logger.info(f"Applying user-approved compliance fixes for {content.module_type.value}")
-            
-            # 创建内容副本
-            fixed_content = IntelligentModuleContent(
-                module_type=content.module_type,
-                title=content.title,
-                description=content.description,
-                key_points=content.key_points.copy(),
-                generated_text=content.generated_text.copy(),
-                material_requests=content.material_requests.copy(),
-                language=content.language,
-                generation_timestamp=datetime.now()
-            )
-            
-            # 应用修复
-            for original_text, fixed_text in user_approved_fixes.items():
-                # 替换标题中的文本
-                if original_text in fixed_content.title:
-                    fixed_content.title = fixed_content.title.replace(original_text, fixed_text)
-                
-                # 替换描述中的文本
-                if original_text in fixed_content.description:
-                    fixed_content.description = fixed_content.description.replace(original_text, fixed_text)
-                
-                # 替换关键点中的文本
-                for i, point in enumerate(fixed_content.key_points):
-                    if original_text in point:
-                        fixed_content.key_points[i] = point.replace(original_text, fixed_text)
-                
-                # 替换其他文本部分
-                for section_name, section_content in fixed_content.generated_text.items():
-                    if isinstance(section_content, str) and original_text in section_content:
-                        fixed_content.generated_text[section_name] = section_content.replace(original_text, fixed_text)
-            
-            logger.info(f"Applied {len(user_approved_fixes)} compliance fixes for {content.module_type.value}")
-            return fixed_content
-            
-        except Exception as e:
-            logger.error(f"Failed to apply compliance fixes: {str(e)}")
-            return content
-    
-    def generate_content_for_multiple_modules(self, contexts: List[GenerationContext], 
-                                            enable_compliance_check: bool = True) -> Dict[ModuleType, IntelligentModuleContent]:
+    def generate_content_for_multiple_modules(self, contexts: List[GenerationContext]) -> Dict[ModuleType, IntelligentModuleContent]:
         """批量生成多个模块的内容
         
         Args:
             contexts: 生成上下文列表
-            enable_compliance_check: 是否启用合规检查
             
         Returns:
             Dict[ModuleType, IntelligentModuleContent]: 模块类型到内容的映射
         """
         try:
-            logger.info(f"Generating content for {len(contexts)} modules (compliance check: {enable_compliance_check})")
+            logger.info(f"Generating content for {len(contexts)} modules")
             
             results = {}
-            compliance_summary = {
-                "total_modules": len(contexts),
-                "compliant_modules": 0,
-                "issues_found": 0,
-                "auto_fixes_applied": 0
-            }
             
             for context in contexts:
                 try:
                     content = self.generate_module_content(context)
-                    
-                    # 如果启用合规检查，进行额外的合规验证
-                    if enable_compliance_check:
-                        compliance_result = self.check_content_compliance_manual(content)
-                        
-                        if compliance_result["is_compliant"]:
-                            compliance_summary["compliant_modules"] += 1
-                        else:
-                            compliance_summary["issues_found"] += compliance_result["total_issues"]
-                    
                     results[context.module_type] = content
                     
                 except Exception as e:
                     logger.error(f"Failed to generate content for {context.module_type.value}: {str(e)}")
                     # 继续处理其他模块，不中断整个批量生成
                     continue
-            
-            # 记录合规检查摘要
-            if enable_compliance_check:
-                logger.info(f"Compliance summary: {compliance_summary['compliant_modules']}/{compliance_summary['total_modules']} modules compliant, {compliance_summary['issues_found']} issues found")
             
             logger.info(f"Batch content generation completed: {len(results)}/{len(contexts)} successful")
             return results
