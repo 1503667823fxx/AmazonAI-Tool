@@ -28,7 +28,7 @@ from .performance_monitor import (
     PerformanceMonitor, performance_monitor, get_global_performance_monitor
 )
 from .error_handler import (
-    ErrorHandler, error_handler, get_global_error_handler
+    SimpleErrorHandler, error_handler, get_global_error_handler
 )
 
 logger = logging.getLogger(__name__)
