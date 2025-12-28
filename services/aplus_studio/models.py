@@ -67,14 +67,6 @@ class GenerationStatus(Enum):
     CANCELLED = "cancelled"
 
 
-class ComplianceStatus(Enum):
-    """亚马逊A+合规状态枚举"""
-    COMPLIANT = "compliant"
-    NON_COMPLIANT = "non_compliant"
-    NEEDS_OPTIMIZATION = "needs_optimization"
-    PENDING_REVIEW = "pending_review"
-
-
 class WorkflowState(Enum):
     """智能工作流状态枚举"""
     INITIAL = "initial"
@@ -246,17 +238,12 @@ class GeneratedModule:
     image_data: Optional[bytes]
     image_path: Optional[str]
     metadata: Dict[str, Any] = field(default_factory=dict)
-    compliance_status: ComplianceStatus = ComplianceStatus.PENDING_REVIEW
     generation_timestamp: datetime = field(default_factory=datetime.now)
     materials_used: Optional[MaterialSet] = None
     quality_score: float = 0.0
     validation_status: ValidationStatus = ValidationStatus.PENDING
     prompt_used: str = ""
     generation_time: float = 0.0
-    
-    def is_compliant(self) -> bool:
-        """检查是否符合A+规范"""
-        return self.compliance_status == ComplianceStatus.COMPLIANT
 
 
 @dataclass
