@@ -16,11 +16,11 @@ import logging
 from services.aplus_studio.intelligent_workflow import (
     IntelligentWorkflowSession, IntelligentWorkflowController,
     ProductAnalysis, ModuleRecommendation,
-    ModuleContent, StyleThemeConfig, ComplianceResult
+    ModuleContent, StyleThemeConfig
 )
 from services.aplus_studio.models import (
     WorkflowState, ProductCategory, ModuleType, Priority,
-    GenerationStatus, GenerationResult
+    GenerationStatus, GenerationResult, IntelligentComplianceResult
 )
 
 logger = logging.getLogger(__name__)
