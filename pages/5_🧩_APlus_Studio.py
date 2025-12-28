@@ -82,6 +82,67 @@ def render_intelligent_workflow():
             st.query_params.clear()
             st.success("✅ URL参数已清除")
             st.rerun()
+        
+        # 🎯 快速测试按钮 - 基于bug报告中的成功模式
+        st.markdown("---")
+        st.subheader("⚡ 快速测试")
+        if st.button("⚡ 快速测试完成页面", type="primary"):
+            # 创建虚拟的生成结果数据，包含4个模块
+            mock_generated_images = {
+                'PRODUCT_OVERVIEW': {
+                    'image_path': 'mock/product_overview.png',
+                    'generation_time': 2.3,
+                    'quality_score': 0.92,
+                    'success': True,
+                    'has_image_data': True,
+                    'module_name': 'Product Overview',
+                    'generated_at': datetime.now().isoformat(),
+                    'is_mock': True
+                },
+                'PROBLEM_SOLUTION': {
+                    'image_path': 'mock/problem_solution.png',
+                    'generation_time': 1.8,
+                    'quality_score': 0.88,
+                    'success': True,
+                    'has_image_data': True,
+                    'module_name': 'Problem Solution',
+                    'generated_at': datetime.now().isoformat(),
+                    'is_mock': True
+                },
+                'USAGE_SCENARIOS': {
+                    'image_path': 'mock/usage_scenarios.png',
+                    'generation_time': 2.1,
+                    'quality_score': 0.85,
+                    'success': True,
+                    'has_image_data': True,
+                    'module_name': 'Usage Scenarios',
+                    'generated_at': datetime.now().isoformat(),
+                    'is_mock': True
+                },
+                'QUALITY_ASSURANCE': {
+                    'image_path': 'mock/quality_assurance.png',
+                    'generation_time': 1.9,
+                    'quality_score': 0.90,
+                    'success': True,
+                    'has_image_data': True,
+                    'module_name': 'Quality Assurance',
+                    'generated_at': datetime.now().isoformat(),
+                    'is_mock': True
+                }
+            }
+            
+            # 直接保存到session state（使用成功的简化模式）
+            st.session_state.generated_images_data = mock_generated_images
+            st.session_state.generation_completed = True
+            st.session_state.generation_timestamp = datetime.now().isoformat()
+            
+            # 设置URL参数跳转到完成状态
+            from services.aplus_studio.models import WorkflowState
+            timestamp = str(int(datetime.now().timestamp()))
+            st.query_params.update({"step": "completed", "t": timestamp})
+            
+            st.success("✅ 快速测试数据已创建，正在跳转...")
+            st.rerun()
     
     # 初始化智能工作流状态管理器
     if 'intelligent_state_manager' not in st.session_state:
@@ -1987,37 +2048,36 @@ def render_image_generation_step(state_manager):
                 # 🎯 混合策略：保留复杂设计的优点，同时解决序列化问题
                 logger.info(f"Saving generated images (real generation): {len(generated_images)} modules")
                 
-                # 1. 完整保存到复杂的state_manager（用于业务逻辑）
-                try:
-                    state_manager.set_generated_images(generated_images)
-                    logger.info("Successfully saved to complex state_manager for business logic")
-                except Exception as sm_error:
-                    logger.warning(f"Complex state_manager save failed: {sm_error}")
+                # 🎯 根本问题修复：采用简化数据存储模式（基于测试页面的成功经验）
+                # 问题根源：复杂的数据结构和序列化过程导致数据在页面重新加载时丢失
+                # 解决方案：使用简单的字典结构，直接存储到session state，确保完全可序列化
                 
-                # 2. 简化保存到session state（用于页面跳转和显示）
+                # 创建简化的数据结构（移除所有bytes数据和复杂对象）
                 simple_generated_images = {}
                 for module_key, result in generated_images.items():
-                    # 提取关键显示信息，确保可序列化
                     simple_generated_images[str(module_key)] = {
                         'image_path': result.get('image_path', ''),
                         'generation_time': result.get('generation_time', 0.0),
                         'quality_score': result.get('quality_score', 0.0),
                         'success': result.get('success', False),
                         'has_image_data': result.get('success', False),
-                        'image_data_size': result.get('image_data_size', 0),
                         'module_name': str(module_key).replace('_', ' ').title(),
-                        'generated_at': datetime.now().isoformat(),
-                        # 保留业务信息的引用
-                        'module_type': str(module_key),
-                        'business_data_available': True
+                        'generated_at': datetime.now().isoformat()
                     }
                 
-                # 直接保存到session state（确保页面跳转成功）
+                # 主要保存：直接保存到session state（可靠）
                 st.session_state.generated_images_data = simple_generated_images
                 st.session_state.generation_completed = True
                 st.session_state.generation_timestamp = datetime.now().isoformat()
                 
-                logger.info("Hybrid save completed: complex data in state_manager, simple data in session_state")
+                # 备用保存：尝试保存到state_manager（可选，失败不影响主流程）
+                try:
+                    state_manager.set_generated_images(generated_images)
+                    logger.info("Successfully saved to state_manager as backup")
+                except Exception as sm_error:
+                    logger.warning(f"State_manager backup save failed (not critical): {sm_error}")
+                
+                logger.info(f"Simplified data save completed: {len(simple_generated_images)} modules saved to session_state")
                 
                 # 计算统计信息
                 total_modules = len(batch_results)
@@ -2193,38 +2253,34 @@ def render_image_generation_step(state_manager):
                 # 🎯 混合策略：保留复杂设计的优点，同时解决序列化问题
                 logger.info(f"Saving generated images (simulated): {len(generated_images)} modules")
                 
-                # 1. 完整保存到复杂的state_manager（用于业务逻辑）
-                try:
-                    state_manager.set_generated_images(generated_images)
-                    logger.info("Successfully saved to complex state_manager for business logic")
-                except Exception as sm_error:
-                    logger.warning(f"Complex state_manager save failed: {sm_error}")
-                
-                # 2. 简化保存到session state（用于页面跳转和显示）
+                # 🎯 根本问题修复：采用简化数据存储模式（基于测试页面的成功经验）
+                # 创建简化的数据结构（移除所有bytes数据和复杂对象）
                 simple_generated_images = {}
                 for module_key, result in generated_images.items():
-                    # 提取关键显示信息，确保可序列化
                     simple_generated_images[str(module_key)] = {
                         'image_path': result.get('image_path', ''),
                         'generation_time': result.get('generation_time', 0.0),
                         'quality_score': result.get('quality_score', 0.0),
                         'success': True,  # 模拟生成总是成功
                         'has_image_data': True,  # 模拟有数据
-                        'image_data_size': 800000,  # 模拟大小
                         'module_name': str(module_key).replace('_', ' ').title(),
                         'generated_at': datetime.now().isoformat(),
-                        'is_simulated': True,
-                        # 保留业务信息的引用
-                        'module_type': str(module_key),
-                        'business_data_available': True
+                        'is_simulated': True
                     }
                 
-                # 直接保存到session state（确保页面跳转成功）
+                # 主要保存：直接保存到session state（可靠）
                 st.session_state.generated_images_data = simple_generated_images
                 st.session_state.generation_completed = True
                 st.session_state.generation_timestamp = datetime.now().isoformat()
                 
-                logger.info("Hybrid save completed: complex data in state_manager, simple data in session_state (simulated)")
+                # 备用保存：尝试保存到state_manager（可选，失败不影响主流程）
+                try:
+                    state_manager.set_generated_images(generated_images)
+                    logger.info("Successfully saved mock data to state_manager as backup")
+                except Exception as sm_error:
+                    logger.warning(f"State_manager backup save failed (not critical): {sm_error}")
+                
+                logger.info(f"Simplified mock data save completed: {len(simple_generated_images)} modules saved to session_state")
                 
                 logger.info("Generated images saved successfully with enhanced persistence (simulated)")
                 st.success("✅ 模拟生成完成！")
@@ -2455,6 +2511,61 @@ def render_workflow_completed_step(state_manager):
                 # 清理状态，开始新项目
                 state_manager.reset_workflow()
                 st.rerun()
+        
+        # 🎯 添加调试和恢复功能
+        st.markdown("---")
+        st.markdown("**🔧 调试和恢复工具**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔍 检查所有数据源", use_container_width=True):
+                st.info("**数据源检查结果：**")
+                session = state_manager.get_current_session()
+                
+                # 检查各种数据源
+                sources = {
+                    "Session State": st.session_state.get('generated_images_data'),
+                    "State Manager": state_manager.get_generated_images(),
+                    "Session Metadata": session.workflow_metadata.get('generated_images') if session and hasattr(session, 'workflow_metadata') else None,
+                    "Session Temp": getattr(session, '_temp_generated_images', None) if session else None,
+                    "Generation Results": getattr(session, 'generation_results', None) if session else None
+                }
+                
+                for source_name, data in sources.items():
+                    if data:
+                        count = len(data) if isinstance(data, (dict, list)) else "存在"
+                        st.success(f"✅ {source_name}: {count}")
+                    else:
+                        st.error(f"❌ {source_name}: 无数据")
+        
+        with col2:
+            if st.button("🔄 强制恢复数据", use_container_width=True):
+                # 尝试从任何可用源恢复数据
+                session = state_manager.get_current_session()
+                recovered = False
+                
+                # 尝试各种恢复方法
+                if st.session_state.get('generated_images_data'):
+                    st.success("✅ 从Session State恢复数据")
+                    recovered = True
+                elif state_manager.get_generated_images():
+                    st.success("✅ 从State Manager恢复数据")
+                    recovered = True
+                elif session and hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images'):
+                    backup_data = session.workflow_metadata['generated_images']
+                    st.session_state.generated_images_data = backup_data
+                    st.success("✅ 从Session Metadata恢复数据")
+                    recovered = True
+                elif session and hasattr(session, '_temp_generated_images') and session._temp_generated_images:
+                    st.session_state.generated_images_data = session._temp_generated_images
+                    st.success("✅ 从临时数据恢复")
+                    recovered = True
+                
+                if recovered:
+                    st.rerun()
+                else:
+                    st.error("❌ 无法恢复数据，请重新生成")
     
     else:
         logger.warning("No generated images found after all recovery attempts")
