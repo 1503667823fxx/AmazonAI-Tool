@@ -313,10 +313,9 @@ class IntelligentWorkflowController:
         # 模块推荐规则
         self.recommendation_rules = self._initialize_recommendation_rules()
         
-        # 初始化错误处理
+        # 初始化错误处理和性能监控
         self._error_handler = get_global_error_handler()
         self._performance_monitor = get_global_performance_monitor()
-        self._error_handler = get_global_error_handler()
         
         # 注册回退处理器
         self._register_fallback_handlers()
