@@ -48,7 +48,8 @@ class ContentEditingUI:
         self.workflow_controller = workflow_controller
         self.content_service = ContentGenerationService()
         self.material_service = MaterialRequirementService()
-        self.compliance_service = AmazonComplianceService()
+        # 移除合规服务 - 根据简化分析，这是过度工程化的功能
+        # self.compliance_service = AmazonComplianceService()
         
         # 编辑状态管理
         self.edit_states: Dict[ModuleType, ContentEditState] = {}
@@ -767,16 +768,14 @@ class ContentEditingUI:
         
         st.write("**🔍 亚马逊合规检查**")
         
-        # 执行合规检查
-        compliance_result = self.compliance_service.check_content_compliance(content.title + " " + content.description)
+        # 简化的合规检查 - 基本文本验证
+        has_compliance_issues = self._simple_compliance_check(content.title + " " + content.description)
         
-        if compliance_result.is_compliant:
-            st.success("✅ 内容符合亚马逊政策要求")
+        if not has_compliance_issues:
+            st.success("✅ 内容通过基本检查")
         else:
-            st.error("❌ 发现合规问题，需要修改")
-            
-            # 显示具体问题
-            for issue in compliance_result.flagged_issues:
+            st.warning("⚠️ 建议检查内容是否符合平台政策")
+            st.info("请确保内容不包含夸大宣传、医疗声明或时效性表述")
                 with st.expander(f"⚠️ {issue.issue_type} 问题", expanded=True):
                     st.write(f"**问题文本:** {issue.flagged_text}")
                     st.write(f"**严重程度:** {issue.severity}")
@@ -887,17 +886,10 @@ class ContentEditingUI:
             st.write("**合规检查**")
             
             if not has_compliance_issues:
-                st.success("✅ 合规检查通过")
+                st.success("✅ 基本检查通过")
             else:
-                st.error("❌ 存在合规问题")
-                
-                # 显示具体问题
-                compliance_result = self.compliance_service.check_content_compliance(
-                    content.title + " " + content.description
-                )
-                
-                for issue in compliance_result.flagged_issues[:3]:  # 显示前3个问题
-                    st.write(f"• {issue.issue_type}: {issue.flagged_text}")
+                st.warning("⚠️ 建议检查内容")
+                st.info("请确保内容符合平台政策要求")
         
         # 审核操作
         col1, col2, col3 = st.columns(3)
@@ -1002,10 +994,8 @@ class ContentEditingUI:
             if not text_to_check.strip():
                 return False
             
-            # 执行合规检查
-            compliance_result = self.compliance_service.check_content_compliance(text_to_check)
-            
-            return not compliance_result.is_compliant
+            # 简化的合规检查
+            return self._simple_compliance_check(text_to_check)
             
         except Exception as e:
             logger.error(f"Compliance check failed: {str(e)}")
@@ -1150,6 +1140,31 @@ class ContentEditingUI:
         except Exception as e:
             logger.error(f"Failed to export content data: {str(e)}")
             return None
+    
+    def _simple_compliance_check(self, text: str) -> bool:
+        """
+        简化的合规检查 - 基本文本验证
+        返回True表示有问题，False表示通过检查
+        """
+        if not text or not text.strip():
+            return False
+        
+        text_lower = text.lower()
+        
+        # 基本的问题词汇检查
+        problematic_words = [
+            "最好的", "最佳", "第一", "唯一", "绝对", "完美",
+            "治疗", "医疗", "药用", "疗效", "治愈",
+            "今天", "明天", "本周", "限时", "马上",
+            "保证", "承诺", "一定", "必须", "肯定"
+        ]
+        
+        for word in problematic_words:
+            if word in text_lower:
+                logger.debug(f"Found potentially problematic word: {word}")
+                return True
+        
+        return False
 
 
 # 全局实例，便于访问
