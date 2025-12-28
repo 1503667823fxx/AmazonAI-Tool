@@ -142,21 +142,13 @@ def render_intelligent_workflow():
             else:
                 # 只有在URL参数完全无效时才清除
                 logger.warning(f"Invalid URL parameter {url_step} for current state {current_state.value}")
-                # 给更多机会，不要轻易清除completed参数
-                if url_step not in ["content_generation", "content_editing", "completed"] and url_step != "completed":
+                # 不要清除completed参数，给状态转换更多机会
+                if url_step not in ["content_generation", "content_editing", "completed"]:
                     st.query_params.clear()
                     logger.warning(f"Cleared invalid URL parameter: {url_step}")
                 else:
-                    # 对于completed参数，即使状态不匹配也要尝试处理
-                    if url_step == "completed":
-                        logger.info(f"Forcing completed state transition despite state mismatch")
-                        current_state = WorkflowState.COMPLETED
-                        session = state_manager.get_current_session()
-                        if session:
-                            session.current_state = WorkflowState.COMPLETED
-                            session.last_updated = datetime.now()
-                            st.session_state.intelligent_workflow_session = session
-                            logger.info(f"Forced session state to COMPLETED")
+                    # 对于已知的有效参数，保留它们
+                    logger.info(f"Keeping valid URL parameter: {url_step}")
         
         logger.info(f"Rendering intelligent workflow, current state: {current_state.value}")
         
@@ -2036,6 +2028,12 @@ def render_image_generation_step(state_manager):
                     if current_session:
                         logger.info(f"Current session state before transition: {current_session.current_state.value}")
                     
+                    # 检查生成图片数据
+                    generated_images = state_manager.get_generated_images()
+                    logger.info(f"Generated images available: {generated_images is not None}")
+                    if generated_images:
+                        logger.info(f"Generated images count: {len(generated_images)}")
+                    
                     # 设置URL参数强制跳转到完成状态
                     timestamp = str(int(datetime.now().timestamp()))
                     st.query_params.update({"step": "completed", "t": timestamp})
@@ -2059,12 +2057,40 @@ def render_image_generation_step(state_manager):
                     else:
                         logger.error("No current session found!")
                     
+                    # 显示调试信息给用户
+                    st.info("🔄 正在跳转到结果页面...")
+                    logger.info("Triggering page rerun...")
+                    
                     # 触发页面重新加载
                     st.rerun()
-                    
-                    logger.info("Triggering page rerun...")
-                    st.success("✅ 正在跳转到结果页面...")
-                    st.rerun()
+                
+                # 临时测试按钮 - 直接跳转方案
+                st.markdown("---")
+                st.markdown("**🧪 测试区域**")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("🔧 直接跳转 (测试)", type="secondary"):
+                        # 直接设置状态，不使用URL参数
+                        from services.aplus_studio.models import WorkflowState
+                        session = state_manager.get_current_session()
+                        if session:
+                            session.current_state = WorkflowState.COMPLETED
+                            session.last_updated = datetime.now()
+                            st.session_state.intelligent_workflow_session = session
+                            st.success("✅ 状态已设置为COMPLETED")
+                            st.rerun()
+                        else:
+                            st.error("❌ 没有找到当前会话")
+                
+                with col2:
+                    if st.button("🔍 检查数据", type="secondary"):
+                        # 检查生成的图片数据
+                        generated_images = state_manager.get_generated_images()
+                        if generated_images:
+                            st.success(f"✅ 找到 {len(generated_images)} 个生成的图片")
+                        else:
+                            st.error("❌ 没有找到生成的图片数据")
                     
             except ImportError as e:
                 st.error(f"❌ 图片生成服务导入失败: {str(e)}")
@@ -2105,6 +2131,12 @@ def render_image_generation_step(state_manager):
                     if current_session:
                         logger.info(f"Current session state before transition: {current_session.current_state.value}")
                     
+                    # 检查生成图片数据
+                    generated_images = state_manager.get_generated_images()
+                    logger.info(f"Generated images available: {generated_images is not None}")
+                    if generated_images:
+                        logger.info(f"Generated images count: {len(generated_images)}")
+                    
                     # 设置URL参数强制跳转到完成状态
                     timestamp = str(int(datetime.now().timestamp()))
                     st.query_params.update({"step": "completed", "t": timestamp})
@@ -2128,11 +2160,40 @@ def render_image_generation_step(state_manager):
                     else:
                         logger.error("No current session found!")
                     
+                    # 显示调试信息给用户
+                    st.info("🔄 正在跳转到结果页面...")
+                    logger.info("Triggering page rerun...")
+                    
                     # 触发页面重新加载
                     st.rerun()
-                    logger.info("Triggering page rerun...")
-                    st.success("✅ 正在跳转到结果页面...")
-                    st.rerun()
+                
+                # 临时测试按钮 - 模拟生成版本
+                st.markdown("---")
+                st.markdown("**🧪 测试区域 (模拟生成)**")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("🔧 直接跳转 (模拟)", type="secondary", key="sim_direct_jump"):
+                        # 直接设置状态，不使用URL参数
+                        from services.aplus_studio.models import WorkflowState
+                        session = state_manager.get_current_session()
+                        if session:
+                            session.current_state = WorkflowState.COMPLETED
+                            session.last_updated = datetime.now()
+                            st.session_state.intelligent_workflow_session = session
+                            st.success("✅ 状态已设置为COMPLETED")
+                            st.rerun()
+                        else:
+                            st.error("❌ 没有找到当前会话")
+                
+                with col2:
+                    if st.button("🔍 检查数据 (模拟)", type="secondary", key="sim_check_data"):
+                        # 检查生成的图片数据
+                        generated_images = state_manager.get_generated_images()
+                        if generated_images:
+                            st.success(f"✅ 找到 {len(generated_images)} 个生成的图片")
+                        else:
+                            st.error("❌ 没有找到生成的图片数据")
                     
             except Exception as e:
                 st.error(f"❌ 图片生成失败: {str(e)}")
