@@ -16,12 +16,6 @@ from .models import (
     ProductInfo, AnalysisResult, GenerationResult,
     WorkflowState, ProductCategory, StyleTheme, Priority
 )
-from .amazon_compliance_service import (
-    AmazonComplianceService, ComplianceIssue, ComplianceResult
-)
-from .performance_monitor import (
-    PerformanceMonitor, performance_monitor, get_global_performance_monitor
-)
 from .error_handler import (
     ErrorHandler, error_handler, get_global_error_handler, ErrorContext
 )
@@ -319,10 +313,8 @@ class IntelligentWorkflowController:
         # 模块推荐规则
         self.recommendation_rules = self._initialize_recommendation_rules()
         
-        # 初始化亚马逊合规检查服务
-        self.compliance_service = AmazonComplianceService()
-        
-        # 初始化性能监控和错误处理
+        # 初始化错误处理
+        self._error_handler = get_global_error_handler()
         self._performance_monitor = get_global_performance_monitor()
         self._error_handler = get_global_error_handler()
         
@@ -518,7 +510,6 @@ class IntelligentWorkflowController:
         self._error_handler.register_fallback_handler("module_recommendation", module_recommendation_fallback)
         self._error_handler.register_fallback_handler("style_theme_selection", style_theme_fallback)
     
-    @performance_monitor("create_new_session", cache_key_params={"session_id": 0}, enable_cache=False)
     @error_handler("create_new_session", max_retries=2, enable_recovery=True)
     
     def create_new_session(self, session_id: Optional[str] = None) -> IntelligentWorkflowSession:
@@ -545,7 +536,6 @@ class IntelligentWorkflowController:
         self.current_session = session
         logger.info(f"Loaded intelligent workflow session: {session.session_id}")
     
-    @performance_monitor("transition_to_state", cache_key_params={"target_state": 1}, enable_cache=False)
     @error_handler("transition_to_state", max_retries=1, enable_recovery=True)
     def transition_to_state(self, target_state: WorkflowState) -> bool:
         """状态转换"""
@@ -606,7 +596,6 @@ class IntelligentWorkflowController:
         
         return suitable_themes
     
-    @performance_monitor("recommend_style_theme", cache_key_params={"product_analysis": 0}, cache_ttl=3600)
     @error_handler("recommend_style_theme", max_retries=1, enable_recovery=True)
     def recommend_style_theme(self, product_analysis: ProductAnalysis) -> StyleThemeConfig:
         """推荐风格主题"""
@@ -627,7 +616,6 @@ class IntelligentWorkflowController:
         recommended_theme = theme_mapping.get(category, StyleTheme.PROFESSIONAL)
         return self.style_themes[recommended_theme]
     
-    @performance_monitor("get_module_recommendations", cache_key_params={"product_analysis": 0}, cache_ttl=1800)
     @error_handler("get_module_recommendations", max_retries=2, enable_recovery=True)
     def get_module_recommendations(self, product_analysis: ProductAnalysis) -> ModuleRecommendation:
         """获取模块推荐"""
@@ -730,269 +718,3 @@ class IntelligentWorkflowController:
             self.save_session_to_history()
             self.current_session = None
             logger.info("Current session cleared")
-    
-    def check_module_content_compliance(self, module_type: ModuleType) -> Optional[ComplianceResult]:
-        """检查指定模块内容的合规性
-        
-        Args:
-            module_type: 要检查的模块类型
-            
-        Returns:
-            ComplianceResult: 合规检查结果，如果模块不存在则返回None
-        """
-        try:
-            if not self.current_session:
-                logger.error("No active session for compliance check")
-                return None
-            
-            if module_type not in self.current_session.module_contents:
-                logger.warning(f"Module {module_type.value} not found in current session")
-                return None
-            
-            module_content = self.current_session.module_contents[module_type]
-            
-            # 收集所有文本内容
-            all_text = []
-            all_text.append(module_content.title)
-            all_text.append(module_content.description)
-            all_text.extend(module_content.key_points)
-            
-            for section_content in module_content.generated_text.values():
-                if isinstance(section_content, str):
-                    all_text.append(section_content)
-            
-            combined_text = " ".join(filter(None, all_text))
-            
-            # 执行合规检查
-            compliance_result = self.compliance_service.check_content_compliance(combined_text)
-            
-            # 转换为工作流的合规结果格式
-            workflow_compliance_result = ComplianceResult(
-                is_compliant=compliance_result.is_compliant,
-                flagged_issues=compliance_result.flagged_issues,  # 直接使用合规服务的结果
-                suggested_fixes=compliance_result.suggested_fixes,
-                compliance_score=compliance_result.compliance_score,
-                check_timestamp=compliance_result.check_timestamp,
-                original_text=combined_text
-            )
-            
-            # 保存合规检查结果到会话
-            self.current_session.compliance_results[module_type] = workflow_compliance_result
-            self.current_session.last_updated = datetime.now()
-            
-            logger.info(f"Compliance check completed for {module_type.value}: {compliance_result.compliance_score:.2f}")
-            return workflow_compliance_result
-            
-        except Exception as e:
-            logger.error(f"Compliance check failed for {module_type.value}: {str(e)}")
-            return None
-    
-    def check_all_modules_compliance(self) -> Dict[ModuleType, ComplianceResult]:
-        """检查所有模块内容的合规性
-        
-        Returns:
-            Dict[ModuleType, ComplianceResult]: 所有模块的合规检查结果
-        """
-        try:
-            if not self.current_session:
-                logger.error("No active session for batch compliance check")
-                return {}
-            
-            results = {}
-            
-            for module_type in self.current_session.selected_modules:
-                if module_type in self.current_session.module_contents:
-                    compliance_result = self.check_module_content_compliance(module_type)
-                    if compliance_result:
-                        results[module_type] = compliance_result
-            
-            logger.info(f"Batch compliance check completed for {len(results)} modules")
-            return results
-            
-        except Exception as e:
-            logger.error(f"Batch compliance check failed: {str(e)}")
-            return {}
-    
-    def apply_compliance_fixes(self, module_type: ModuleType, 
-                             approved_fixes: Dict[str, str]) -> bool:
-        """应用用户批准的合规修复
-        
-        Args:
-            module_type: 要修复的模块类型
-            approved_fixes: 用户批准的修复，格式为 {原文: 修复后文本}
-            
-        Returns:
-            bool: 修复是否成功
-        """
-        try:
-            if not self.current_session:
-                logger.error("No active session for applying compliance fixes")
-                return False
-            
-            if module_type not in self.current_session.module_contents:
-                logger.warning(f"Module {module_type.value} not found in current session")
-                return False
-            
-            module_content = self.current_session.module_contents[module_type]
-            
-            # 应用修复
-            for original_text, fixed_text in approved_fixes.items():
-                # 替换标题中的文本
-                if original_text in module_content.title:
-                    module_content.title = module_content.title.replace(original_text, fixed_text)
-                
-                # 替换描述中的文本
-                if original_text in module_content.description:
-                    module_content.description = module_content.description.replace(original_text, fixed_text)
-                
-                # 替换关键点中的文本
-                for i, point in enumerate(module_content.key_points):
-                    if original_text in point:
-                        module_content.key_points[i] = point.replace(original_text, fixed_text)
-                
-                # 替换其他文本部分
-                for section_name, section_content in module_content.generated_text.items():
-                    if isinstance(section_content, str) and original_text in section_content:
-                        module_content.generated_text[section_name] = section_content.replace(original_text, fixed_text)
-            
-            # 更新时间戳
-            module_content.generation_timestamp = datetime.now()
-            self.current_session.last_updated = datetime.now()
-            
-            # 重新检查合规性
-            self.check_module_content_compliance(module_type)
-            
-            logger.info(f"Applied {len(approved_fixes)} compliance fixes for {module_type.value}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to apply compliance fixes for {module_type.value}: {str(e)}")
-            return False
-    
-    def get_compliance_summary(self) -> Dict[str, Any]:
-        """获取当前会话的合规性摘要
-        
-        Returns:
-            Dict[str, Any]: 合规性摘要信息
-        """
-        try:
-            if not self.current_session:
-                return {"error": "No active session"}
-            
-            summary = {
-                "total_modules": len(self.current_session.selected_modules),
-                "checked_modules": len(self.current_session.compliance_results),
-                "compliant_modules": 0,
-                "non_compliant_modules": 0,
-                "total_issues": 0,
-                "issues_by_type": {},
-                "average_compliance_score": 0.0,
-                "modules_status": {}
-            }
-            
-            total_score = 0.0
-            
-            for module_type, compliance_result in self.current_session.compliance_results.items():
-                summary["modules_status"][module_type.value] = {
-                    "is_compliant": compliance_result.is_compliant,
-                    "compliance_score": compliance_result.compliance_score,
-                    "issues_count": len(compliance_result.flagged_issues)
-                }
-                
-                if compliance_result.is_compliant:
-                    summary["compliant_modules"] += 1
-                else:
-                    summary["non_compliant_modules"] += 1
-                
-                summary["total_issues"] += len(compliance_result.flagged_issues)
-                total_score += compliance_result.compliance_score
-                
-                # 统计问题类型
-                for issue in compliance_result.flagged_issues:
-                    issue_type = issue.issue_type
-                    summary["issues_by_type"][issue_type] = summary["issues_by_type"].get(issue_type, 0) + 1
-            
-            # 计算平均合规分数
-            if summary["checked_modules"] > 0:
-                summary["average_compliance_score"] = total_score / summary["checked_modules"]
-            
-            return summary
-            
-        except Exception as e:
-            logger.error(f"Failed to generate compliance summary: {str(e)}")
-            return {"error": str(e)}
-    
-    def auto_fix_all_compliance_issues(self) -> Dict[ModuleType, int]:
-        """自动修复所有模块的合规问题
-        
-        Returns:
-            Dict[ModuleType, int]: 每个模块修复的问题数量
-        """
-        try:
-            if not self.current_session:
-                logger.error("No active session for auto-fixing compliance issues")
-                return {}
-            
-            fixes_applied = {}
-            
-            for module_type in self.current_session.selected_modules:
-                if module_type not in self.current_session.module_contents:
-                    continue
-                
-                module_content = self.current_session.module_contents[module_type]
-                
-                # 收集所有文本内容
-                all_text_parts = [
-                    ("title", module_content.title),
-                    ("description", module_content.description)
-                ]
-                
-                for i, point in enumerate(module_content.key_points):
-                    all_text_parts.append((f"key_point_{i}", point))
-                
-                for section_name, section_content in module_content.generated_text.items():
-                    if isinstance(section_content, str):
-                        all_text_parts.append((f"section_{section_name}", section_content))
-                
-                # 对每个文本部分应用自动修复
-                fixes_count = 0
-                
-                for content_type, text_content in all_text_parts:
-                    if not text_content:
-                        continue
-                    
-                    # 应用自动修复
-                    fixed_text = self.compliance_service.sanitize_content(text_content, auto_fix=True)
-                    
-                    if fixed_text != text_content:
-                        fixes_count += 1
-                        
-                        # 更新内容
-                        if content_type == "title":
-                            module_content.title = fixed_text
-                        elif content_type == "description":
-                            module_content.description = fixed_text
-                        elif content_type.startswith("key_point_"):
-                            point_index = int(content_type.split("_")[-1])
-                            if point_index < len(module_content.key_points):
-                                module_content.key_points[point_index] = fixed_text
-                        elif content_type.startswith("section_"):
-                            section_name = content_type.replace("section_", "")
-                            module_content.generated_text[section_name] = fixed_text
-                
-                if fixes_count > 0:
-                    fixes_applied[module_type] = fixes_count
-                    module_content.generation_timestamp = datetime.now()
-                    
-                    # 重新检查合规性
-                    self.check_module_content_compliance(module_type)
-            
-            if fixes_applied:
-                self.current_session.last_updated = datetime.now()
-                logger.info(f"Auto-fixed compliance issues: {sum(fixes_applied.values())} total fixes across {len(fixes_applied)} modules")
-            
-            return fixes_applied
-            
-        except Exception as e:
-            logger.error(f"Auto-fix compliance issues failed: {str(e)}")
-            return {}
