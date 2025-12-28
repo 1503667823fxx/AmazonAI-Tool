@@ -2149,44 +2149,46 @@ def render_image_generation_step(state_manager):
                             st.metric("生成效率", f"{efficiency:.2f} 模块/秒")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 使用URL参数强制状态转换（参考方案6的成功实现）
+                    # 🎯 关键修复：确保简化数据存在于session state中
                     from services.aplus_studio.models import WorkflowState
                     
                     logger.info("User clicked '查看生成结果' button")
                     
-                    # 获取当前状态信息用于调试
-                    current_session = state_manager.get_current_session()
-                    if current_session:
-                        logger.info(f"Current session state before transition: {current_session.current_state.value}")
-                    
-                    # 检查生成图片数据
-                    generated_images = state_manager.get_generated_images()
-                    logger.info(f"Generated images available: {generated_images is not None}")
-                    if generated_images:
-                        logger.info(f"Generated images count: {len(generated_images)}")
+                    # 首先确保简化数据存在于session state中
+                    if 'generated_images_data' not in st.session_state:
+                        logger.warning("No simplified data in session_state, creating from complex data")
+                        
+                        # 从复杂数据创建简化数据
+                        generated_images = state_manager.get_generated_images()
+                        if generated_images:
+                            simple_generated_images = {}
+                            for module_key, result in generated_images.items():
+                                simple_generated_images[str(module_key)] = {
+                                    'image_path': result.get('image_path', ''),
+                                    'generation_time': result.get('generation_time', 0.0),
+                                    'quality_score': result.get('quality_score', 0.0),
+                                    'success': result.get('success', False),
+                                    'has_image_data': result.get('success', False),
+                                    'module_name': str(module_key).replace('_', ' ').title(),
+                                    'generated_at': datetime.now().isoformat()
+                                }
+                            
+                            # 保存到session state
+                            st.session_state.generated_images_data = simple_generated_images
+                            st.session_state.generation_completed = True
+                            st.session_state.generation_timestamp = datetime.now().isoformat()
+                            logger.info(f"Created simplified data for {len(simple_generated_images)} modules")
+                        else:
+                            logger.error("No complex data available to create simplified data from")
+                            st.error("❌ 没有找到生成的图片数据，请重新生成")
+                            return
+                    else:
+                        logger.info("Simplified data already exists in session_state")
                     
                     # 设置URL参数强制跳转到完成状态
                     timestamp = str(int(datetime.now().timestamp()))
                     st.query_params.update({"step": "completed", "t": timestamp})
                     logger.info(f"Set URL params: step=completed, t={timestamp}")
-                    
-                    # 同时更新session状态
-                    session = state_manager.get_current_session()
-                    if session:
-                        session.current_state = WorkflowState.COMPLETED
-                        session.last_updated = datetime.now()
-                        st.session_state.intelligent_workflow_session = session
-                        logger.info("Updated session state to COMPLETED")
-                        
-                        # 安全的session备份，避免序列化问题
-                        try:
-                            state_manager._safe_save_session(session)
-                            logger.info("Session backup completed successfully")
-                        except Exception as backup_error:
-                            logger.warning(f"Session backup failed: {backup_error}")
-                            # 继续执行，不让备份失败影响主流程
-                    else:
-                        logger.error("No current session found!")
                     
                     # 显示调试信息给用户
                     st.info("🔄 正在跳转到结果页面...")
@@ -2286,44 +2288,47 @@ def render_image_generation_step(state_manager):
                 st.success("✅ 模拟生成完成！")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 使用URL参数强制状态转换（参考方案6的成功实现）
+                    # 🎯 关键修复：确保简化数据存在于session state中
                     from services.aplus_studio.models import WorkflowState
                     
                     logger.info("User clicked '查看生成结果' button (simulated)")
                     
-                    # 获取当前状态信息用于调试
-                    current_session = state_manager.get_current_session()
-                    if current_session:
-                        logger.info(f"Current session state before transition: {current_session.current_state.value}")
-                    
-                    # 检查生成图片数据
-                    generated_images = state_manager.get_generated_images()
-                    logger.info(f"Generated images available: {generated_images is not None}")
-                    if generated_images:
-                        logger.info(f"Generated images count: {len(generated_images)}")
+                    # 首先确保简化数据存在于session state中
+                    if 'generated_images_data' not in st.session_state:
+                        logger.warning("No simplified data in session_state, creating from complex data (simulated)")
+                        
+                        # 从复杂数据创建简化数据
+                        generated_images = state_manager.get_generated_images()
+                        if generated_images:
+                            simple_generated_images = {}
+                            for module_key, result in generated_images.items():
+                                simple_generated_images[str(module_key)] = {
+                                    'image_path': result.get('image_path', ''),
+                                    'generation_time': result.get('generation_time', 0.0),
+                                    'quality_score': result.get('quality_score', 0.0),
+                                    'success': True,  # 模拟生成总是成功
+                                    'has_image_data': True,  # 模拟有数据
+                                    'module_name': str(module_key).replace('_', ' ').title(),
+                                    'generated_at': datetime.now().isoformat(),
+                                    'is_simulated': True
+                                }
+                            
+                            # 保存到session state
+                            st.session_state.generated_images_data = simple_generated_images
+                            st.session_state.generation_completed = True
+                            st.session_state.generation_timestamp = datetime.now().isoformat()
+                            logger.info(f"Created simplified data for {len(simple_generated_images)} modules (simulated)")
+                        else:
+                            logger.error("No complex data available to create simplified data from (simulated)")
+                            st.error("❌ 没有找到生成的图片数据，请重新生成")
+                            return
+                    else:
+                        logger.info("Simplified data already exists in session_state (simulated)")
                     
                     # 设置URL参数强制跳转到完成状态
                     timestamp = str(int(datetime.now().timestamp()))
                     st.query_params.update({"step": "completed", "t": timestamp})
                     logger.info(f"Set URL params: step=completed, t={timestamp}")
-                    
-                    # 同时更新session状态
-                    session = state_manager.get_current_session()
-                    if session:
-                        session.current_state = WorkflowState.COMPLETED
-                        session.last_updated = datetime.now()
-                        st.session_state.intelligent_workflow_session = session
-                        logger.info("Updated session state to COMPLETED")
-                        
-                        # 安全的session备份，避免序列化问题
-                        try:
-                            state_manager._safe_save_session(session)
-                            logger.info("Session backup completed successfully")
-                        except Exception as backup_error:
-                            logger.warning(f"Session backup failed: {backup_error}")
-                            # 继续执行，不让备份失败影响主流程
-                    else:
-                        logger.error("No current session found!")
                     
                     # 显示调试信息给用户
                     st.info("🔄 正在跳转到结果页面...")
