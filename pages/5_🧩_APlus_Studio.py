@@ -72,6 +72,9 @@ def render_intelligent_workflow():
             keys_to_clear = [k for k in st.session_state.keys() if 'intelligent' in k.lower()]
             for key in keys_to_clear:
                 del st.session_state[key]
+            # 清除生成的图片数据
+            if 'generated_images_data' in st.session_state:
+                del st.session_state['generated_images_data']
             st.success("✅ 工作流已重置")
             st.rerun()
         
@@ -134,12 +137,15 @@ def render_intelligent_workflow():
                 # 检查是否有生成的图片数据
                 session = state_manager.get_current_session()
                 generated_images = state_manager.get_generated_images()
+                # [关键修复] 同时检查 session_state 中的简单数据备份
+                simple_images = st.session_state.get('generated_images_data')
                 
-                logger.info(f"Checking generated images for completed step: {generated_images is not None}")
-                if generated_images:
-                    logger.info(f"Found {len(generated_images)} generated images")
+                logger.info(f"Checking generated images for completed step: state_mgr={generated_images is not None}, session_state={simple_images is not None}")
+                
+                if generated_images or simple_images:
+                    logger.info(f"Found generated images (Complex: {len(generated_images) if generated_images else 0}, Simple: {len(simple_images) if simple_images else 0})")
                 else:
-                    logger.warning("No generated images found, checking session backup")
+                    logger.warning("No generated images found in primary sources, checking session backup")
                     
                     # 尝试从session备份恢复数据
                     if session and hasattr(session, 'workflow_metadata'):
@@ -152,8 +158,14 @@ def render_intelligent_workflow():
                             else:
                                 logger.info("No temp images to restore")
                 
-                # 只有在有生成数据时才跳转到完成状态
-                if generated_images or (session and session.workflow_metadata.get('generated_images')):
+                # [关键修复] 只要任意一个地方有数据，就允许通过
+                has_data = (
+                    generated_images is not None or 
+                    simple_images is not None or 
+                    (session and session.workflow_metadata.get('generated_images'))
+                )
+
+                if has_data:
                     current_state = WorkflowState.COMPLETED
                     
                     # 确保session状态也是正确的
@@ -198,12 +210,10 @@ def render_intelligent_workflow():
                 
                 # 显示生成的图片信息
                 generated_images = state_manager.get_generated_images()
-                if generated_images:
-                    st.write(f"**生成的图片**: {len(generated_images)} 个模块")
-                    for module_key, result in generated_images.items():
-                        st.write(f"  - {module_key}: {'有数据' if result else '无数据'}")
-                else:
-                    st.write("**生成的图片**: 无")
+                simple_images = st.session_state.get('generated_images_data')
+                
+                st.write(f"**State Manager 图片**: {'有数据' if generated_images else '无数据'}")
+                st.write(f"**Session State 图片**: {'有数据' if simple_images else '无数据'}")
             else:
                 st.write("**Session**: 不存在")
         
