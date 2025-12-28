@@ -20,7 +20,7 @@ from enum import Enum
 import queue
 
 from .models import (
-    ModuleType, GeneratedModule, GenerationStatus, ComplianceStatus, 
+    ModuleType, GeneratedModule, GenerationStatus, 
     ValidationStatus, MaterialSet
 )
 
@@ -290,7 +290,6 @@ class BatchProcessor:
             module_type=task.module_type,
             image_data=f"mock_generated_data_{task.task_id}".encode(),
             image_path=None,
-            compliance_status=ComplianceStatus.COMPLIANT,
             generation_timestamp=datetime.now(),
             materials_used=task.material_set,
             quality_score=0.85 + (hash(task.task_id) % 15) / 100,
