@@ -130,15 +130,48 @@ def render_intelligent_workflow():
             elif url_step == "completed":
                 # 更宽松的条件 - 只要不是初始状态就允许跳转到完成状态
                 logger.info(f"URL parameter indicates completed step, forcing transition from {current_state.value}")
-                current_state = WorkflowState.COMPLETED
                 
-                # 确保session状态也是正确的
+                # 检查是否有生成的图片数据
                 session = state_manager.get_current_session()
-                if session:
-                    session.current_state = WorkflowState.COMPLETED
-                    session.last_updated = datetime.now()
-                    st.session_state.intelligent_workflow_session = session
-                    logger.info(f"Session state updated to COMPLETED")
+                generated_images = state_manager.get_generated_images()
+                
+                logger.info(f"Checking generated images for completed step: {generated_images is not None}")
+                if generated_images:
+                    logger.info(f"Found {len(generated_images)} generated images")
+                else:
+                    logger.warning("No generated images found, checking session backup")
+                    
+                    # 尝试从session备份恢复数据
+                    if session and hasattr(session, 'workflow_metadata'):
+                        backup_images = session.workflow_metadata.get('generated_images')
+                        if backup_images:
+                            logger.info(f"Found backup images: {len(backup_images)}")
+                            # 恢复图片数据到内存
+                            if hasattr(session, '_temp_generated_images'):
+                                logger.info("Restoring temp generated images from backup")
+                            else:
+                                logger.info("No temp images to restore")
+                
+                # 只有在有生成数据时才跳转到完成状态
+                if generated_images or (session and session.workflow_metadata.get('generated_images')):
+                    current_state = WorkflowState.COMPLETED
+                    
+                    # 确保session状态也是正确的
+                    if session:
+                        session.current_state = WorkflowState.COMPLETED
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                        logger.info(f"Session state updated to COMPLETED")
+                else:
+                    logger.warning("No generated images found, staying in IMAGE_GENERATION state")
+                    # 如果没有生成数据，保持在图片生成状态
+                    current_state = WorkflowState.IMAGE_GENERATION
+                    if session:
+                        session.current_state = WorkflowState.IMAGE_GENERATION
+                        st.session_state.intelligent_workflow_session = session
+                    # 清除completed参数，避免循环
+                    st.query_params.clear()
+                    logger.info("Cleared completed parameter due to missing data")
             else:
                 # 只有在URL参数完全无效时才清除
                 logger.warning(f"Invalid URL parameter {url_step} for current state {current_state.value}")
@@ -1945,8 +1978,33 @@ def render_image_generation_step(state_manager):
                     
                     total_time += result.get('generation_time', 0.0)
                 
-                # 保存生成结果
+                # 保存生成结果 - 增强版本，确保数据持久化
+                logger.info(f"Saving generated images (real generation): {len(generated_images)} modules")
                 state_manager.set_generated_images(generated_images)
+                
+                # 额外保存到session的多个位置，确保数据不丢失
+                session = state_manager.get_current_session()
+                if session:
+                    # 保存到临时内存
+                    session._temp_generated_images = generated_images.copy()
+                    
+                    # 保存到workflow_metadata（可序列化版本）
+                    if not hasattr(session, 'workflow_metadata'):
+                        session.workflow_metadata = {}
+                    session.workflow_metadata['generated_images'] = generated_images.copy()
+                    
+                    # 强制更新session状态
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                    
+                    # 创建备份
+                    try:
+                        state_manager._create_session_backup()
+                        logger.info("Session backup created after real image generation")
+                    except Exception as backup_error:
+                        logger.warning(f"Session backup failed: {backup_error}")
+                
+                logger.info("Generated images saved successfully with enhanced persistence (real)")
                 
                 # 计算统计信息
                 total_modules = len(batch_results)
@@ -2116,8 +2174,33 @@ def render_image_generation_step(state_manager):
                         'is_simulated': True
                     }
                 
-                # 保存生成结果
+                # 保存生成结果 - 增强版本，确保数据持久化
+                logger.info(f"Saving generated images (simulated): {len(generated_images)} modules")
                 state_manager.set_generated_images(generated_images)
+                
+                # 额外保存到session的多个位置，确保数据不丢失
+                session = state_manager.get_current_session()
+                if session:
+                    # 保存到临时内存
+                    session._temp_generated_images = generated_images.copy()
+                    
+                    # 保存到workflow_metadata（可序列化版本）
+                    if not hasattr(session, 'workflow_metadata'):
+                        session.workflow_metadata = {}
+                    session.workflow_metadata['generated_images'] = generated_images.copy()
+                    
+                    # 强制更新session状态
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                    
+                    # 创建备份
+                    try:
+                        state_manager._create_session_backup()
+                        logger.info("Session backup created after simulated image generation")
+                    except Exception as backup_error:
+                        logger.warning(f"Session backup failed: {backup_error}")
+                
+                logger.info("Generated images saved successfully with enhanced persistence (simulated)")
                 st.success("✅ 模拟生成完成！")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
@@ -2217,13 +2300,64 @@ def render_workflow_completed_step(state_manager):
     # 调试信息
     logger.info("Rendering workflow completed step")
     
-    # 显示完成摘要
+    # 尝试多种方式获取生成的图片数据
     generated_images = state_manager.get_generated_images()
-    logger.info(f"Retrieved generated images: {generated_images is not None}")
+    logger.info(f"Retrieved generated images from state_manager: {generated_images is not None}")
+    
+    # 如果没有找到，尝试从session中恢复
+    if not generated_images:
+        session = state_manager.get_current_session()
+        if session:
+            logger.info("Attempting to recover generated images from session")
+            
+            # 尝试从workflow_metadata恢复
+            if hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images'):
+                backup_images = session.workflow_metadata['generated_images']
+                logger.info(f"Found backup images in workflow_metadata: {len(backup_images)}")
+                generated_images = backup_images
+            
+            # 尝试从_temp_generated_images恢复
+            elif hasattr(session, '_temp_generated_images') and session._temp_generated_images:
+                logger.info("Found temp generated images in session")
+                generated_images = session._temp_generated_images
+            
+            # 尝试从generation_results恢复
+            elif hasattr(session, 'generation_results') and session.generation_results:
+                logger.info("Attempting to reconstruct from generation_results")
+                reconstructed_images = {}
+                for module_type, result in session.generation_results.items():
+                    if hasattr(result, 'image_data') and result.image_data:
+                        reconstructed_images[str(module_type)] = {
+                            'image_data': result.image_data,
+                            'quality_score': getattr(result, 'quality_score', 0.8),
+                            'has_image_data': True
+                        }
+                if reconstructed_images:
+                    generated_images = reconstructed_images
+                    logger.info(f"Reconstructed {len(reconstructed_images)} images from generation_results")
+    
+    # 显示调试信息
+    with st.expander("🔧 数据恢复调试信息", expanded=False):
+        session = state_manager.get_current_session()
+        if session:
+            st.write(f"**会话ID**: {session.session_id}")
+            st.write(f"**当前状态**: {session.current_state.value}")
+            st.write(f"**生成图片数据**: {'存在' if generated_images else '不存在'}")
+            if generated_images:
+                st.write(f"**图片数量**: {len(generated_images)}")
+            
+            # 显示各种数据源的状态
+            st.write("**数据源检查**:")
+            st.write(f"- state_manager.get_generated_images(): {'有数据' if state_manager.get_generated_images() else '无数据'}")
+            st.write(f"- session.workflow_metadata.generated_images: {'有数据' if hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images') else '无数据'}")
+            st.write(f"- session._temp_generated_images: {'有数据' if hasattr(session, '_temp_generated_images') and session._temp_generated_images else '无数据'}")
+            st.write(f"- session.generation_results: {'有数据' if hasattr(session, 'generation_results') and session.generation_results else '无数据'}")
+        else:
+            st.write("**没有找到会话**")
     
     if generated_images:
         logger.info(f"Found {len(generated_images)} generated images")
-        st.write(f"**生成结果**: 成功生成 {len(generated_images)} 个A+模块")
+        st.success(f"**生成结果**: 成功生成 {len(generated_images)} 个A+模块")
         
         # 显示生成的模块列表
         for module_key, result in generated_images.items():
@@ -2284,36 +2418,75 @@ def render_workflow_completed_step(state_manager):
                 st.rerun()
     
     else:
-        logger.warning("No generated images found")
-        st.warning("没有找到生成的图片")
+        logger.warning("No generated images found after all recovery attempts")
+        st.error("❌ 没有找到生成的图片数据")
+        
+        # 显示详细的调试信息
+        st.warning("**可能的原因：**")
+        st.write("1. 图片生成过程中出现错误")
+        st.write("2. 页面刷新导致数据丢失")
+        st.write("3. Session状态管理问题")
         
         # 调试信息：显示当前会话状态
         session = state_manager.get_current_session()
         if session:
             st.info(f"当前会话状态: {session.current_state.value}")
             if hasattr(session, 'workflow_metadata'):
-                st.info(f"工作流元数据键: {list(session.workflow_metadata.keys())}")
+                metadata_keys = list(session.workflow_metadata.keys())
+                st.info(f"工作流元数据键: {metadata_keys}")
             if hasattr(session, '_temp_generated_images'):
                 st.info(f"临时图片数据: {session._temp_generated_images is not None}")
         
         st.info("请返回上一步重新生成图片")
         
-        if st.button("🔙 返回图片生成", use_container_width=True):
-            # 返回图片生成步骤
-            from services.aplus_studio.models import WorkflowState
-            st.query_params.clear()
-            session = state_manager.get_current_session()
-            if session:
-                session.current_state = WorkflowState.IMAGE_GENERATION
-                session.last_updated = datetime.now()
-                st.session_state.intelligent_workflow_session = session
-                
-                # 安全的session备份
-                try:
-                    state_manager._create_session_backup()
-                except Exception as backup_error:
-                    logger.warning(f"Session backup failed: {backup_error}")
-            st.rerun()
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔙 返回图片生成", use_container_width=True):
+                # 返回图片生成步骤
+                from services.aplus_studio.models import WorkflowState
+                st.query_params.clear()
+                session = state_manager.get_current_session()
+                if session:
+                    session.current_state = WorkflowState.IMAGE_GENERATION
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                    
+                    # 安全的session备份
+                    try:
+                        state_manager._create_session_backup()
+                    except Exception as backup_error:
+                        logger.warning(f"Session backup failed: {backup_error}")
+                st.rerun()
+        
+        with col2:
+            if st.button("🔄 尝试恢复数据", use_container_width=True):
+                # 尝试强制恢复数据
+                session = state_manager.get_current_session()
+                if session:
+                    # 检查是否有任何可恢复的数据
+                    recovery_attempted = False
+                    
+                    # 尝试从备份恢复
+                    backup_data = st.session_state.get('intelligent_workflow_backup')
+                    if backup_data:
+                        try:
+                            recovered_session = state_manager._deserialize_session(backup_data)
+                            if recovered_session and hasattr(recovered_session, 'workflow_metadata'):
+                                backup_images = recovered_session.workflow_metadata.get('generated_images')
+                                if backup_images:
+                                    state_manager.set_generated_images(backup_images)
+                                    st.success("✅ 从备份恢复了图片数据")
+                                    recovery_attempted = True
+                        except Exception as e:
+                            logger.error(f"Backup recovery failed: {e}")
+                    
+                    if not recovery_attempted:
+                        st.warning("⚠️ 没有找到可恢复的数据")
+                    
+                    st.rerun()
+                else:
+                    st.error("❌ 没有找到会话数据")
 
 
 if __name__ == "__main__":
