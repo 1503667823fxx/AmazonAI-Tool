@@ -79,6 +79,67 @@ def render_intelligent_workflow():
             st.query_params.clear()
             st.success("✅ URL参数已清除")
             st.rerun()
+        
+        # 快速测试模式
+        st.markdown("---")
+        st.subheader("🧪 快速测试")
+        if st.button("⚡ 快速测试完成页面", type="primary"):
+            from services.aplus_studio.models import WorkflowState
+            
+            # 创建虚拟的生成结果数据
+            mock_generated_images = {
+                'PRODUCT_OVERVIEW': {
+                    'image_path': 'mock/product_overview.png',
+                    'generation_time': 3.2,
+                    'quality_score': 0.92,
+                    'is_mock': True,
+                    'has_image_data': True,
+                    'image_data_size': 1024000
+                },
+                'FEATURE_ANALYSIS': {
+                    'image_path': 'mock/feature_analysis.png',
+                    'generation_time': 2.8,
+                    'quality_score': 0.88,
+                    'is_mock': True,
+                    'has_image_data': True,
+                    'image_data_size': 896000
+                },
+                'USAGE_SCENARIOS': {
+                    'image_path': 'mock/usage_scenarios.png',
+                    'generation_time': 3.5,
+                    'quality_score': 0.90,
+                    'is_mock': True,
+                    'has_image_data': True,
+                    'image_data_size': 1152000
+                },
+                'QUALITY_ASSURANCE': {
+                    'image_path': 'mock/quality_assurance.png',
+                    'generation_time': 2.9,
+                    'quality_score': 0.85,
+                    'is_mock': True,
+                    'has_image_data': True,
+                    'image_data_size': 768000
+                }
+            }
+            
+            # 创建或获取session
+            session = state_manager.get_current_session()
+            if not session:
+                session = state_manager.create_new_session()
+            
+            # 设置虚拟数据
+            state_manager.set_generated_images(mock_generated_images)
+            
+            # 直接跳转到完成状态
+            session.current_state = WorkflowState.COMPLETED
+            session.last_updated = datetime.now()
+            st.session_state.intelligent_workflow_session = session
+            
+            # 设置URL参数
+            st.query_params.update({"step": "completed", "test": "mock"})
+            
+            st.success("✅ 快速测试模式已激活")
+            st.rerun()
     
     # 初始化智能工作流状态管理器
     if 'intelligent_state_manager' not in st.session_state:
@@ -2416,6 +2477,61 @@ def render_workflow_completed_step(state_manager):
                 # 清理状态，开始新项目
                 state_manager.reset_workflow()
                 st.rerun()
+        
+        # 测试和调试区域 - 始终显示
+        st.markdown("---")
+        st.markdown("**🧪 测试和调试区域**")
+        test_col1, test_col2 = st.columns(2)
+        
+        with test_col1:
+            if st.button("🔍 检查所有数据源", use_container_width=True):
+                st.write("**数据源检查结果：**")
+                session = state_manager.get_current_session()
+                if session:
+                    # 检查各种数据源
+                    main_images = state_manager.get_generated_images()
+                    st.write(f"- 主数据源: {'✅ 有数据' if main_images else '❌ 无数据'}")
+                    if main_images:
+                        st.write(f"  数量: {len(main_images)}")
+                    
+                    metadata_images = session.workflow_metadata.get('generated_images') if hasattr(session, 'workflow_metadata') else None
+                    st.write(f"- 元数据源: {'✅ 有数据' if metadata_images else '❌ 无数据'}")
+                    if metadata_images:
+                        st.write(f"  数量: {len(metadata_images)}")
+                    
+                    temp_images = getattr(session, '_temp_generated_images', None)
+                    st.write(f"- 临时数据源: {'✅ 有数据' if temp_images else '❌ 无数据'}")
+                    if temp_images:
+                        st.write(f"  数量: {len(temp_images)}")
+                else:
+                    st.error("❌ 没有找到会话")
+        
+        with test_col2:
+            if st.button("🔄 强制恢复数据", use_container_width=True):
+                session = state_manager.get_current_session()
+                if session:
+                    recovery_success = False
+                    
+                    # 尝试从元数据恢复
+                    if hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images'):
+                        metadata_images = session.workflow_metadata['generated_images']
+                        state_manager.set_generated_images(metadata_images)
+                        st.success(f"✅ 从元数据恢复了 {len(metadata_images)} 个图片")
+                        recovery_success = True
+                    
+                    # 尝试从临时数据恢复
+                    elif hasattr(session, '_temp_generated_images') and session._temp_generated_images:
+                        temp_images = session._temp_generated_images
+                        state_manager.set_generated_images(temp_images)
+                        st.success(f"✅ 从临时数据恢复了 {len(temp_images)} 个图片")
+                        recovery_success = True
+                    
+                    if recovery_success:
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ 没有找到可恢复的数据")
+                else:
+                    st.error("❌ 没有找到会话")
     
     else:
         logger.warning("No generated images found after all recovery attempts")
