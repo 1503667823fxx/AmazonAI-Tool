@@ -18,7 +18,6 @@ from services.aplus_studio.models import ModuleType, Priority
 from services.aplus_studio.intelligent_workflow import ModuleContent, MaterialRequest
 from services.aplus_studio.content_generation_service import ContentGenerationService
 from services.aplus_studio.material_requirement_service import MaterialRequirementService
-from services.aplus_studio.amazon_compliance_service import AmazonComplianceService
 from services.aplus_studio.intelligent_workflow import IntelligentWorkflowController
 
 logger = logging.getLogger(__name__)
