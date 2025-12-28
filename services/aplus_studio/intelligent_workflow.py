@@ -203,7 +203,6 @@ class IntelligentWorkflowSession:
     selected_modules: List[ModuleType] = field(default_factory=list)
     module_contents: Dict[ModuleType, ModuleContent] = field(default_factory=dict)
     selected_style_theme: Optional[StyleThemeConfig] = None
-    compliance_results: Dict[ModuleType, ComplianceResult] = field(default_factory=dict)
     generation_results: Dict[ModuleType, GenerationResult] = field(default_factory=dict)
     generation_status: Dict[ModuleType, GenerationStatus] = field(default_factory=dict)
     user_edits: Dict[str, Any] = field(default_factory=dict)
@@ -238,7 +237,6 @@ class IntelligentWorkflowSession:
             # 清理相关数据
             self.generation_status.pop(module_type, None)
             self.module_contents.pop(module_type, None)
-            self.compliance_results.pop(module_type, None)
             self.generation_results.pop(module_type, None)
             self.last_updated = datetime.now()
     
@@ -287,7 +285,6 @@ class IntelligentWorkflowSession:
             'selected_modules': [m.value for m in self.selected_modules],
             'module_contents': {k.value: v.to_dict() for k, v in self.module_contents.items()},
             'selected_style_theme': self.selected_style_theme.to_dict() if self.selected_style_theme else None,
-            'compliance_results': {k.value: v.to_dict() for k, v in self.compliance_results.items()},
             'generation_status': {k.value: v.value for k, v in self.generation_status.items()},
             'user_edits': self.user_edits,
             'workflow_metadata': self.workflow_metadata,
