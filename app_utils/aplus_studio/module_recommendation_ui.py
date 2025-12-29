@@ -270,19 +270,9 @@ class ModuleRecommendationUI:
         # 生成推荐按钮
         col1, col2, col3 = st.columns([2, 1, 1])
         
-        # 调试信息
-        if st.checkbox("显示调试信息", value=False):
-            st.write("**调试信息:**")
-            st.write(f"- recommendation_count: {recommendation_count}")
-            st.write(f"- include_alternatives: {include_alternatives}")
-            st.write(f"- recommendation_style: {recommendation_style}")
-            st.write(f"- prioritize_simplicity: {prioritize_simplicity}")
-            st.write(f"- analysis_result keys: {list(analysis_result.keys()) if analysis_result else 'None'}")
-        
         with col1:
             if st.button("🚀 生成AI推荐", type="primary", use_container_width=True):
                 logger.debug("Generate AI recommendation button clicked")
-                st.write("🔄 按钮已点击，正在处理...")  # 临时调试信息
                 return {
                     "action": "generate_recommendation",
                     "analysis_result": analysis_result,
@@ -763,8 +753,6 @@ class ModuleRecommendationUI:
     def _render_action_buttons(self, selected_modules: List[ModuleType], mode: str) -> Dict[str, Any]:
         """渲染操作按钮"""
         
-        st.write("**操作选项**")
-        
         # 验证选择
         if not selected_modules:
             st.warning("⚠️ 请至少选择一个模块后再进行操作")
@@ -773,26 +761,6 @@ class ModuleRecommendationUI:
         if len(selected_modules) > 6:
             st.error("❌ 最多只能选择6个模块，请取消一些选择")
             return {"action": None}
-        
-        # 显示选择摘要
-        total_time = sum(self.module_configs[m]["estimated_time"] for m in selected_modules)
-        complexity_counts = {}
-        
-        for module in selected_modules:
-            complexity = self.module_configs[module]["complexity"]
-            complexity_counts[complexity] = complexity_counts.get(complexity, 0) + 1
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("选择模块", len(selected_modules))
-        
-        with col2:
-            st.metric("预计时间", f"{total_time}分钟")
-        
-        with col3:
-            complexity_text = ", ".join([f"{k}:{v}" for k, v in complexity_counts.items()])
-            st.metric("复杂度分布", complexity_text)
         
         # 操作按钮
         col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
