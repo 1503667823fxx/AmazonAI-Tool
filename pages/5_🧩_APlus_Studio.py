@@ -2644,11 +2644,152 @@ def render_workflow_completed_step(state_manager):
                     del st.session_state['force_completed_timestamp']
                 st.success("✅ 强制状态已清除")
                 st.rerun()
+    else:
+        # 没有生成数据的情况
+        st.warning("⚠️ 没有找到生成的图片数据")
+        
+        # 🎯 终极修复：即使没有数据，也要检查强制状态
+        if st.session_state.get('force_completed_state'):
+            st.info("🎯 检测到强制完成状态，但没有找到生成数据")
+            st.markdown("**可能的原因：**")
+            st.markdown("- 数据在状态转换过程中丢失")
+            st.markdown("- 序列化/反序列化问题")
+            st.markdown("- 会话状态不一致")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 返回图片生成", use_container_width=True):
+                # 清除URL参数并设置状态
+                from services.aplus_studio.models import WorkflowState
+                st.query_params.clear()
+                session = state_manager.get_current_session()
+                if session:
+                    session.current_state = WorkflowState.IMAGE_GENERATION
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                st.rerun()
+        
+        with col2:
+            if st.button("🆕 重新开始", use_container_width=True):
+                # 清理所有状态，重新开始
+                if 'force_completed_state' in st.session_state:
+                    del st.session_state['force_completed_state']
+                if 'force_completed_timestamp' in st.session_state:
+                    del st.session_state['force_completed_timestamp']
+                state_manager.reset_workflow()
+                st.rerun()
+
+
+if __name__ == "__main__":
+    main()
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("🔍 检查所有数据源", use_container_width=True):
+                st.info("**数据源检查结果：**")
+                session = state_manager.get_current_session()
+                
+                # 检查各种数据源
+                sources = {
+                    "Session State": st.session_state.get('generated_images_data'),
+                    "State Manager": state_manager.get_generated_images(),
+                    "Session Metadata": session.workflow_metadata.get('generated_images') if session and hasattr(session, 'workflow_metadata') else None,
+                    "Session Temp": getattr(session, '_temp_generated_images', None) if session else None,
+                    "Generation Results": getattr(session, 'generation_results', None) if session else None
+                }
+                
+                for source_name, data in sources.items():
                     if data:
-                        count = len(data) if isinstance(data, (dict, list)) else "存在"
-                        st.success(f"✅ {source_name}: {count}")
+                        st.success(f"✅ {source_name}: {len(data)} 项")
                     else:
                         st.error(f"❌ {source_name}: 无数据")
+        
+        with col2:
+            if st.button("🔄 尝试数据恢复", use_container_width=True):
+                # 尝试从各种源恢复数据
+                recovered = False
+                session = state_manager.get_current_session()
+                
+                if session and hasattr(session, '_temp_generated_images') and session._temp_generated_images:
+                    st.session_state.generated_images_data = session._temp_generated_images
+                    st.success("✅ 从临时数据恢复成功")
+                    recovered = True
+                elif session and hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images'):
+                    st.session_state.generated_images_data = session.workflow_metadata['generated_images']
+                    st.success("✅ 从元数据恢复成功")
+                    recovered = True
+                
+                if not recovered:
+                    st.warning("⚠️ 未找到可恢复的数据")
+                else:
+                    st.rerun()
+        
+        with col3:
+            # 🎯 终极修复：清除强制状态按钮
+            if st.button("🎯 清除强制状态", use_container_width=True):
+                if 'force_completed_state' in st.session_state:
+                    del st.session_state['force_completed_state']
+                if 'force_completed_timestamp' in st.session_state:
+                    del st.session_state['force_completed_timestamp']
+                st.success("✅ 强制状态已清除")
+                st.rerun()
+    else:
+        # 没有生成数据的情况
+        st.warning("⚠️ 没有找到生成的图片数据")
+        
+        # 🎯 终极修复：即使没有数据，也要检查强制状态
+        if st.session_state.get('force_completed_state'):
+            st.info("🎯 检测到强制完成状态，但没有找到生成数据")
+            st.markdown("**可能的原因：**")
+            st.markdown("- 数据在状态转换过程中丢失")
+            st.markdown("- 序列化/反序列化问题")
+            st.markdown("- 会话状态不一致")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🔄 返回图片生成", use_container_width=True):
+                # 清除URL参数并设置状态
+                from services.aplus_studio.models import WorkflowState
+                st.query_params.clear()
+                session = state_manager.get_current_session()
+                if session:
+                    session.current_state = WorkflowState.IMAGE_GENERATION
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+                st.rerun()
+        
+        with col2:
+            if st.button("🆕 重新开始", use_container_width=True):
+                # 清理所有状态，重新开始
+                if 'force_completed_state' in st.session_state:
+                    del st.session_state['force_completed_state']
+                if 'force_completed_timestamp' in st.session_state:
+                    del st.session_state['force_completed_timestamp']
+                state_manager.reset_workflow()
+                st.rerun()
+
+
+if __name__ == "__main__":
+    main()
+                    recovered = True
+                
+                if not recovered:
+                    st.warning("⚠️ 未找到可恢复的数据")
+                else:
+                    st.rerun()
+        
+        with col3:
+            # 🎯 终极修复：清除强制状态按钮
+            if st.button("🎯 清除强制状态", use_container_width=True):
+                if 'force_completed_state' in st.session_state:
+                    del st.session_state['force_completed_state']
+                if 'force_completed_timestamp' in st.session_state:
+                    del st.session_state['force_completed_timestamp']
+                st.success("✅ 强制状态已清除")
+                st.rerun()
         
         with col2:
             if st.button("🔄 强制恢复数据", use_container_width=True):
