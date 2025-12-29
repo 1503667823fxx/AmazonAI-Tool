@@ -61,95 +61,7 @@ def render_intelligent_workflow():
     st.header("🤖 A+ 智能工作流")
     st.caption("AI驱动的端到端A+页面创建解决方案")
     
-    # 紧急重置按钮
-    with st.sidebar:
-        st.markdown("---")
-        st.subheader("🚨 紧急控制")
-        if st.button("🔄 重置工作流", type="secondary"):
-            # 清除所有URL参数
-            st.query_params.clear()
-            # 清除会话状态
-            keys_to_clear = [k for k in st.session_state.keys() if 'intelligent' in k.lower()]
-            for key in keys_to_clear:
-                del st.session_state[key]
-            # 清除生成的图片数据
-            if 'generated_images_data' in st.session_state:
-                del st.session_state['generated_images_data']
-            st.success("✅ 工作流已重置")
-            st.rerun()
-        
-        if st.button("🗑️ 清除URL参数", type="secondary"):
-            st.query_params.clear()
-            st.success("✅ URL参数已清除")
-            st.rerun()
-        
-        # 🎯 快速测试按钮 - 基于单页面模式
-        st.markdown("---")
-        st.subheader("⚡ 快速测试")
-        if st.button("⚡ 快速测试完成页面", type="primary"):
-            # 创建虚拟的生成结果数据，包含4个模块
-            mock_generated_images = {
-                'PRODUCT_OVERVIEW': {
-                    'image_path': 'mock/product_overview.png',
-                    'generation_time': 2.3,
-                    'quality_score': 0.92,
-                    'success': True,
-                    'has_image_data': True,
-                    'module_name': 'Product Overview',
-                    'generated_at': datetime.now().isoformat(),
-                    'is_mock': True
-                },
-                'PROBLEM_SOLUTION': {
-                    'image_path': 'mock/problem_solution.png',
-                    'generation_time': 1.8,
-                    'quality_score': 0.88,
-                    'success': True,
-                    'has_image_data': True,
-                    'module_name': 'Problem Solution',
-                    'generated_at': datetime.now().isoformat(),
-                    'is_mock': True
-                },
-                'USAGE_SCENARIOS': {
-                    'image_path': 'mock/usage_scenarios.png',
-                    'generation_time': 2.1,
-                    'quality_score': 0.85,
-                    'success': True,
-                    'has_image_data': True,
-                    'module_name': 'Usage Scenarios',
-                    'generated_at': datetime.now().isoformat(),
-                    'is_mock': True
-                },
-                'QUALITY_ASSURANCE': {
-                    'image_path': 'mock/quality_assurance.png',
-                    'generation_time': 1.9,
-                    'quality_score': 0.90,
-                    'success': True,
-                    'has_image_data': True,
-                    'module_name': 'Quality Assurance',
-                    'generated_at': datetime.now().isoformat(),
-                    'is_mock': True
-                }
-            }
-            
-            # 🎯 单页面模式：直接保存到session state并跳转到图片生成页面的结果显示
-            st.session_state.generated_images_data = mock_generated_images
-            st.session_state.generation_completed = True
-            st.session_state.generation_timestamp = datetime.now().isoformat()
-            st.session_state.show_results = True
-            
-            # 跳转到图片生成步骤，但显示结果
-            from services.aplus_studio.models import WorkflowState
-            st.query_params.clear()
-            session = state_manager.get_current_session()
-            if not session:
-                session = state_manager.create_new_session()
-            if session:
-                session.current_state = WorkflowState.IMAGE_GENERATION
-                session.last_updated = datetime.now()
-                st.session_state.intelligent_workflow_session = session
-            
-            st.success("✅ 快速测试数据已创建，正在显示结果...")
-            st.rerun()
+
     
     # 初始化智能工作流状态管理器
     if 'intelligent_state_manager' not in st.session_state:
@@ -230,25 +142,7 @@ def render_intelligent_workflow():
         
         logger.info(f"Rendering intelligent workflow, current state: {current_state.value}")
         
-        # 临时调试面板 - 帮助诊断状态转换问题
-        with st.expander("🔧 状态调试信息", expanded=False):
-            st.write(f"**当前状态**: {current_state.value}")
-            st.write(f"**URL参数**: {dict(st.query_params)}")
-            
-            session = state_manager.get_current_session()
-            if session:
-                st.write(f"**Session状态**: {session.current_state.value}")
-                st.write(f"**Session ID**: {session.session_id}")
-                st.write(f"**最后更新**: {session.last_updated}")
-                
-                # 显示生成的图片信息
-                generated_images = state_manager.get_generated_images()
-                simple_images = st.session_state.get('generated_images_data')
-                
-                st.write(f"**State Manager 图片**: {'有数据' if generated_images else '无数据'}")
-                st.write(f"**Session State 图片**: {'有数据' if simple_images else '无数据'}")
-            else:
-                st.write("**Session**: 不存在")
+
         
         # 添加状态验证和恢复机制
         session = state_manager.get_current_session()
@@ -321,19 +215,9 @@ def render_workflow_start(state_manager):
     """渲染工作流开始页面"""
     st.subheader("🚀 开始智能工作流")
     
-    # 调试信息
-    logger.info("render_workflow_start called")
+
     
-    # 临时调试面板
-    with st.expander("🔧 调试信息", expanded=False):
-        current_session = state_manager.get_current_session()
-        if current_session:
-            st.write(f"**会话ID**: {current_session.session_id}")
-            st.write(f"**当前状态**: {current_session.current_state.value}")
-        else:
-            st.write("**没有当前会话**")
-        
-        st.write(f"**有活跃会话**: {state_manager.has_active_session()}")
+
     
     col1, col2 = st.columns([2, 1])
     
@@ -512,14 +396,6 @@ def render_product_analysis_step(state_manager):
                     st.session_state['analysis_in_progress'] = False
                     st.error(f"AI分析失败: {str(e)}")
                     
-                    # 显示详细错误信息
-                    with st.expander("🔧 错误详情", expanded=False):
-                        st.code(str(e))
-                        st.write("**可能的解决方案：**")
-                        st.write("1. 检查网络连接是否稳定")
-                        st.write("2. 确保上传的图片清晰且包含产品信息")
-                        st.write("3. 稍后重试或联系技术支持")
-                    
                     if st.button("🔄 重新分析", type="primary"):
                         st.rerun()
         
@@ -625,35 +501,14 @@ def render_module_recommendation_step(state_manager):
         existing_recommendation = state_manager.get_module_recommendation()
         logger.debug(f"Existing recommendation: {existing_recommendation is not None}")
         
-        recommendation_result = recommendation_ui.render_recommendation_interface(analysis_result)
+
         
         # 添加调试信息
         logger.debug(f"Recommendation result: {recommendation_result}")
         
-        # 临时调试面板
-        with st.expander("🔧 调试信息", expanded=False):
-            current_session = state_manager.get_current_session()
-            if current_session:
-                st.write(f"**会话ID**: {current_session.session_id}")
-                st.write(f"**当前状态**: {current_session.current_state.value}")
-                st.write(f"**最后更新**: {current_session.last_updated}")
-                
-                # 显示会话状态
-                session_in_state = st.session_state.get('intelligent_workflow_session')
-                if session_in_state:
-                    st.write(f"**st.session_state中的状态**: {session_in_state.current_state.value}")
-                else:
-                    st.write("**st.session_state中没有会话**")
-                    
-                # 显示备份状态
-                backup_data = st.session_state.get('intelligent_workflow_backup')
-                st.write(f"**备份可用**: {backup_data is not None}")
-            else:
-                st.write("**没有当前会话**")
+
         
-        # 显示调试信息（临时）
-        if recommendation_result:
-            st.write(f"🔧 调试：收到动作 - {recommendation_result.get('action', 'None')}")
+
         
         # 处理推荐生成动作
         if recommendation_result and recommendation_result.get('action') == 'generate_recommendation':
@@ -675,27 +530,11 @@ def render_module_recommendation_step(state_manager):
                         logger.error(f"Failed to save recommendation data: {str(save_error)}")
                         st.error(f"保存推荐结果失败: {str(save_error)}")
                         
-                        # 显示调试信息
-                        with st.expander("🔧 调试信息", expanded=False):
-                            st.write("**推荐数据结构：**")
-                            st.json({
-                                "recommended_modules_count": len(recommendation_data.get('recommended_modules', [])),
-                                "recommendation_reasons_count": len(recommendation_data.get('recommendation_reasons', {})),
-                                "confidence_scores_count": len(recommendation_data.get('confidence_scores', {})),
-                                "alternative_modules_count": len(recommendation_data.get('alternative_modules', [])),
-                                "has_timestamp": 'recommendation_timestamp' in recommendation_data
-                            })
+
                     
                 except Exception as e:
                     st.error(f"推荐生成失败: {str(e)}")
                     logger.error(f"Intelligent recommendation generation failed: {str(e)}")
-                    
-                    # 显示详细错误信息
-                    with st.expander("🔧 错误详情", expanded=False):
-                        st.code(str(e))
-                        st.write("**可能的解决方案：**")
-                        st.write("1. 检查产品分析结果是否完整")
-                        st.write("2. 稍后重试或使用手动选择模式")
         
         elif recommendation_result and recommendation_result.get('action') == 'reset_selection':
             # 处理重新选择
@@ -1183,19 +1022,7 @@ def render_content_generation_step(state_manager):
     st.subheader("✍️ 第三步：内容生成")
     st.markdown("AI为每个推荐的模块自动生成专业的文案内容")
     
-    # 调试信息
-    logger.info("render_content_generation_step called")
-    st.success("🎉 成功进入内容生成步骤！")
-    
-    # 临时调试面板
-    with st.expander("🔧 调试信息", expanded=True):
-        current_session = state_manager.get_current_session()
-        if current_session:
-            st.write(f"**会话ID**: {current_session.session_id}")
-            st.write(f"**当前状态**: {current_session.current_state.value}")
-            st.write(f"**最后更新**: {current_session.last_updated}")
-        else:
-            st.write("**没有当前会话**")
+
     
     # 检查前置条件
     recommendation = state_manager.get_module_recommendation()
@@ -1535,14 +1362,6 @@ def render_content_generation_step(state_manager):
             except Exception as e:
                 st.error(f"内容生成失败: {str(e)}")
                 logger.error(f"Content generation failed: {str(e)}")
-                
-                # 显示详细错误信息
-                with st.expander("🔧 错误详情", expanded=False):
-                    st.code(str(e))
-                    st.write("**可能的解决方案：**")
-                    st.write("1. 检查网络连接是否稳定")
-                    st.write("2. 确保API密钥配置正确")
-                    st.write("3. 稍后重试或联系技术支持")
                     # 使用URL参数方法进行状态转换
                     session = state_manager.get_current_session()
                     if session:
@@ -1838,28 +1657,46 @@ def render_image_generation_step(state_manager):
         render_results_section(state_manager)
         return
     
-    # 添加调试信息
-    with st.expander("🔍 调试信息", expanded=False):
-        session = state_manager.get_current_session()
-        if session:
-            st.write(f"**Session ID**: {session.session_id}")
-            st.write(f"**当前状态**: {session.current_state}")
-            st.write(f"**Module Contents**: {len(session.module_contents) if session.module_contents else 0} 个模块")
-            if session.module_contents:
-                for module_type, content in session.module_contents.items():
-                    st.write(f"  - {module_type.value}: {getattr(content, 'title', 'No title')}")
-            
-            final_content = state_manager.get_final_content()
-            st.write(f"**Final Content**: {'存在' if final_content else '不存在'}")
-            if final_content:
-                st.write(f"  - 模块数量: {len(final_content)}")
-            
-            style_theme = state_manager.get_style_theme()
-            st.write(f"**Style Theme**: {'存在' if style_theme else '不存在'}")
-            if style_theme:
-                st.write(f"  - 主题名称: {style_theme.get('theme_name', 'Unknown')}")
-        else:
-            st.write("**Session**: 不存在")
+    # 🎯 添加简单的测试按钮来验证功能
+    st.markdown("---")
+    st.subheader("🧪 测试功能")
+    if st.button("🎭 创建测试数据并查看结果", type="primary"):
+        # 创建简单的测试数据
+        test_images = {
+            'PRODUCT_OVERVIEW': {
+                'image_path': 'test/product_overview.png',
+                'generation_time': 2.0,
+                'quality_score': 0.9,
+                'success': True,
+                'has_image_data': True,
+                'module_name': 'Product Overview',
+                'generated_at': datetime.now().isoformat(),
+                'is_test': True
+            },
+            'USAGE_SCENARIOS': {
+                'image_path': 'test/usage_scenarios.png',
+                'generation_time': 1.8,
+                'quality_score': 0.85,
+                'success': True,
+                'has_image_data': True,
+                'module_name': 'Usage Scenarios',
+                'generated_at': datetime.now().isoformat(),
+                'is_test': True
+            }
+        }
+        
+        # 保存测试数据
+        st.session_state.generated_images_data = test_images
+        st.session_state.generation_completed = True
+        st.session_state.generation_timestamp = datetime.now().isoformat()
+        
+        # 设置显示结果标志
+        st.session_state.show_results = True
+        st.success("✅ 测试数据已创建，正在显示结果...")
+        st.rerun()
+    
+    st.markdown("---")
+
     
     # 检查前置条件
     final_content = state_manager.get_final_content()
@@ -1985,15 +1822,7 @@ def render_image_generation_step(state_manager):
                 retry_attempts = 2     # 重试次数
                 quality_threshold = 0.7  # 质量阈值
                 
-                # 显示生成配置信息
-                with st.expander("🔧 生成配置", expanded=False):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.info(f"生成模式: {generation_mode.value}")
-                        st.info(f"并行任务数: {max_parallel_jobs}")
-                    with col2:
-                        st.info(f"重试次数: {retry_attempts}")
-                        st.info(f"质量阈值: {quality_threshold:.1%}")
+
                 
                 # 估算生成时间
                 estimated_time = batch_service.estimate_batch_time(final_content)
@@ -2085,54 +1914,7 @@ def render_image_generation_step(state_manager):
                 with col3:
                     st.metric("总用时", f"{total_time:.1f}s")
                 
-                # 显示生成统计详情 - 增强版统计信息
-                stats = batch_service.get_generation_stats()
-                with st.expander("📊 详细生成统计", expanded=False):
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("总生成数", stats["total_modules"])
-                        st.metric("成功生成", stats["successful_generations"])
-                        st.metric("平均质量", f"{stats.get('average_quality_score', 0):.1%}")
-                    with col2:
-                        st.metric("失败生成", stats["failed_generations"])
-                        st.metric("平均用时", f"{stats['average_generation_time']:.1f}s")
-                        st.metric("总批次数", stats["total_batches"])
-                    with col3:
-                        st.metric("整体成功率", f"{stats['success_rate']:.1%}")
-                        st.metric("总用时", f"{stats['total_generation_time']:.1f}s")
-                        
-                        # 显示模块复杂度信息
-                        complexity_info = batch_service.get_module_complexity_info()
-                        complex_modules = sum(1 for k in final_content.keys() if complexity_info.get(k) == "complex")
-                        st.metric("复杂模块数", complex_modules)
-                
-                # 显示质量分析
-                if success_count > 0:
-                    quality_scores = [result.get('quality_score', 0.0) for result in batch_results.values() if result.get('success', False)]
-                    if quality_scores:
-                        with st.expander("🎯 质量分析", expanded=False):
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.metric("最高质量", f"{max(quality_scores):.1%}")
-                                st.metric("最低质量", f"{min(quality_scores):.1%}")
-                            with col2:
-                                high_quality_count = sum(1 for score in quality_scores if score >= quality_threshold)
-                                st.metric("高质量模块", f"{high_quality_count}/{len(quality_scores)}")
-                                st.metric("质量达标率", f"{high_quality_count/len(quality_scores):.1%}")
-                
-                # 显示生成时间分析
-                generation_times = [result.get('generation_time', 0.0) for result in batch_results.values()]
-                if generation_times:
-                    with st.expander("⏱️ 性能分析", expanded=False):
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.metric("最快生成", f"{min(generation_times):.1f}s")
-                            st.metric("最慢生成", f"{max(generation_times):.1f}s")
-                        with col2:
-                            avg_time = sum(generation_times) / len(generation_times)
-                            st.metric("平均时间", f"{avg_time:.1f}s")
-                            efficiency = len(generation_times) / total_time if total_time > 0 else 0
-                            st.metric("生成效率", f"{efficiency:.2f} 模块/秒")
+
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
                     # 🎯 关键修复：使用页面内状态切换，避免跨页面数据传输
@@ -2143,26 +1925,7 @@ def render_image_generation_step(state_manager):
                     st.success("✅ 正在显示生成结果...")
                     st.rerun()
                 
-                # 临时测试按钮 - 直接跳转方案
-                st.markdown("---")
-                st.markdown("**🧪 测试区域**")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.button("🔧 直接跳转 (测试)", type="secondary"):
-                        # 🎯 修改：使用页面内状态切换
-                        st.session_state.show_results = True
-                        st.success("✅ 切换到结果显示模式")
-                        st.rerun()
-                
-                with col2:
-                    if st.button("🔍 检查数据", type="secondary"):
-                        # 检查生成的图片数据
-                        generated_images = state_manager.get_generated_images()
-                        if generated_images:
-                            st.success(f"✅ 找到 {len(generated_images)} 个生成的图片")
-                        else:
-                            st.error("❌ 没有找到生成的图片数据")
+
                     
             except ImportError as e:
                 st.error(f"❌ 图片生成服务导入失败: {str(e)}")
@@ -2235,39 +1998,11 @@ def render_image_generation_step(state_manager):
                     st.success("✅ 正在显示生成结果...")
                     st.rerun()
                 
-                # 临时测试按钮 - 模拟生成版本
-                st.markdown("---")
-                st.markdown("**🧪 测试区域 (模拟生成)**")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.button("🔧 直接跳转 (模拟)", type="secondary", key="sim_direct_jump"):
-                        # 🎯 修改：使用页面内状态切换
-                        st.session_state.show_results = True
-                        st.success("✅ 切换到结果显示模式")
-                        st.rerun()
-                
-                with col2:
-                    if st.button("🔍 检查数据 (模拟)", type="secondary", key="sim_check_data"):
-                        # 检查生成的图片数据
-                        generated_images = state_manager.get_generated_images()
-                        if generated_images:
-                            st.success(f"✅ 找到 {len(generated_images)} 个生成的图片")
-                        else:
-                            st.error("❌ 没有找到生成的图片数据")
+
                     
             except Exception as e:
                 st.error(f"❌ 图片生成失败: {str(e)}")
                 logger.error(f"Image generation failed: {str(e)}")
-                
-                # 显示详细错误信息
-                with st.expander("🔧 错误详情", expanded=False):
-                    st.code(str(e))
-                    st.write("**可能的解决方案：**")
-                    st.write("1. 检查API密钥配置是否正确")
-                    st.write("2. 确保网络连接稳定")
-                    st.write("3. 检查图片生成服务是否正常运行")
-                    st.write("4. 稍后重试或联系技术支持")
 
 
 
