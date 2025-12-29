@@ -1362,21 +1362,6 @@ def render_content_generation_step(state_manager):
             except Exception as e:
                 st.error(f"内容生成失败: {str(e)}")
                 logger.error(f"Content generation failed: {str(e)}")
-                    # 使用URL参数方法进行状态转换
-                    session = state_manager.get_current_session()
-                    if session:
-                        from services.aplus_studio.models import WorkflowState
-                        session.current_state = WorkflowState.CONTENT_EDITING
-                        session.last_updated = datetime.now()
-                        st.session_state.intelligent_workflow_session = session
-                        state_manager._create_session_backup()
-                        
-                        # 使用URL参数强制跳转
-                        st.query_params.update({"step": "content_editing", "t": str(int(datetime.now().timestamp()))})
-                        st.rerun()
-                    
-            except Exception as e:
-                st.error(f"内容生成失败: {str(e)}")
 
 
 def render_content_editing_step(state_manager):
