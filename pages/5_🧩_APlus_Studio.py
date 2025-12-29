@@ -83,7 +83,7 @@ def render_intelligent_workflow():
             st.success("✅ URL参数已清除")
             st.rerun()
         
-        # 🎯 快速测试按钮 - 基于bug报告中的成功模式
+        # 🎯 快速测试按钮 - 基于单页面模式
         st.markdown("---")
         st.subheader("⚡ 快速测试")
         if st.button("⚡ 快速测试完成页面", type="primary"):
@@ -131,17 +131,24 @@ def render_intelligent_workflow():
                 }
             }
             
-            # 直接保存到session state（使用成功的简化模式）
+            # 🎯 单页面模式：直接保存到session state并跳转到图片生成页面的结果显示
             st.session_state.generated_images_data = mock_generated_images
             st.session_state.generation_completed = True
             st.session_state.generation_timestamp = datetime.now().isoformat()
+            st.session_state.show_results = True
             
-            # 设置URL参数跳转到完成状态
+            # 跳转到图片生成步骤，但显示结果
             from services.aplus_studio.models import WorkflowState
-            timestamp = str(int(datetime.now().timestamp()))
-            st.query_params.update({"step": "completed", "t": timestamp})
+            st.query_params.clear()
+            session = state_manager.get_current_session()
+            if not session:
+                session = state_manager.create_new_session()
+            if session:
+                session.current_state = WorkflowState.IMAGE_GENERATION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
             
-            st.success("✅ 快速测试数据已创建，正在跳转...")
+            st.success("✅ 快速测试数据已创建，正在显示结果...")
             st.rerun()
     
     # 初始化智能工作流状态管理器
@@ -291,7 +298,15 @@ def render_intelligent_workflow():
             render_image_generation_step(state_manager)
         elif current_state == WorkflowState.COMPLETED:
             logger.debug("Rendering workflow completed step")
-            render_workflow_completed_step(state_manager)
+            # 🎯 单页面模式：完成状态重定向到图片生成页面的结果显示
+            st.session_state.show_results = True
+            # 重定向到图片生成步骤，但显示结果
+            session = state_manager.get_current_session()
+            if session:
+                session.current_state = WorkflowState.IMAGE_GENERATION
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+            st.rerun()
         else:
             logger.error(f"Unknown workflow state: {current_state}")
             st.error(f"未知的工作流状态: {current_state}")
@@ -1813,9 +1828,15 @@ def render_style_selection_step(state_manager):
 
 
 def render_image_generation_step(state_manager):
-    """渲染图片生成步骤"""
+    """渲染图片生成步骤 - 单页面模式"""
     st.subheader("🖼️ 第六步：图片生成")
     st.markdown("AI正在为您生成专业的A+模块图片")
+    
+    # 🎯 检查是否需要显示结果（单页面模式的核心逻辑）
+    if st.session_state.get('show_results', False):
+        # 在当前页面显示结果，而不是跳转
+        render_results_section(state_manager)
+        return
     
     # 添加调试信息
     with st.expander("🔍 调试信息", expanded=False):
@@ -2114,52 +2135,12 @@ def render_image_generation_step(state_manager):
                             st.metric("生成效率", f"{efficiency:.2f} 模块/秒")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 🎯 关键修复：确保简化数据存在于session state中
-                    from services.aplus_studio.models import WorkflowState
+                    # 🎯 关键修复：使用页面内状态切换，避免跨页面数据传输
+                    logger.info("User clicked '查看生成结果' button - using single page mode")
                     
-                    logger.info("User clicked '查看生成结果' button")
-                    
-                    # 首先确保简化数据存在于session state中
-                    if 'generated_images_data' not in st.session_state:
-                        logger.warning("No simplified data in session_state, creating from complex data")
-                        
-                        # 从复杂数据创建简化数据
-                        generated_images = state_manager.get_generated_images()
-                        if generated_images:
-                            simple_generated_images = {}
-                            for module_key, result in generated_images.items():
-                                simple_generated_images[str(module_key)] = {
-                                    'image_path': result.get('image_path', ''),
-                                    'generation_time': result.get('generation_time', 0.0),
-                                    'quality_score': result.get('quality_score', 0.0),
-                                    'success': result.get('success', False),
-                                    'has_image_data': result.get('success', False),
-                                    'module_name': str(module_key).replace('_', ' ').title(),
-                                    'generated_at': datetime.now().isoformat()
-                                }
-                            
-                            # 保存到session state
-                            st.session_state.generated_images_data = simple_generated_images
-                            st.session_state.generation_completed = True
-                            st.session_state.generation_timestamp = datetime.now().isoformat()
-                            logger.info(f"Created simplified data for {len(simple_generated_images)} modules")
-                        else:
-                            logger.error("No complex data available to create simplified data from")
-                            st.error("❌ 没有找到生成的图片数据，请重新生成")
-                            return
-                    else:
-                        logger.info("Simplified data already exists in session_state")
-                    
-                    # 设置URL参数强制跳转到完成状态
-                    timestamp = str(int(datetime.now().timestamp()))
-                    st.query_params.update({"step": "completed", "t": timestamp})
-                    logger.info(f"Set URL params: step=completed, t={timestamp}")
-                    
-                    # 显示调试信息给用户
-                    st.info("🔄 正在跳转到结果页面...")
-                    logger.info("Triggering page rerun...")
-                    
-                    # 触发页面重新加载
+                    # 设置页面内状态标志，显示结果区域
+                    st.session_state.show_results = True
+                    st.success("✅ 正在显示生成结果...")
                     st.rerun()
                 
                 # 临时测试按钮 - 直接跳转方案
@@ -2169,17 +2150,10 @@ def render_image_generation_step(state_manager):
                 
                 with col1:
                     if st.button("🔧 直接跳转 (测试)", type="secondary"):
-                        # 直接设置状态，不使用URL参数
-                        from services.aplus_studio.models import WorkflowState
-                        session = state_manager.get_current_session()
-                        if session:
-                            session.current_state = WorkflowState.COMPLETED
-                            session.last_updated = datetime.now()
-                            st.session_state.intelligent_workflow_session = session
-                            st.success("✅ 状态已设置为COMPLETED")
-                            st.rerun()
-                        else:
-                            st.error("❌ 没有找到当前会话")
+                        # 🎯 修改：使用页面内状态切换
+                        st.session_state.show_results = True
+                        st.success("✅ 切换到结果显示模式")
+                        st.rerun()
                 
                 with col2:
                     if st.button("🔍 检查数据", type="secondary"):
@@ -2253,53 +2227,12 @@ def render_image_generation_step(state_manager):
                 st.success("✅ 模拟生成完成！")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 🎯 关键修复：确保简化数据存在于session state中
-                    from services.aplus_studio.models import WorkflowState
+                    # 🎯 关键修复：使用页面内状态切换，避免跨页面数据传输
+                    logger.info("User clicked '查看生成结果' button (simulated) - using single page mode")
                     
-                    logger.info("User clicked '查看生成结果' button (simulated)")
-                    
-                    # 首先确保简化数据存在于session state中
-                    if 'generated_images_data' not in st.session_state:
-                        logger.warning("No simplified data in session_state, creating from complex data (simulated)")
-                        
-                        # 从复杂数据创建简化数据
-                        generated_images = state_manager.get_generated_images()
-                        if generated_images:
-                            simple_generated_images = {}
-                            for module_key, result in generated_images.items():
-                                simple_generated_images[str(module_key)] = {
-                                    'image_path': result.get('image_path', ''),
-                                    'generation_time': result.get('generation_time', 0.0),
-                                    'quality_score': result.get('quality_score', 0.0),
-                                    'success': True,  # 模拟生成总是成功
-                                    'has_image_data': True,  # 模拟有数据
-                                    'module_name': str(module_key).replace('_', ' ').title(),
-                                    'generated_at': datetime.now().isoformat(),
-                                    'is_simulated': True
-                                }
-                            
-                            # 保存到session state
-                            st.session_state.generated_images_data = simple_generated_images
-                            st.session_state.generation_completed = True
-                            st.session_state.generation_timestamp = datetime.now().isoformat()
-                            logger.info(f"Created simplified data for {len(simple_generated_images)} modules (simulated)")
-                        else:
-                            logger.error("No complex data available to create simplified data from (simulated)")
-                            st.error("❌ 没有找到生成的图片数据，请重新生成")
-                            return
-                    else:
-                        logger.info("Simplified data already exists in session_state (simulated)")
-                    
-                    # 设置URL参数强制跳转到完成状态
-                    timestamp = str(int(datetime.now().timestamp()))
-                    st.query_params.update({"step": "completed", "t": timestamp})
-                    logger.info(f"Set URL params: step=completed, t={timestamp}")
-                    
-                    # 显示调试信息给用户
-                    st.info("🔄 正在跳转到结果页面...")
-                    logger.info("Triggering page rerun...")
-                    
-                    # 触发页面重新加载
+                    # 设置页面内状态标志，显示结果区域
+                    st.session_state.show_results = True
+                    st.success("✅ 正在显示生成结果...")
                     st.rerun()
                 
                 # 临时测试按钮 - 模拟生成版本
@@ -2309,17 +2242,10 @@ def render_image_generation_step(state_manager):
                 
                 with col1:
                     if st.button("🔧 直接跳转 (模拟)", type="secondary", key="sim_direct_jump"):
-                        # 直接设置状态，不使用URL参数
-                        from services.aplus_studio.models import WorkflowState
-                        session = state_manager.get_current_session()
-                        if session:
-                            session.current_state = WorkflowState.COMPLETED
-                            session.last_updated = datetime.now()
-                            st.session_state.intelligent_workflow_session = session
-                            st.success("✅ 状态已设置为COMPLETED")
-                            st.rerun()
-                        else:
-                            st.error("❌ 没有找到当前会话")
+                        # 🎯 修改：使用页面内状态切换
+                        st.session_state.show_results = True
+                        st.success("✅ 切换到结果显示模式")
+                        st.rerun()
                 
                 with col2:
                     if st.button("🔍 检查数据 (模拟)", type="secondary", key="sim_check_data"):
@@ -2344,15 +2270,14 @@ def render_image_generation_step(state_manager):
                     st.write("4. 稍后重试或联系技术支持")
 
 
-def render_workflow_completed_step(state_manager):
-    """渲染工作流完成步骤"""
-    st.subheader("🎉 智能工作流完成！")
-    st.markdown("恭喜！您的A+页面已经生成完成")
+
+def render_results_section(state_manager):
+    """在图片生成页面内显示结果区域 - 单页面模式的核心"""
+    st.markdown("---")
+    st.subheader("🎉 生成结果")
+    st.markdown("您的A+页面图片已生成完成！")
     
-    # 调试信息
-    logger.info("Rendering workflow completed step")
-    
-    # 🎯 关键修复：优先从简单的session state获取数据
+    # 🎯 优先从简单的session state获取数据
     generated_images = st.session_state.get('generated_images_data')
     logger.info(f"Retrieved generated images from session state: {generated_images is not None}")
     
@@ -2362,238 +2287,157 @@ def render_workflow_completed_step(state_manager):
         generated_images = state_manager.get_generated_images()
         logger.info(f"Retrieved generated images from state_manager: {generated_images is not None}")
     
-    # 如果还是没有，尝试从session中恢复
-    if not generated_images:
-        session = state_manager.get_current_session()
-        if session:
-            logger.info("Attempting to recover generated images from session")
-            
-            # 尝试从workflow_metadata恢复
-            if hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images'):
-                backup_images = session.workflow_metadata['generated_images']
-                logger.info(f"Found backup images in workflow_metadata: {len(backup_images)}")
-                generated_images = backup_images
-            
-            # 尝试从_temp_generated_images恢复
-            elif hasattr(session, '_temp_generated_images') and session._temp_generated_images:
-                logger.info("Found temp generated images in session")
-                generated_images = session._temp_generated_images
-            
-            # 尝试从generation_results恢复
-            elif hasattr(session, 'generation_results') and session.generation_results:
-                logger.info("Attempting to reconstruct from generation_results")
-                reconstructed_images = {}
-                for module_type, result in session.generation_results.items():
-                    if hasattr(result, 'image_data') and result.image_data:
-                        reconstructed_images[str(module_type)] = {
-                            'image_data': result.image_data,
-                            'quality_score': getattr(result, 'quality_score', 0.8),
-                            'has_image_data': True
-                        }
-                if reconstructed_images:
-                    generated_images = reconstructed_images
-                    logger.info(f"Reconstructed {len(reconstructed_images)} images from generation_results")
-    
-    # 显示调试信息
-    with st.expander("🔧 数据恢复调试信息", expanded=False):
-        session = state_manager.get_current_session()
-        if session:
-            st.write(f"**会话ID**: {session.session_id}")
-            st.write(f"**当前状态**: {session.current_state.value}")
-            st.write(f"**生成图片数据**: {'存在' if generated_images else '不存在'}")
-            if generated_images:
-                st.write(f"**图片数量**: {len(generated_images)}")
-            
-            # 显示各种数据源的状态
-            st.write("**数据源检查**:")
-            st.write(f"- st.session_state.generated_images_data: {'有数据' if st.session_state.get('generated_images_data') else '无数据'}")
-            st.write(f"- state_manager.get_generated_images(): {'有数据' if state_manager.get_generated_images() else '无数据'}")
-            st.write(f"- session.workflow_metadata.generated_images: {'有数据' if hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images') else '无数据'}")
-            st.write(f"- session._temp_generated_images: {'有数据' if hasattr(session, '_temp_generated_images') and session._temp_generated_images else '无数据'}")
-            st.write(f"- session.generation_results: {'有数据' if hasattr(session, 'generation_results') and session.generation_results else '无数据'}")
-            
-            # 显示生成时间信息
-            generation_time = st.session_state.get('generation_timestamp')
-            if generation_time:
-                st.write(f"- 生成时间: {generation_time}")
-            st.write(f"- 生成完成标志: {st.session_state.get('generation_completed', False)}")
-        else:
-            st.write("**没有找到会话**")
-    
     if generated_images:
         logger.info(f"Found {len(generated_images)} generated images")
         st.success(f"**生成结果**: 成功生成 {len(generated_images)} 个A+模块")
         
-        # 显示生成的模块列表
-        for module_key, result in generated_images.items():
-            col1, col2, col3 = st.columns([2, 1, 1])
-            
-            with col1:
+        # 显示生成的模块列表 - 使用网格布局
+        cols = st.columns(min(len(generated_images), 2))  # 每行最多2个模块
+        
+        for i, (module_key, result) in enumerate(generated_images.items()):
+            with cols[i % 2]:
                 # 处理module_key，可能是字符串或ModuleType对象
                 if hasattr(module_key, 'value'):
                     display_name = module_key.value.replace('_', ' ').title()
                 else:
                     display_name = str(module_key).replace('_', ' ').title()
-                st.write(f"📋 {display_name}")
-            
-            with col2:
-                quality_score = result.get('quality_score', 0.0) if isinstance(result, dict) else 0.0
-                st.write(f"质量: {quality_score:.1%}")
-            
-            with col3:
-                # 使用字符串形式的module_key作为按钮key
-                button_key = str(module_key) if hasattr(module_key, 'value') else module_key
-                if st.button(f"下载", key=f"download_{button_key}"):
-                    # 检查是否有图片数据
-                    if isinstance(result, dict) and (result.get('has_image_data') or result.get('image_data')):
-                        st.success(f"开始下载 {display_name}")
+                
+                # 创建模块卡片
+                with st.container():
+                    st.markdown(f"### 📋 {display_name}")
+                    
+                    # 显示质量信息
+                    quality_score = result.get('quality_score', 0.0) if isinstance(result, dict) else 0.0
+                    generation_time = result.get('generation_time', 0.0) if isinstance(result, dict) else 0.0
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("质量评分", f"{quality_score:.1%}")
+                    with col2:
+                        st.metric("生成时间", f"{generation_time:.1f}s")
+                    
+                    # 模拟图片显示（实际应用中这里会显示真实图片）
+                    if result.get('is_simulated'):
+                        st.info("🎭 模拟生成的图片")
                     else:
-                        st.warning("图片数据不可用")
+                        st.info("🖼️ 图片已生成")
+                    
+                    # 操作按钮
+                    button_key = str(module_key) if hasattr(module_key, 'value') else module_key
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button(f"📥 下载", key=f"download_{button_key}", use_container_width=True):
+                            if isinstance(result, dict) and (result.get('has_image_data') or result.get('image_data')):
+                                st.success(f"开始下载 {display_name}")
+                            else:
+                                st.warning("图片数据不可用")
+                    
+                    with col2:
+                        if st.button(f"🔄 重新生成", key=f"regenerate_{button_key}", use_container_width=True):
+                            st.info(f"重新生成 {display_name}")
         
-        # 批量操作
+        # 批量操作区域
         st.markdown("---")
-        col1, col2, col3 = st.columns(3)
+        st.subheader("📦 批量操作")
+        
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             if st.button("📦 批量下载", use_container_width=True):
-                st.success("开始批量下载...")
+                st.success("开始批量下载所有图片...")
         
         with col2:
-            if st.button("🔄 重新生成", use_container_width=True):
-                # 清除URL参数并设置状态
-                from services.aplus_studio.models import WorkflowState
-                st.query_params.clear()
-                session = state_manager.get_current_session()
-                if session:
-                    session.current_state = WorkflowState.IMAGE_GENERATION
-                    session.last_updated = datetime.now()
-                    st.session_state.intelligent_workflow_session = session
-                    
-                    # 安全的session备份
-                    try:
-                        state_manager._create_session_backup()
-                    except Exception as backup_error:
-                        logger.warning(f"Session backup failed: {backup_error}")
+            if st.button("🔄 全部重新生成", use_container_width=True):
+                # 清除结果显示状态，返回生成界面
+                st.session_state.show_results = False
+                # 清除生成的数据，重新生成
+                if 'generated_images_data' in st.session_state:
+                    del st.session_state['generated_images_data']
+                st.success("正在重新生成...")
                 st.rerun()
         
         with col3:
-            if st.button("🆕 新建项目", use_container_width=True):
-                # 清理状态，开始新项目
-                state_manager.reset_workflow()
+            if st.button("🔙 返回生成", use_container_width=True):
+                # 返回生成界面，但保留数据
+                st.session_state.show_results = False
                 st.rerun()
         
-        # 🎯 添加调试和恢复功能
-        st.markdown("---")
-        st.markdown("**🔧 调试和恢复工具**")
+        with col4:
+            if st.button("🆕 新建项目", use_container_width=True):
+                # 清理所有状态，开始新项目
+                keys_to_clear = [k for k in st.session_state.keys() if 'intelligent' in k.lower() or 'generated' in k.lower() or 'show_results' in k]
+                for key in keys_to_clear:
+                    del st.session_state[key]
+                st.query_params.clear()
+                st.success("正在开始新项目...")
+                st.rerun()
         
-        col1, col2 = st.columns(2)
+        # 显示生成统计信息
+        st.markdown("---")
+        st.subheader("📊 生成统计")
+        
+        # 计算统计信息
+        total_modules = len(generated_images)
+        successful_modules = sum(1 for result in generated_images.values() if result.get('success', False))
+        avg_quality = sum(result.get('quality_score', 0.0) for result in generated_images.values()) / total_modules if total_modules > 0 else 0
+        total_time = sum(result.get('generation_time', 0.0) for result in generated_images.values())
+        
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            if st.button("🔍 检查所有数据源", use_container_width=True):
-                st.info("**数据源检查结果：**")
-                session = state_manager.get_current_session()
-                
-                # 检查各种数据源
-                sources = {
-                    "Session State": st.session_state.get('generated_images_data'),
-                    "State Manager": state_manager.get_generated_images(),
-                    "Session Metadata": session.workflow_metadata.get('generated_images') if session and hasattr(session, 'workflow_metadata') else None,
-                    "Session Temp": getattr(session, '_temp_generated_images', None) if session else None,
-                    "Generation Results": getattr(session, 'generation_results', None) if session else None
-                }
-                
-                for source_name, data in sources.items():
-                    if data:
-                        count = len(data) if isinstance(data, (dict, list)) else "存在"
-                        st.success(f"✅ {source_name}: {count}")
-                    else:
-                        st.error(f"❌ {source_name}: 无数据")
-        
+            st.metric("总模块数", total_modules)
         with col2:
-            if st.button("🔄 强制恢复数据", use_container_width=True):
-                # 尝试从任何可用源恢复数据
-                session = state_manager.get_current_session()
-                recovered = False
-                
-                # 尝试各种恢复方法
-                if st.session_state.get('generated_images_data'):
-                    st.success("✅ 从Session State恢复数据")
-                    recovered = True
-                elif state_manager.get_generated_images():
-                    st.success("✅ 从State Manager恢复数据")
-                    recovered = True
-                elif session and hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images'):
-                    backup_data = session.workflow_metadata['generated_images']
-                    st.session_state.generated_images_data = backup_data
-                    st.success("✅ 从Session Metadata恢复数据")
-                    recovered = True
-                elif session and hasattr(session, '_temp_generated_images') and session._temp_generated_images:
-                    st.session_state.generated_images_data = session._temp_generated_images
-                    st.success("✅ 从临时数据恢复")
-                    recovered = True
-                
-                if recovered:
-                    st.rerun()
-                else:
-                    st.error("❌ 无法恢复数据，请重新生成")
+            st.metric("成功生成", successful_modules)
+        with col3:
+            st.metric("平均质量", f"{avg_quality:.1%}")
+        with col4:
+            st.metric("总用时", f"{total_time:.1f}s")
+        
+        # 生成时间信息
+        generation_time = st.session_state.get('generation_timestamp')
+        if generation_time:
+            st.info(f"⏰ 生成完成时间: {generation_time}")
     
     else:
-        logger.warning("No generated images found after all recovery attempts")
+        logger.warning("No generated images found in results section")
         st.error("❌ 没有找到生成的图片数据")
         
-        # 显示详细的调试信息
         st.warning("**可能的原因：**")
         st.write("1. 图片生成过程中出现错误")
-        st.write("2. 页面刷新导致数据丢失")
+        st.write("2. 数据传输过程中丢失")
         st.write("3. Session状态管理问题")
-        
-        # 调试信息：显示当前会话状态
-        session = state_manager.get_current_session()
-        if session:
-            st.info(f"当前会话状态: {session.current_state.value}")
-            if hasattr(session, 'workflow_metadata'):
-                metadata_keys = list(session.workflow_metadata.keys())
-                st.info(f"工作流元数据键: {metadata_keys}")
-            if hasattr(session, '_temp_generated_images'):
-                st.info(f"临时图片数据: {session._temp_generated_images is not None}")
-        
-        st.info("请返回上一步重新生成图片")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🔙 返回图片生成", use_container_width=True):
-                # 返回图片生成步骤
-                from services.aplus_studio.models import WorkflowState
-                st.query_params.clear()
-                session = state_manager.get_current_session()
-                if session:
-                    session.current_state = WorkflowState.IMAGE_GENERATION
-                    session.last_updated = datetime.now()
-                    st.session_state.intelligent_workflow_session = session
-                    
-                    # 安全的session备份
-                    try:
-                        state_manager._create_session_backup()
-                    except Exception as backup_error:
-                        logger.warning(f"Session backup failed: {backup_error}")
+            if st.button("🔙 返回生成界面", use_container_width=True):
+                st.session_state.show_results = False
                 st.rerun()
         
         with col2:
             if st.button("🔄 尝试恢复数据", use_container_width=True):
-                # 简化的恢复尝试
-                session = state_manager.get_current_session()
-                if session:
-                    # 检查是否有任何可恢复的数据
-                    if hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images'):
-                        backup_images = session.workflow_metadata['generated_images']
-                        state_manager.set_generated_images(backup_images)
-                        st.success("✅ 从备份恢复了图片数据")
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ 没有找到可恢复的数据")
+                # 尝试从state_manager恢复数据
+                recovered_images = state_manager.get_generated_images()
+                if recovered_images:
+                    # 转换为简化格式
+                    simple_images = {}
+                    for module_key, result in recovered_images.items():
+                        simple_images[str(module_key)] = {
+                            'image_path': result.get('image_path', ''),
+                            'generation_time': result.get('generation_time', 0.0),
+                            'quality_score': result.get('quality_score', 0.0),
+                            'success': result.get('success', False),
+                            'has_image_data': result.get('success', False),
+                            'module_name': str(module_key).replace('_', ' ').title(),
+                            'generated_at': datetime.now().isoformat()
+                        }
+                    
+                    st.session_state.generated_images_data = simple_images
+                    st.success("✅ 数据恢复成功！")
+                    st.rerun()
                 else:
-                    st.error("❌ 没有找到会话数据")
+                    st.error("❌ 无法恢复数据，请重新生成")
 
 
 if __name__ == "__main__":
