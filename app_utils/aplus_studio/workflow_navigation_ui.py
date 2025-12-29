@@ -155,13 +155,6 @@ class WorkflowNavigationUI:
             # 渲染步骤导航
             action = self._render_step_navigation(session)
             
-            # 渲染进度信息
-            if self.show_progress_bar:
-                self._render_progress_bar(session)
-            
-            # 渲染会话信息
-            self._render_session_info(session)
-            
             return action
             
         except Exception as e:
@@ -384,47 +377,7 @@ class WorkflowNavigationUI:
             st.error(f"步骤导航渲染错误: {str(e)}")
             return None
     
-    def _render_progress_bar(self, session: IntelligentWorkflowSession):
-        """渲染进度条"""
-        try:
-            # 计算整体进度
-            total_progress = self._calculate_overall_progress(session)
-            
-            st.markdown("#### 📈 整体进度")
-            
-            # 进度条
-            progress_bar = st.progress(total_progress / 100.0)
-            
-            # 进度文本
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("整体进度", f"{total_progress:.1f}%")
-            
-            with col2:
-                if session.selected_modules:
-                    completed_count = len(session.get_completed_modules())
-                    total_count = len(session.selected_modules)
-                    st.metric("模块进度", f"{completed_count}/{total_count}")
-                else:
-                    st.metric("模块进度", "0/0")
-            
-            with col3:
-                # 预估剩余时间
-                remaining_time = self._estimate_remaining_time(session)
-                if remaining_time > 0:
-                    if remaining_time < 60:
-                        time_text = f"{remaining_time:.0f}秒"
-                    elif remaining_time < 3600:
-                        time_text = f"{remaining_time/60:.0f}分钟"
-                    else:
-                        time_text = f"{remaining_time/3600:.1f}小时"
-                    st.metric("预估剩余", time_text)
-                else:
-                    st.metric("预估剩余", "已完成")
-            
-        except Exception as e:
-            logger.error(f"Error rendering progress bar: {str(e)}")
+
     
     def _calculate_overall_progress(self, session: IntelligentWorkflowSession) -> float:
         """计算整体进度百分比"""
@@ -495,31 +448,7 @@ class WorkflowNavigationUI:
             logger.error(f"Error estimating remaining time: {str(e)}")
             return 0.0
     
-    def _render_session_info(self, session: IntelligentWorkflowSession):
-        """渲染会话信息"""
-        try:
-            with st.expander("📋 会话信息", expanded=False):
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.text(f"会话ID: {session.session_id}")
-                    st.text(f"创建时间: {session.creation_time.strftime('%Y-%m-%d %H:%M:%S')}")
-                    st.text(f"最后更新: {session.last_updated.strftime('%Y-%m-%d %H:%M:%S')}")
-                
-                with col2:
-                    st.text(f"当前状态: {session.current_state.value}")
-                    if session.selected_modules:
-                        module_names = [m.value for m in session.selected_modules]
-                        st.text(f"选定模块: {', '.join(module_names)}")
-                    
-                    # 会话操作按钮
-                    if st.button("💾 保存会话", key="save_session"):
-                        self.state_manager.save_current_session_to_history()
-                        st.success("会话已保存到历史记录")
-                        st.rerun()
-            
-        except Exception as e:
-            logger.error(f"Error rendering session info: {str(e)}")
+
     
     def render_navigation_actions(self) -> Optional[NavigationAction]:
         """渲染导航操作按钮
