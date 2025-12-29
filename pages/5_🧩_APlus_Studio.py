@@ -166,6 +166,29 @@ def render_intelligent_workflow():
         # 显示当前步骤和进度
         current_state = state_manager.get_current_state()
         
+        # 🎯 终极修复：检查强制完成状态标志
+        if st.session_state.get('force_completed_state'):
+            logger.info("🎯 ULTIMATE FIX: force_completed_state detected, FORCING COMPLETED state")
+            current_state = WorkflowState.COMPLETED
+            
+            # 确保session状态也是COMPLETED
+            session = state_manager.get_current_session()
+            if session and session.current_state != WorkflowState.COMPLETED:
+                logger.info(f"🎯 FORCING session state from {session.current_state.value} to COMPLETED due to force flag")
+                session.current_state = WorkflowState.COMPLETED
+                session.last_updated = datetime.now()
+                st.session_state.intelligent_workflow_session = session
+            
+            # 清除强制标志（避免永久循环）
+            force_timestamp = st.session_state.get('force_completed_timestamp')
+            if force_timestamp:
+                force_time = datetime.fromisoformat(force_timestamp)
+                # 如果强制标志超过30秒，清除它
+                if (datetime.now() - force_time).total_seconds() > 30:
+                    logger.info("🎯 Clearing expired force_completed_state flag")
+                    del st.session_state['force_completed_state']
+                    del st.session_state['force_completed_timestamp']
+        
         # 检查URL参数是否指定了特定步骤 - 但要验证合理性
         url_step = st.query_params.get("step")
         if url_step:  # 🎯 简化条件：只要有URL参数就处理
@@ -243,41 +266,48 @@ def render_intelligent_workflow():
             else:
                 st.write("**Session**: 不存在")
         
-        # 添加状态验证和恢复机制
-        session = state_manager.get_current_session()
-        if session:
-            logger.debug(f"Session found: {session.session_id}, state: {session.current_state.value}")
-            # 🎯 关键修复：URL参数状态优先于session状态
-            # 如果URL参数设置了状态，说明用户有明确的跳转意图，应该优先执行
-            url_step = st.query_params.get("step")
-            if url_step:
-                logger.info(f"URL parameter detected, keeping URL-driven state: {current_state.value}")
-                # 更新session状态以匹配URL参数
-                if session.current_state != current_state:
-                    logger.info(f"Updating session state from {session.current_state.value} to {current_state.value}")
-                    session.current_state = current_state
-                    session.last_updated = datetime.now()
-                    st.session_state.intelligent_workflow_session = session
+        # 🎯 关键修复：URL参数优先处理，避免导航UI组件干扰
+        # 如果URL参数指示completed状态，直接跳过导航UI的处理
+        skip_navigation_ui = (url_step == "completed")
+        
+        if not skip_navigation_ui:
+            # 添加状态验证和恢复机制
+            session = state_manager.get_current_session()
+            if session:
+                logger.debug(f"Session found: {session.session_id}, state: {session.current_state.value}")
+                # 🎯 关键修复：URL参数状态优先于session状态
+                # 如果URL参数设置了状态，说明用户有明确的跳转意图，应该优先执行
+                url_step_check = st.query_params.get("step")
+                if url_step_check:
+                    logger.info(f"URL parameter detected, keeping URL-driven state: {current_state.value}")
+                    # 更新session状态以匹配URL参数
+                    if session.current_state != current_state:
+                        logger.info(f"Updating session state from {session.current_state.value} to {current_state.value}")
+                        session.current_state = current_state
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                else:
+                    # 只有在没有URL参数时才使用session状态
+                    if session.current_state != current_state:
+                        logger.warning(f"State inconsistency detected: session={session.current_state.value}, manager={current_state.value}")
+                        # 以session中的状态为准
+                        current_state = session.current_state
+                        logger.info(f"Using session state: {current_state.value}")
             else:
-                # 只有在没有URL参数时才使用session状态
-                if session.current_state != current_state:
-                    logger.warning(f"State inconsistency detected: session={session.current_state.value}, manager={current_state.value}")
-                    # 以session中的状态为准
-                    current_state = session.current_state
-                    logger.info(f"Using session state: {current_state.value}")
+                logger.debug("No session found")
+            
+            nav_action = nav_ui.render_navigation_header()
+            
+            # 处理导航操作
+            if nav_action:
+                nav_ui.handle_navigation_action(nav_action)
+            
+            # 渲染导航操作按钮并处理
+            nav_button_action = nav_ui.render_navigation_actions()
+            if nav_button_action:
+                nav_ui.handle_navigation_action(nav_button_action)
         else:
-            logger.debug("No session found")
-        
-        nav_action = nav_ui.render_navigation_header()
-        
-        # 处理导航操作
-        if nav_action:
-            nav_ui.handle_navigation_action(nav_action)
-        
-        # 渲染导航操作按钮并处理
-        nav_button_action = nav_ui.render_navigation_actions()
-        if nav_button_action:
-            nav_ui.handle_navigation_action(nav_button_action)
+            logger.info("🎯 Skipping navigation UI processing for completed state to avoid interference")
         
         # 根据当前状态渲染对应的界面
         if current_state == WorkflowState.INITIAL:
@@ -2126,12 +2156,12 @@ def render_image_generation_step(state_manager):
                             st.metric("生成效率", f"{efficiency:.2f} 模块/秒")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 🎯 关键修复：确保简化数据存在于session state中
+                    # 🎯 终极修复：绕过所有复杂逻辑，直接强制跳转
                     from services.aplus_studio.models import WorkflowState
                     
-                    logger.info("User clicked '查看生成结果' button")
+                    logger.info("🎯 ULTIMATE FIX: User clicked '查看生成结果' button - FORCING direct transition")
                     
-                    # 首先确保简化数据存在于session state中
+                    # 第一步：确保简化数据存在
                     if 'generated_images_data' not in st.session_state:
                         logger.warning("No simplified data in session_state, creating from complex data")
                         
@@ -2162,14 +2192,33 @@ def render_image_generation_step(state_manager):
                     else:
                         logger.info("Simplified data already exists in session_state")
                     
-                    # 设置URL参数强制跳转到完成状态
+                    # 第二步：直接设置session状态（绕过URL参数可能的问题）
+                    session = state_manager.get_current_session()
+                    if session:
+                        logger.info(f"🎯 FORCING session state from {session.current_state.value} to COMPLETED")
+                        session.current_state = WorkflowState.COMPLETED
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                    else:
+                        logger.info("🎯 Creating new session with COMPLETED state")
+                        session = state_manager.create_new_session()
+                        session.current_state = WorkflowState.COMPLETED
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                    
+                    # 第三步：设置URL参数作为备用
                     timestamp = str(int(datetime.now().timestamp()))
                     st.query_params.update({"step": "completed", "t": timestamp})
-                    logger.info(f"Set URL params: step=completed, t={timestamp}")
+                    logger.info(f"🎯 Set URL params as backup: step=completed, t={timestamp}")
                     
-                    # 显示调试信息给用户
-                    st.info("🔄 正在跳转到结果页面...")
-                    logger.info("Triggering page rerun...")
+                    # 第四步：设置强制标志，防止其他逻辑干扰
+                    st.session_state['force_completed_state'] = True
+                    st.session_state['force_completed_timestamp'] = datetime.now().isoformat()
+                    logger.info("🎯 Set force_completed_state flag to prevent interference")
+                    
+                    # 显示用户反馈
+                    st.success("✅ 正在跳转到结果页面...")
+                    logger.info("🎯 ULTIMATE FIX: All steps completed, triggering rerun")
                     
                     # 触发页面重新加载
                     st.rerun()
@@ -2265,12 +2314,12 @@ def render_image_generation_step(state_manager):
                 st.success("✅ 模拟生成完成！")
                 
                 if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 🎯 关键修复：确保简化数据存在于session state中
+                    # 🎯 终极修复：绕过所有复杂逻辑，直接强制跳转（模拟版本）
                     from services.aplus_studio.models import WorkflowState
                     
-                    logger.info("User clicked '查看生成结果' button (simulated)")
+                    logger.info("🎯 ULTIMATE FIX: User clicked '查看生成结果' button (simulated) - FORCING direct transition")
                     
-                    # 首先确保简化数据存在于session state中
+                    # 第一步：确保简化数据存在
                     if 'generated_images_data' not in st.session_state:
                         logger.warning("No simplified data in session_state, creating from complex data (simulated)")
                         
@@ -2302,14 +2351,33 @@ def render_image_generation_step(state_manager):
                     else:
                         logger.info("Simplified data already exists in session_state (simulated)")
                     
-                    # 设置URL参数强制跳转到完成状态
+                    # 第二步：直接设置session状态（绕过URL参数可能的问题）
+                    session = state_manager.get_current_session()
+                    if session:
+                        logger.info(f"🎯 FORCING session state from {session.current_state.value} to COMPLETED (simulated)")
+                        session.current_state = WorkflowState.COMPLETED
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                    else:
+                        logger.info("🎯 Creating new session with COMPLETED state (simulated)")
+                        session = state_manager.create_new_session()
+                        session.current_state = WorkflowState.COMPLETED
+                        session.last_updated = datetime.now()
+                        st.session_state.intelligent_workflow_session = session
+                    
+                    # 第三步：设置URL参数作为备用
                     timestamp = str(int(datetime.now().timestamp()))
                     st.query_params.update({"step": "completed", "t": timestamp})
-                    logger.info(f"Set URL params: step=completed, t={timestamp}")
+                    logger.info(f"🎯 Set URL params as backup: step=completed, t={timestamp} (simulated)")
                     
-                    # 显示调试信息给用户
-                    st.info("🔄 正在跳转到结果页面...")
-                    logger.info("Triggering page rerun...")
+                    # 第四步：设置强制标志，防止其他逻辑干扰
+                    st.session_state['force_completed_state'] = True
+                    st.session_state['force_completed_timestamp'] = datetime.now().isoformat()
+                    logger.info("🎯 Set force_completed_state flag to prevent interference (simulated)")
+                    
+                    # 显示用户反馈
+                    st.success("✅ 正在跳转到结果页面...")
+                    logger.info("🎯 ULTIMATE FIX: All steps completed, triggering rerun (simulated)")
                     
                     # 触发页面重新加载
                     st.rerun()
@@ -2364,6 +2432,11 @@ def render_workflow_completed_step(state_manager):
     # 调试信息
     logger.info("Rendering workflow completed step")
     
+    # 🎯 终极修复：检查强制完成状态
+    if st.session_state.get('force_completed_state'):
+        logger.info("🎯 ULTIMATE FIX: Rendering completed step with force_completed_state active")
+        st.info("🎯 强制完成模式：确保显示结果页面")
+    
     # 🎯 关键修复：优先从简单的session state获取数据
     generated_images = st.session_state.get('generated_images_data')
     logger.info(f"Retrieved generated images from session state: {generated_images is not None}")
@@ -2406,6 +2479,23 @@ def render_workflow_completed_step(state_manager):
                     generated_images = reconstructed_images
                     logger.info(f"Reconstructed {len(reconstructed_images)} images from generation_results")
     
+    # 🎯 终极修复：如果仍然没有数据但有强制标志，创建占位数据
+    if not generated_images and st.session_state.get('force_completed_state'):
+        logger.info("🎯 ULTIMATE FIX: No data found but force flag active, creating placeholder data")
+        generated_images = {
+            'PLACEHOLDER_MODULE': {
+                'image_path': 'placeholder/generated.png',
+                'generation_time': 2.0,
+                'quality_score': 0.85,
+                'success': True,
+                'has_image_data': True,
+                'module_name': 'Generated Module',
+                'generated_at': datetime.now().isoformat(),
+                'is_placeholder': True
+            }
+        }
+        st.warning("⚠️ 使用占位数据显示完成页面（强制模式）")
+    
     # 显示调试信息
     with st.expander("🔧 数据恢复调试信息", expanded=False):
         session = state_manager.get_current_session()
@@ -2415,6 +2505,11 @@ def render_workflow_completed_step(state_manager):
             st.write(f"**生成图片数据**: {'存在' if generated_images else '不存在'}")
             if generated_images:
                 st.write(f"**图片数量**: {len(generated_images)}")
+            
+            # 🎯 显示强制状态信息
+            if st.session_state.get('force_completed_state'):
+                st.write(f"**🎯 强制完成状态**: 激活")
+                st.write(f"**🎯 强制时间**: {st.session_state.get('force_completed_timestamp', 'N/A')}")
             
             # 显示各种数据源的状态
             st.write("**数据源检查**:")
@@ -2498,7 +2593,7 @@ def render_workflow_completed_step(state_manager):
         st.markdown("---")
         st.markdown("**🔧 调试和恢复工具**")
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             if st.button("🔍 检查所有数据源", use_container_width=True):
@@ -2515,6 +2610,40 @@ def render_workflow_completed_step(state_manager):
                 }
                 
                 for source_name, data in sources.items():
+                    if data:
+                        st.success(f"✅ {source_name}: {len(data)} 项")
+                    else:
+                        st.error(f"❌ {source_name}: 无数据")
+        
+        with col2:
+            if st.button("🔄 尝试数据恢复", use_container_width=True):
+                # 尝试从各种源恢复数据
+                recovered = False
+                session = state_manager.get_current_session()
+                
+                if session and hasattr(session, '_temp_generated_images') and session._temp_generated_images:
+                    st.session_state.generated_images_data = session._temp_generated_images
+                    st.success("✅ 从临时数据恢复成功")
+                    recovered = True
+                elif session and hasattr(session, 'workflow_metadata') and session.workflow_metadata.get('generated_images'):
+                    st.session_state.generated_images_data = session.workflow_metadata['generated_images']
+                    st.success("✅ 从元数据恢复成功")
+                    recovered = True
+                
+                if not recovered:
+                    st.warning("⚠️ 未找到可恢复的数据")
+                else:
+                    st.rerun()
+        
+        with col3:
+            # 🎯 终极修复：清除强制状态按钮
+            if st.button("🎯 清除强制状态", use_container_width=True):
+                if 'force_completed_state' in st.session_state:
+                    del st.session_state['force_completed_state']
+                if 'force_completed_timestamp' in st.session_state:
+                    del st.session_state['force_completed_timestamp']
+                st.success("✅ 强制状态已清除")
+                st.rerun()
                     if data:
                         count = len(data) if isinstance(data, (dict, list)) else "存在"
                         st.success(f"✅ {source_name}: {count}")
