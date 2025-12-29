@@ -1607,44 +1607,6 @@ def render_image_generation_step(state_manager):
         render_results_section(state_manager)
         return
     
-    # 🎯 添加简单的测试按钮来验证功能
-    st.markdown("---")
-    st.subheader("🧪 测试功能")
-    if st.button("🎭 创建测试数据并查看结果", type="primary"):
-        # 创建简单的测试数据
-        test_images = {
-            'PRODUCT_OVERVIEW': {
-                'image_path': 'test/product_overview.png',
-                'generation_time': 2.0,
-                'quality_score': 0.9,
-                'success': True,
-                'has_image_data': True,
-                'module_name': 'Product Overview',
-                'generated_at': datetime.now().isoformat(),
-                'is_test': True
-            },
-            'USAGE_SCENARIOS': {
-                'image_path': 'test/usage_scenarios.png',
-                'generation_time': 1.8,
-                'quality_score': 0.85,
-                'success': True,
-                'has_image_data': True,
-                'module_name': 'Usage Scenarios',
-                'generated_at': datetime.now().isoformat(),
-                'is_test': True
-            }
-        }
-        
-        # 保存测试数据
-        st.session_state.generated_images_data = test_images
-        st.session_state.generation_completed = True
-        st.session_state.generation_timestamp = datetime.now().isoformat()
-        
-        # 设置显示结果标志
-        st.session_state.show_results = True
-        st.success("✅ 测试数据已创建，正在显示结果...")
-        st.rerun()
-    
     st.markdown("---")
 
     
@@ -1812,15 +1774,16 @@ def render_image_generation_step(state_manager):
                 # 问题根源：复杂的数据结构和序列化过程导致数据在页面重新加载时丢失
                 # 解决方案：使用简单的字典结构，直接存储到session state，确保完全可序列化
                 
-                # 创建简化的数据结构（移除所有bytes数据和复杂对象）
+                # 创建简化的数据结构（保留真实的图片bytes数据）
                 simple_generated_images = {}
                 for module_key, result in generated_images.items():
                     simple_generated_images[str(module_key)] = {
                         'image_path': result.get('image_path', ''),
+                        'image_data': result.get('image_data'),  # 🎯 保留真实的图片bytes数据
                         'generation_time': result.get('generation_time', 0.0),
                         'quality_score': result.get('quality_score', 0.0),
                         'success': result.get('success', False),
-                        'has_image_data': result.get('success', False),
+                        'has_image_data': bool(result.get('image_data')),  # 基于真实数据判断
                         'module_name': str(module_key).replace('_', ' ').title(),
                         'generated_at': datetime.now().isoformat()
                     }
@@ -1898,15 +1861,16 @@ def render_image_generation_step(state_manager):
                 logger.info(f"Saving generated images (simulated): {len(generated_images)} modules")
                 
                 # 🎯 根本问题修复：采用简化数据存储模式（基于测试页面的成功经验）
-                # 创建简化的数据结构（移除所有bytes数据和复杂对象）
+                # 创建简化的数据结构（保留真实的图片bytes数据）
                 simple_generated_images = {}
                 for module_key, result in generated_images.items():
                     simple_generated_images[str(module_key)] = {
                         'image_path': result.get('image_path', ''),
+                        'image_data': result.get('image_data'),  # 🎯 保留真实的图片bytes数据
                         'generation_time': result.get('generation_time', 0.0),
                         'quality_score': result.get('quality_score', 0.0),
                         'success': True,  # 模拟生成总是成功
-                        'has_image_data': True,  # 模拟有数据
+                        'has_image_data': bool(result.get('image_data')),  # 基于真实数据判断
                         'module_name': str(module_key).replace('_', ' ').title(),
                         'generated_at': datetime.now().isoformat(),
                         'is_simulated': True
@@ -1966,7 +1930,8 @@ def render_results_section(state_manager):
         logger.info(f"Found {len(generated_images)} generated images")
         st.success(f"**生成结果**: 成功生成 {len(generated_images)} 个A+模块")
         
-        # 显示生成的模块列表 - 使用网格布局
+        # 🎯 学习成功页面的模式：使用网格布局显示图片
+        # 参考Smart_Edit和Batch_Variant的实现
         cols = st.columns(min(len(generated_images), 2))  # 每行最多2个模块
         
         for i, (module_key, result) in enumerate(generated_images.items()):
@@ -1978,8 +1943,33 @@ def render_results_section(state_manager):
                     display_name = str(module_key).replace('_', ' ').title()
                 
                 # 创建模块卡片
-                with st.container():
+                with st.container(border=True):
                     st.markdown(f"### 📋 {display_name}")
+                    
+                    # 🎯 关键修复：显示真实的图片数据
+                    # 学习Smart_Edit的模式：st.image(img_bytes, use_container_width=True)
+                    if isinstance(result, dict):
+                        # 检查是否有真实的图片数据
+                        if result.get('image_data'):
+                            # 有真实的bytes数据，直接显示
+                            try:
+                                st.image(result['image_data'], use_container_width=True, caption=f"{display_name}")
+                            except Exception as e:
+                                st.error(f"图片显示失败: {str(e)}")
+                                st.info("🖼️ 图片数据存在但显示失败")
+                        elif result.get('image_path'):
+                            # 有图片路径，尝试加载
+                            try:
+                                import os
+                                if os.path.exists(result['image_path']):
+                                    st.image(result['image_path'], use_container_width=True, caption=f"{display_name}")
+                                else:
+                                    st.info("🖼️ 图片已生成（路径存在但文件不可访问）")
+                            except Exception as e:
+                                st.info("🖼️ 图片已生成（路径模式）")
+                        else:
+                            # 模拟或测试数据
+                            st.info("🎭 模拟生成的图片")
                     
                     # 显示质量信息
                     quality_score = result.get('quality_score', 0.0) if isinstance(result, dict) else 0.0
@@ -1990,12 +1980,6 @@ def render_results_section(state_manager):
                         st.metric("质量评分", f"{quality_score:.1%}")
                     with col2:
                         st.metric("生成时间", f"{generation_time:.1f}s")
-                    
-                    # 模拟图片显示（实际应用中这里会显示真实图片）
-                    if result.get('is_simulated'):
-                        st.info("🎭 模拟生成的图片")
-                    else:
-                        st.info("🖼️ 图片已生成")
                     
                     # 操作按钮
                     button_key = str(module_key) if hasattr(module_key, 'value') else module_key
@@ -2100,10 +2084,11 @@ def render_results_section(state_manager):
                     for module_key, result in recovered_images.items():
                         simple_images[str(module_key)] = {
                             'image_path': result.get('image_path', ''),
+                            'image_data': result.get('image_data'),  # 🎯 保留真实的图片数据
                             'generation_time': result.get('generation_time', 0.0),
                             'quality_score': result.get('quality_score', 0.0),
                             'success': result.get('success', False),
-                            'has_image_data': result.get('success', False),
+                            'has_image_data': bool(result.get('image_data')),
                             'module_name': str(module_key).replace('_', ' ').title(),
                             'generated_at': datetime.now().isoformat()
                         }
