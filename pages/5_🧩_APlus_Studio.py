@@ -2683,26 +2683,6 @@ def render_workflow_completed_step(state_manager):
 
 if __name__ == "__main__":
     main()
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("🔍 检查所有数据源", use_container_width=True):
-                st.info("**数据源检查结果：**")
-                session = state_manager.get_current_session()
-                
-                # 检查各种数据源
-                sources = {
-                    "Session State": st.session_state.get('generated_images_data'),
-                    "State Manager": state_manager.get_generated_images(),
-                    "Session Metadata": session.workflow_metadata.get('generated_images') if session and hasattr(session, 'workflow_metadata') else None,
-                    "Session Temp": getattr(session, '_temp_generated_images', None) if session else None,
-                    "Generation Results": getattr(session, 'generation_results', None) if session else None
-                }
-                
-                for source_name, data in sources.items():
-                    if data:
-                        st.success(f"✅ {source_name}: {len(data)} 项")
                     else:
                         st.error(f"❌ {source_name}: 无数据")
         
