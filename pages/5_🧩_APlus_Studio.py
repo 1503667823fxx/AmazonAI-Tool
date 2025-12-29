@@ -247,12 +247,24 @@ def render_intelligent_workflow():
         session = state_manager.get_current_session()
         if session:
             logger.debug(f"Session found: {session.session_id}, state: {session.current_state.value}")
-            # 确保状态一致性
-            if session.current_state != current_state:
-                logger.warning(f"State inconsistency detected: session={session.current_state.value}, manager={current_state.value}")
-                # 以session中的状态为准
-                current_state = session.current_state
-                logger.info(f"Using session state: {current_state.value}")
+            # 🎯 关键修复：URL参数状态优先于session状态
+            # 如果URL参数设置了状态，说明用户有明确的跳转意图，应该优先执行
+            url_step = st.query_params.get("step")
+            if url_step:
+                logger.info(f"URL parameter detected, keeping URL-driven state: {current_state.value}")
+                # 更新session状态以匹配URL参数
+                if session.current_state != current_state:
+                    logger.info(f"Updating session state from {session.current_state.value} to {current_state.value}")
+                    session.current_state = current_state
+                    session.last_updated = datetime.now()
+                    st.session_state.intelligent_workflow_session = session
+            else:
+                # 只有在没有URL参数时才使用session状态
+                if session.current_state != current_state:
+                    logger.warning(f"State inconsistency detected: session={session.current_state.value}, manager={current_state.value}")
+                    # 以session中的状态为准
+                    current_state = session.current_state
+                    logger.info(f"Using session state: {current_state.value}")
         else:
             logger.debug("No session found")
         
