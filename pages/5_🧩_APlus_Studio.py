@@ -1764,43 +1764,27 @@ def render_image_generation_step(state_manager):
                     
                     total_time += result.get('generation_time', 0.0)
                 
-                # 保存生成结果 - 使用简单直接的方式，避免复杂序列化
-                logger.info(f"Saving generated images (real generation): {len(generated_images)} modules")
+                # 🎯 学习成功案例：直接存储图片bytes，立即显示
+                # 参考Smart_Edit: st.session_state.se_std_results.append(res_bytes)
+                # 参考Batch_Variant: st.session_state.bv_results.append(img_bytes)
                 
-                # 🎯 混合策略：保留复杂设计的优点，同时解决序列化问题
-                logger.info(f"Saving generated images (real generation): {len(generated_images)} modules")
+                # 直接存储生成的图片数据到session state
+                if 'aplus_results' not in st.session_state:
+                    st.session_state.aplus_results = []
                 
-                # 🎯 根本问题修复：采用简化数据存储模式（基于测试页面的成功经验）
-                # 问题根源：复杂的数据结构和序列化过程导致数据在页面重新加载时丢失
-                # 解决方案：使用简单的字典结构，直接存储到session state，确保完全可序列化
+                st.session_state.aplus_results.clear()  # 清空之前的结果
                 
-                # 创建简化的数据结构（保留真实的图片bytes数据）
-                simple_generated_images = {}
                 for module_key, result in generated_images.items():
-                    simple_generated_images[str(module_key)] = {
-                        'image_path': result.get('image_path', ''),
-                        'image_data': result.get('image_data'),  # 🎯 保留真实的图片bytes数据
-                        'generation_time': result.get('generation_time', 0.0),
-                        'quality_score': result.get('quality_score', 0.0),
-                        'success': result.get('success', False),
-                        'has_image_data': bool(result.get('image_data')),  # 基于真实数据判断
-                        'module_name': str(module_key).replace('_', ' ').title(),
-                        'generated_at': datetime.now().isoformat()
-                    }
+                    if result.get('image_data'):
+                        # 存储图片数据和基本信息
+                        st.session_state.aplus_results.append({
+                            'module_name': str(module_key).replace('_', ' ').title(),
+                            'image_data': result['image_data'],
+                            'quality_score': result.get('quality_score', 0.0),
+                            'generation_time': result.get('generation_time', 0.0)
+                        })
                 
-                # 主要保存：直接保存到session state（可靠）
-                st.session_state.generated_images_data = simple_generated_images
-                st.session_state.generation_completed = True
-                st.session_state.generation_timestamp = datetime.now().isoformat()
-                
-                # 备用保存：尝试保存到state_manager（可选，失败不影响主流程）
-                try:
-                    state_manager.set_generated_images(generated_images)
-                    logger.info("Successfully saved to state_manager as backup")
-                except Exception as sm_error:
-                    logger.warning(f"State_manager backup save failed (not critical): {sm_error}")
-                
-                logger.info(f"Simplified data save completed: {len(simple_generated_images)} modules saved to session_state")
+                logger.info(f"Stored {len(st.session_state.aplus_results)} generated images directly")
                 
                 # 计算统计信息
                 total_modules = len(batch_results)
@@ -1822,87 +1806,16 @@ def render_image_generation_step(state_manager):
                 with col3:
                     st.metric("总用时", f"{total_time:.1f}s")
                 
-
-                
-                if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 🎯 关键修复：使用页面内状态切换，避免跨页面数据传输
-                    logger.info("User clicked '查看生成结果' button - using single page mode")
-                    
-                    # 设置页面内状态标志，显示结果区域
-                    st.session_state.show_results = True
-                    st.success("✅ 正在显示生成结果...")
-                    st.rerun()
-                
+                # 🎯 关键修复：生成完成后自动显示结果，不需要点击按钮
+                st.session_state.show_results = True
+                st.info("🎉 正在显示生成结果...")
+                st.rerun()
 
                     
             except ImportError as e:
                 st.error(f"❌ 图片生成服务导入失败: {str(e)}")
-                st.info("🔄 使用模拟生成模式...")
-                
-                # 回退到模拟生成
-                generated_images = {}
-                modules = list(final_content.keys())
-                
-                for i, module in enumerate(modules):
-                    time.sleep(2)  # 模拟生成时间
-                    
-                    # 模拟生成结果
-                    generated_images[module] = {
-                        'image_path': f'generated/{module}_{int(time.time())}.png',
-                        'generation_time': 2.0,
-                        'quality_score': 0.85 + (i * 0.02),
-                        'is_simulated': True
-                    }
-                
-                # 保存生成结果 - 使用简单直接的方式，避免复杂序列化
-                logger.info(f"Saving generated images (simulated): {len(generated_images)} modules")
-                
-                # 🎯 混合策略：保留复杂设计的优点，同时解决序列化问题
-                logger.info(f"Saving generated images (simulated): {len(generated_images)} modules")
-                
-                # 🎯 根本问题修复：采用简化数据存储模式（基于测试页面的成功经验）
-                # 创建简化的数据结构（保留真实的图片bytes数据）
-                simple_generated_images = {}
-                for module_key, result in generated_images.items():
-                    simple_generated_images[str(module_key)] = {
-                        'image_path': result.get('image_path', ''),
-                        'image_data': result.get('image_data'),  # 🎯 保留真实的图片bytes数据
-                        'generation_time': result.get('generation_time', 0.0),
-                        'quality_score': result.get('quality_score', 0.0),
-                        'success': True,  # 模拟生成总是成功
-                        'has_image_data': bool(result.get('image_data')),  # 基于真实数据判断
-                        'module_name': str(module_key).replace('_', ' ').title(),
-                        'generated_at': datetime.now().isoformat(),
-                        'is_simulated': True
-                    }
-                
-                # 主要保存：直接保存到session state（可靠）
-                st.session_state.generated_images_data = simple_generated_images
-                st.session_state.generation_completed = True
-                st.session_state.generation_timestamp = datetime.now().isoformat()
-                
-                # 备用保存：尝试保存到state_manager（可选，失败不影响主流程）
-                try:
-                    state_manager.set_generated_images(generated_images)
-                    logger.info("Successfully saved mock data to state_manager as backup")
-                except Exception as sm_error:
-                    logger.warning(f"State_manager backup save failed (not critical): {sm_error}")
-                
-                logger.info(f"Simplified mock data save completed: {len(simple_generated_images)} modules saved to session_state")
-                
-                logger.info("Generated images saved successfully with enhanced persistence (simulated)")
-                st.success("✅ 模拟生成完成！")
-                
-                if st.button("📊 查看生成结果", type="primary", use_container_width=True):
-                    # 🎯 关键修复：使用页面内状态切换，避免跨页面数据传输
-                    logger.info("User clicked '查看生成结果' button (simulated) - using single page mode")
-                    
-                    # 设置页面内状态标志，显示结果区域
-                    st.session_state.show_results = True
-                    st.success("✅ 正在显示生成结果...")
-                    st.rerun()
-                
-
+                st.error("请检查图片生成服务配置")
+                return
                     
             except Exception as e:
                 st.error(f"❌ 图片生成失败: {str(e)}")
@@ -1911,90 +1824,49 @@ def render_image_generation_step(state_manager):
 
 
 def render_results_section(state_manager):
-    """在图片生成页面内显示结果区域 - 单页面模式的核心"""
+    """在图片生成页面内显示结果区域 - 学习成功案例的简单模式"""
     st.markdown("---")
     st.subheader("🎉 生成结果")
     st.markdown("您的A+页面图片已生成完成！")
     
-    # 🎯 优先从简单的session state获取数据
-    generated_images = st.session_state.get('generated_images_data')
-    logger.info(f"Retrieved generated images from session state: {generated_images is not None}")
+    # 🎯 学习成功案例：直接从session state获取结果
+    # 参考Smart_Edit: st.session_state.se_std_results
+    # 参考Batch_Variant: st.session_state.bv_results
+    aplus_results = st.session_state.get('aplus_results', [])
     
-    # 如果session state中没有，再尝试从state_manager获取
-    if not generated_images:
-        logger.info("No data in session state, trying state_manager")
-        generated_images = state_manager.get_generated_images()
-        logger.info(f"Retrieved generated images from state_manager: {generated_images is not None}")
-    
-    if generated_images:
-        logger.info(f"Found {len(generated_images)} generated images")
-        st.success(f"**生成结果**: 成功生成 {len(generated_images)} 个A+模块")
+    if aplus_results:
+        st.success(f"**生成结果**: 成功生成 {len(aplus_results)} 个A+模块")
         
-        # 🎯 学习成功页面的模式：使用网格布局显示图片
-        # 参考Smart_Edit和Batch_Variant的实现
-        cols = st.columns(min(len(generated_images), 2))  # 每行最多2个模块
+        # 🎯 学习成功页面的网格布局
+        cols = st.columns(min(len(aplus_results), 2))  # 每行最多2个模块
         
-        for i, (module_key, result) in enumerate(generated_images.items()):
+        for i, result in enumerate(aplus_results):
             with cols[i % 2]:
-                # 处理module_key，可能是字符串或ModuleType对象
-                if hasattr(module_key, 'value'):
-                    display_name = module_key.value.replace('_', ' ').title()
-                else:
-                    display_name = str(module_key).replace('_', ' ').title()
-                
                 # 创建模块卡片
                 with st.container(border=True):
-                    st.markdown(f"### 📋 {display_name}")
+                    st.markdown(f"### 📋 {result['module_name']}")
                     
-                    # 🎯 关键修复：显示真实的图片数据
-                    # 学习Smart_Edit的模式：st.image(img_bytes, use_container_width=True)
-                    if isinstance(result, dict):
-                        # 检查是否有真实的图片数据
-                        if result.get('image_data'):
-                            # 有真实的bytes数据，直接显示
-                            try:
-                                st.image(result['image_data'], use_container_width=True, caption=f"{display_name}")
-                            except Exception as e:
-                                st.error(f"图片显示失败: {str(e)}")
-                                st.info("🖼️ 图片数据存在但显示失败")
-                        elif result.get('image_path'):
-                            # 有图片路径，尝试加载
-                            try:
-                                import os
-                                if os.path.exists(result['image_path']):
-                                    st.image(result['image_path'], use_container_width=True, caption=f"{display_name}")
-                                else:
-                                    st.info("🖼️ 图片已生成（路径存在但文件不可访问）")
-                            except Exception as e:
-                                st.info("🖼️ 图片已生成（路径模式）")
-                        else:
-                            # 模拟或测试数据
-                            st.info("🎭 模拟生成的图片")
+                    # 🎯 关键：直接显示图片，学习Smart_Edit的方式
+                    try:
+                        st.image(result['image_data'], use_container_width=True, caption=result['module_name'])
+                    except Exception as e:
+                        st.error(f"图片显示失败: {str(e)}")
                     
                     # 显示质量信息
-                    quality_score = result.get('quality_score', 0.0) if isinstance(result, dict) else 0.0
-                    generation_time = result.get('generation_time', 0.0) if isinstance(result, dict) else 0.0
-                    
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.metric("质量评分", f"{quality_score:.1%}")
+                        st.metric("质量评分", f"{result['quality_score']:.1%}")
                     with col2:
-                        st.metric("生成时间", f"{generation_time:.1f}s")
+                        st.metric("生成时间", f"{result['generation_time']:.1f}s")
                     
                     # 操作按钮
-                    button_key = str(module_key) if hasattr(module_key, 'value') else module_key
                     col1, col2 = st.columns(2)
-                    
                     with col1:
-                        if st.button(f"📥 下载", key=f"download_{button_key}", use_container_width=True):
-                            if isinstance(result, dict) and (result.get('has_image_data') or result.get('image_data')):
-                                st.success(f"开始下载 {display_name}")
-                            else:
-                                st.warning("图片数据不可用")
-                    
+                        if st.button(f"📥 下载", key=f"download_{i}", use_container_width=True):
+                            st.success(f"开始下载 {result['module_name']}")
                     with col2:
-                        if st.button(f"🔄 重新生成", key=f"regenerate_{button_key}", use_container_width=True):
-                            st.info(f"重新生成 {display_name}")
+                        if st.button(f"🔄 重新生成", key=f"regenerate_{i}", use_container_width=True):
+                            st.info(f"重新生成 {result['module_name']}")
         
         # 批量操作区域
         st.markdown("---")
@@ -2008,11 +1880,9 @@ def render_results_section(state_manager):
         
         with col2:
             if st.button("🔄 全部重新生成", use_container_width=True):
-                # 清除结果显示状态，返回生成界面
+                # 清除结果，返回生成界面
+                st.session_state.aplus_results = []
                 st.session_state.show_results = False
-                # 清除生成的数据，重新生成
-                if 'generated_images_data' in st.session_state:
-                    del st.session_state['generated_images_data']
                 st.success("正在重新生成...")
                 st.rerun()
         
@@ -2025,79 +1895,19 @@ def render_results_section(state_manager):
         with col4:
             if st.button("🆕 新建项目", use_container_width=True):
                 # 清理所有状态，开始新项目
-                keys_to_clear = [k for k in st.session_state.keys() if 'intelligent' in k.lower() or 'generated' in k.lower() or 'show_results' in k]
-                for key in keys_to_clear:
-                    del st.session_state[key]
+                st.session_state.aplus_results = []
+                st.session_state.show_results = False
                 st.query_params.clear()
                 st.success("正在开始新项目...")
                 st.rerun()
-        
-        # 显示生成统计信息
-        st.markdown("---")
-        st.subheader("📊 生成统计")
-        
-        # 计算统计信息
-        total_modules = len(generated_images)
-        successful_modules = sum(1 for result in generated_images.values() if result.get('success', False))
-        avg_quality = sum(result.get('quality_score', 0.0) for result in generated_images.values()) / total_modules if total_modules > 0 else 0
-        total_time = sum(result.get('generation_time', 0.0) for result in generated_images.values())
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("总模块数", total_modules)
-        with col2:
-            st.metric("成功生成", successful_modules)
-        with col3:
-            st.metric("平均质量", f"{avg_quality:.1%}")
-        with col4:
-            st.metric("总用时", f"{total_time:.1f}s")
-        
-        # 生成时间信息
-        generation_time = st.session_state.get('generation_timestamp')
-        if generation_time:
-            st.info(f"⏰ 生成完成时间: {generation_time}")
     
     else:
-        logger.warning("No generated images found in results section")
         st.error("❌ 没有找到生成的图片数据")
+        st.warning("请重新生成图片")
         
-        st.warning("**可能的原因：**")
-        st.write("1. 图片生成过程中出现错误")
-        st.write("2. 数据传输过程中丢失")
-        st.write("3. Session状态管理问题")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🔙 返回生成界面", use_container_width=True):
-                st.session_state.show_results = False
-                st.rerun()
-        
-        with col2:
-            if st.button("🔄 尝试恢复数据", use_container_width=True):
-                # 尝试从state_manager恢复数据
-                recovered_images = state_manager.get_generated_images()
-                if recovered_images:
-                    # 转换为简化格式
-                    simple_images = {}
-                    for module_key, result in recovered_images.items():
-                        simple_images[str(module_key)] = {
-                            'image_path': result.get('image_path', ''),
-                            'image_data': result.get('image_data'),  # 🎯 保留真实的图片数据
-                            'generation_time': result.get('generation_time', 0.0),
-                            'quality_score': result.get('quality_score', 0.0),
-                            'success': result.get('success', False),
-                            'has_image_data': bool(result.get('image_data')),
-                            'module_name': str(module_key).replace('_', ' ').title(),
-                            'generated_at': datetime.now().isoformat()
-                        }
-                    
-                    st.session_state.generated_images_data = simple_images
-                    st.success("✅ 数据恢复成功！")
-                    st.rerun()
-                else:
-                    st.error("❌ 无法恢复数据，请重新生成")
+        if st.button("🔙 返回生成界面", use_container_width=True):
+            st.session_state.show_results = False
+            st.rerun()
 
 
 if __name__ == "__main__":
