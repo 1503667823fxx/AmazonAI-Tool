@@ -316,13 +316,6 @@ def render_product_analysis_step(state_manager):
                     
                     analysis_service = ProductAnalysisService()
                     
-                    # 创建进度显示
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    status_text.text("正在处理和验证图片...")
-                    progress_bar.progress(0.2)
-                    
                     # 准备图片数据
                     from services.aplus_studio.product_analysis_service import ProductImageSet, UploadedProductImage
                     
@@ -354,17 +347,11 @@ def render_product_analysis_step(state_manager):
                         upload_session_id=str(uuid.uuid4())
                     )
                     
-                    status_text.text("正在调用AI进行产品分析...")
-                    progress_bar.progress(0.6)
-                    
                     # 执行AI分析
                     analysis_result_obj = analysis_service.analyze_product_images(
                         image_set=image_set,
                         language="zh"
                     )
-                    
-                    status_text.text("正在生成分析报告...")
-                    progress_bar.progress(0.9)
                     
                     # 转换分析结果为字典格式
                     analysis_data = {
@@ -379,9 +366,6 @@ def render_product_analysis_step(state_manager):
                         'product_description': product_info.description or '',
                         'analysis_timestamp': datetime.now().isoformat()
                     }
-                    
-                    progress_bar.progress(1.0)
-                    status_text.text("分析完成！")
                     
                     # 保存分析结果
                     state_manager.set_analysis_result(analysis_data)
@@ -1187,8 +1171,6 @@ def render_content_generation_step(state_manager):
                 )
                 
                 # 批量生成内容
-                progress_bar = st.progress(0)
-                status_text = st.empty()
                 generated_content = {}
                 
                 contexts = []
@@ -1212,16 +1194,10 @@ def render_content_generation_step(state_manager):
                     contexts.append(context)
                 
                 # 使用批量生成方法
-                status_text.text("正在调用AI生成服务...")
-                progress_bar.progress(0.2)
-                
                 # 调用现有的批量内容生成服务
                 batch_results = content_service.generate_content_for_multiple_modules(
                     contexts=contexts
                 )
-                
-                progress_bar.progress(0.8)
-                status_text.text("正在处理生成结果...")
                 
                 # 转换结果格式并保存到session.module_contents
                 session = state_manager.get_current_session()
@@ -1325,8 +1301,6 @@ def render_content_generation_step(state_manager):
                 # 保存生成的内容
                 state_manager.set_generated_content(generated_content)
                 
-                progress_bar.progress(1.0)
-                status_text.text("内容生成完成！")
                 st.success("✅ AI内容生成完成！")
                 
                 # 显示生成的内容预览
@@ -1792,14 +1766,9 @@ def render_image_generation_step(state_manager):
                 # 创建增强批量生成服务
                 batch_service = EnhancedAPlusBatchService()
                 
-                # 创建进度显示
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
                 # 进度回调函数 - 兼容增强服务的接口
                 def update_progress(module_name, progress):
-                    progress_bar.progress(progress)
-                    status_text.text(f"正在生成 {module_name} 模块图片... ({int(progress * 100)}%)")
+                    pass  # 移除进度显示
                 
                 # 生成模式选择（可选的高级配置）
                 generation_mode = BatchGenerationMode.PARALLEL  # 默认并行模式
@@ -1917,15 +1886,10 @@ def render_image_generation_step(state_manager):
                 st.info("🔄 使用模拟生成模式...")
                 
                 # 回退到模拟生成
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
                 generated_images = {}
                 modules = list(final_content.keys())
                 
                 for i, module in enumerate(modules):
-                    status_text.text(f"正在生成 {module} 模块图片...")
-                    progress_bar.progress((i + 1) / len(modules))
                     time.sleep(2)  # 模拟生成时间
                     
                     # 模拟生成结果
