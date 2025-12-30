@@ -1,78 +1,29 @@
 """
-Google Veo 3.1 API Service
+Google Veo 3.1 API Service - 简化版，只使用Gemini API
 
-真正的Google Veo API调用服务 - 支持Gemini API和Vertex AI两种方式
+使用同步HTTP请求避免事件循环问题
 """
 
 import json
 import base64
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, Dict, Any
 import streamlit as st
 
 
 class VeoAPIService:
-    """Google Veo 3.1 API服务 - 同步版本"""
+    """Google Veo 3.1 API服务 - 只使用Gemini API"""
     
     def __init__(self):
-        # 检查API配置方式
-        self.use_gemini_api = "GOOGLE_API_KEY" in st.secrets
+        # 只使用Gemini API
+        self.api_key = st.secrets["GOOGLE_API_KEY"]
+        self.model_id = "veo-3.1-generate-preview"
+        self.base_url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_id}"
         
-        if self.use_gemini_api:
-            # 使用Gemini API
-            self.api_key = st.secrets["GOOGLE_API_KEY"]
-            self.model_id = "veo-3.1-generate-preview"
-            self.base_url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_id}"
-            print(f"[DEBUG] 使用Gemini API")
-            print(f"  模型ID: {self.model_id}")
-            print(f"  基础URL: {self.base_url}")
-        else:
-            # 使用Vertex AI
-            self.project_id = st.secrets.get("GOOGLE_CLOUD_PROJECT_ID", "cohesive-point-481508-d4")
-            self.location = st.secrets.get("GOOGLE_CLOUD_LOCATION", "us-central1")
-            self.model_id = "veo-3.1-generate-001"
-            self.base_url = f"https://{self.location}-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/{self.location}/publishers/google/models/{self.model_id}"
-            print(f"[DEBUG] 使用Vertex AI")
-            print(f"  项目ID: {self.project_id}")
-            print(f"  地区: {self.location}")
-            print(f"  模型ID: {self.model_id}")
-            print(f"  基础URL: {self.base_url}")
-        
-        self._access_token: Optional[str] = None
-        self._token_expiry: Optional[datetime] = None
-    
-    def _get_access_token(self) -> str:
-        """获取Google Cloud访问令牌"""
-        # 检查缓存的令牌是否仍然有效
-        if self._access_token and self._token_expiry and datetime.now() < self._token_expiry:
-            return self._access_token
-        
-        try:
-            # 从Streamlit secrets获取服务账号凭据
-            credentials_json = st.secrets["GOOGLE_CLOUD_CREDENTIALS"]
-            credentials_info = json.loads(credentials_json)
-            
-            # 使用Google OAuth2库获取访问令牌
-            from google.oauth2 import service_account
-            from google.auth.transport.requests import Request
-            
-            credentials = service_account.Credentials.from_service_account_info(
-                credentials_info,
-                scopes=['https://www.googleapis.com/auth/cloud-platform']
-            )
-            
-            # 刷新令牌
-            credentials.refresh(Request())
-            
-            self._access_token = credentials.token
-            # 设置过期时间为50分钟后（令牌通常1小时有效）
-            self._token_expiry = datetime.now() + timedelta(minutes=50)
-            
-            return self._access_token
-            
-        except Exception as e:
-            raise RuntimeError(f"获取访问令牌失败: {str(e)}")
+        print(f"[DEBUG] 使用Gemini API")
+        print(f"  模型ID: {self.model_id}")
+        print(f"  基础URL: {self.base_url}")
     
     def generate_video(
         self,
@@ -85,39 +36,7 @@ class VeoAPIService:
         seed: Optional[int] = None,
         generate_audio: bool = False
     ) -> Dict[str, Any]:
-        """
-        生成视频 - 同步版本，支持Gemini API和Vertex AI
-        """
-        try:
-            if self.use_gemini_api:
-                return self._generate_video_gemini(
-                    prompt, duration, aspect_ratio, quality, 
-                    reference_image, negative_prompt, seed, generate_audio
-                )
-            else:
-                return self._generate_video_vertex(
-                    prompt, duration, aspect_ratio, quality, 
-                    reference_image, negative_prompt, seed, generate_audio
-                )
-                
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"生成失败: {str(e)}"
-            }
-    
-    def _generate_video_gemini(
-        self,
-        prompt: str,
-        duration: int,
-        aspect_ratio: str,
-        quality: str,
-        reference_image: Optional[bytes],
-        negative_prompt: Optional[str],
-        seed: Optional[int],
-        generate_audio: bool
-    ) -> Dict[str, Any]:
-        """使用Gemini API生成视频"""
+        """生成视频"""
         try:
             # 构建请求头
             headers = {
@@ -139,8 +58,7 @@ class VeoAPIService:
                     "mimeType": "image/jpeg"
                 }
             
-            # 构建参数 - 使用Gemini API格式
-            # 确保时长符合Veo 3.1限制
+            # 构建参数 - 确保符合Veo 3.1限制
             valid_durations = [4, 6, 8]
             if duration not in valid_durations:
                 duration = min(valid_durations, key=lambda x: abs(x - duration))
@@ -152,7 +70,7 @@ class VeoAPIService:
             parameters = {
                 "aspectRatio": aspect_ratio,
                 "durationSeconds": duration,
-                "resolution": quality.lower(),  # 确保是小写格式，如 "720p", "1080p"
+                "resolution": quality.lower(),
                 "sampleCount": 1
             }
             
@@ -175,14 +93,12 @@ class VeoAPIService:
             # 发送请求到Gemini API
             url = f"{self.base_url}:predictLongRunning"
             
-            print(f"[DEBUG] Gemini API请求到: {url}")
-            print(f"[DEBUG] 请求头: {headers}")
+            print(f"[DEBUG] 发送请求到: {url}")
             print(f"[DEBUG] 请求数据: {json.dumps(request_data, indent=2, ensure_ascii=False)}")
             
             response = requests.post(url, json=request_data, headers=headers, timeout=60)
             
             print(f"[DEBUG] 响应状态码: {response.status_code}")
-            print(f"[DEBUG] 响应头: {dict(response.headers)}")
             
             if response.status_code == 200:
                 result = response.json()
@@ -201,7 +117,7 @@ class VeoAPIService:
                     "job_id": operation_id,
                     "operation_name": operation_name,
                     "status": "processing",
-                    "message": "视频生成任务已创建 (Gemini API)"
+                    "message": "视频生成任务已创建"
                 }
             else:
                 return self._handle_error_response(response, url)
@@ -210,120 +126,170 @@ class VeoAPIService:
             return {
                 "success": False,
                 "error": f"网络错误: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"生成失败: {str(e)}"
             }
     
-    def _generate_video_vertex(
-        self,
-        prompt: str,
-        duration: int,
-        aspect_ratio: str,
-        quality: str,
-        reference_image: Optional[bytes],
-        negative_prompt: Optional[str],
-        seed: Optional[int],
-        generate_audio: bool
-    ) -> Dict[str, Any]:
-        """使用Vertex AI生成视频"""
+    def get_video_status(self, operation_name: str) -> Dict[str, Any]:
+        """获取视频生成状态"""
         try:
-            # 获取访问令牌
-            access_token = self._get_access_token()
-            
             # 构建请求头
             headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-                "User-Agent": "VideoStudio-Veo/1.0"
+                "x-goog-api-key": self.api_key,
+                "Content-Type": "application/json"
             }
             
-            # 构建实例数据
-            instance = {
-                "prompt": prompt
-            }
+            # 构建操作状态查询URL
+            url = f"https://generativelanguage.googleapis.com/v1beta/{operation_name}"
             
-            # 添加参考图片
-            if reference_image:
-                base64_image = base64.b64encode(reference_image).decode('utf-8')
-                instance["image"] = {
-                    "bytesBase64Encoded": base64_image,
-                    "mimeType": "image/jpeg"
-                }
-            
-            # 构建参数
-            # 确保时长符合Veo 3.1限制
-            valid_durations = [4, 6, 8]
-            if duration not in valid_durations:
-                duration = min(valid_durations, key=lambda x: abs(x - duration))
-            
-            # 参考图片转视频只支持8秒
-            if reference_image and duration != 8:
-                duration = 8
-            
-            parameters = {
-                "aspectRatio": aspect_ratio,
-                "durationSeconds": duration,
-                "resolution": quality,
-                "sampleCount": 1
-            }
-            
-            # 添加可选参数
-            if negative_prompt:
-                parameters["negativePrompt"] = negative_prompt
-            
-            if seed is not None:
-                parameters["seed"] = seed
-            
-            if generate_audio:
-                parameters["generateAudio"] = True
-            
-            # 构建完整请求数据
-            request_data = {
-                "instances": [instance],
-                "parameters": parameters
-            }
-            
-            # 发送请求到Vertex AI
-            url = f"{self.base_url}:predictLongRunning"
-            
-            print(f"[DEBUG] Vertex AI请求到: {url}")
-            print(f"[DEBUG] 请求头: {headers}")
-            print(f"[DEBUG] 请求数据: {json.dumps(request_data, indent=2, ensure_ascii=False)}")
-            
-            response = requests.post(url, json=request_data, headers=headers, timeout=60)
-            
-            print(f"[DEBUG] 响应状态码: {response.status_code}")
-            print(f"[DEBUG] 响应头: {dict(response.headers)}")
+            response = requests.get(url, headers=headers, timeout=30)
             
             if response.status_code == 200:
                 result = response.json()
-                print(f"[DEBUG] 成功响应: {json.dumps(result, indent=2, ensure_ascii=False)}")
+                print(f"[DEBUG] 状态响应: {json.dumps(result, indent=2, ensure_ascii=False)}")
                 
-                operation_name = result.get("name")
-                
-                if not operation_name:
-                    raise RuntimeError("API返回中没有操作名称")
-                
-                # 提取操作ID
-                operation_id = operation_name.split("/")[-1]
-                
-                return {
-                    "success": True,
-                    "job_id": operation_id,
-                    "operation_name": operation_name,
-                    "status": "processing",
-                    "message": "视频生成任务已创建 (Vertex AI)"
-                }
+                # 检查操作是否完成
+                if result.get("done", False):
+                    if "error" in result:
+                        return {
+                            "status": "failed",
+                            "progress": 0,
+                            "error": result["error"].get("message", "生成失败")
+                        }
+                    else:
+                        # 提取视频URL - 全面搜索
+                        video_url = None
+                        if "response" in result:
+                            response_data = result["response"]
+                            video_url = self._extract_video_url(response_data)
+                        
+                        print(f"[DEBUG] 最终提取的视频URL: {video_url}")
+                        
+                        return {
+                            "status": "completed",
+                            "progress": 100,
+                            "video_url": video_url,
+                            "message": "视频生成完成",
+                            "raw_response": result
+                        }
+                else:
+                    # 仍在处理中
+                    return {
+                        "status": "processing",
+                        "progress": 50,
+                        "message": "正在生成视频..."
+                    }
             else:
-                return self._handle_error_response(response, url)
+                return {
+                    "status": "error",
+                    "progress": 0,
+                    "error": f"无法获取状态: HTTP {response.status_code}"
+                }
                 
         except requests.RequestException as e:
             return {
-                "success": False,
+                "status": "error",
+                "progress": 0,
                 "error": f"网络错误: {str(e)}"
             }
+        except Exception as e:
+            return {
+                "status": "error",
+                "progress": 0,
+                "error": f"状态查询失败: {str(e)}"
+            }
+    
+    def _extract_video_url(self, response_data: dict) -> Optional[str]:
+        """从响应数据中提取视频URL"""
+        # 方法1: 检查predictions结构
+        if "predictions" in response_data:
+            predictions = response_data["predictions"]
+            if predictions and len(predictions) > 0:
+                prediction = predictions[0]
+                
+                # 检查视频数据对象
+                if "video" in prediction:
+                    video_data = prediction["video"]
+                    video_url = (video_data.get("uri") or 
+                               video_data.get("gcsUri") or
+                               video_data.get("url") or
+                               video_data.get("downloadUrl") or
+                               video_data.get("signedUrl") or
+                               video_data.get("videoUri") or
+                               video_data.get("fileUri"))
+                    if video_url:
+                        return video_url
+                
+                # 检查预测对象的直接字段
+                video_url = (prediction.get("uri") or 
+                           prediction.get("gcsUri") or
+                           prediction.get("url") or
+                           prediction.get("downloadUrl") or
+                           prediction.get("signedUrl") or
+                           prediction.get("videoUri") or
+                           prediction.get("fileUri") or
+                           prediction.get("video_uri"))
+                if video_url:
+                    return video_url
+        
+        # 方法2: 检查generatedVideos结构
+        if "generatedVideos" in response_data:
+            generated_videos = response_data["generatedVideos"]
+            if generated_videos and len(generated_videos) > 0:
+                video_info = generated_videos[0]
+                
+                if "video" in video_info:
+                    video_data = video_info["video"]
+                    video_url = (video_data.get("uri") or 
+                               video_data.get("gcsUri") or
+                               video_data.get("url") or
+                               video_data.get("downloadUrl") or
+                               video_data.get("signedUrl") or
+                               video_data.get("videoUri") or
+                               video_data.get("fileUri"))
+                    if video_url:
+                        return video_url
+                
+                # 直接检查video_info的字段
+                video_url = (video_info.get("uri") or 
+                           video_info.get("gcsUri") or
+                           video_info.get("url") or
+                           video_info.get("downloadUrl") or
+                           video_info.get("signedUrl") or
+                           video_info.get("videoUri") or
+                           video_info.get("fileUri"))
+                if video_url:
+                    return video_url
+        
+        # 方法3: 递归搜索所有可能的URL字段
+        def find_url_in_dict(data, depth=0):
+            if depth > 5:  # 防止无限递归
+                return None
+            if isinstance(data, dict):
+                # 检查常见的URL字段名
+                url_fields = ['uri', 'url', 'gcsUri', 'downloadUrl', 'signedUrl', 'videoUri', 'fileUri', 'video_uri', 'download_url', 'publicUrl', 'viewUrl']
+                for field in url_fields:
+                    if field in data and isinstance(data[field], str) and data[field].startswith(('http', 'gs://')):
+                        return data[field]
+                # 递归搜索嵌套对象
+                for value in data.values():
+                    result = find_url_in_dict(value, depth + 1)
+                    if result:
+                        return result
+            elif isinstance(data, list):
+                for item in data:
+                    result = find_url_in_dict(item, depth + 1)
+                    if result:
+                        return result
+            return None
+        
+        return find_url_in_dict(response_data)
     
     def _handle_error_response(self, response: requests.Response, url: str) -> Dict[str, Any]:
         """处理错误响应"""
-        # 记录错误响应
         try:
             error_data = response.json()
             print(f"[DEBUG] 错误响应: {json.dumps(error_data, indent=2, ensure_ascii=False)}")
@@ -333,17 +299,17 @@ class VeoAPIService:
         if response.status_code == 401:
             return {
                 "success": False,
-                "error": "认证失败，请检查API密钥或Google Cloud凭据"
+                "error": "认证失败，请检查API密钥"
             }
         elif response.status_code == 403:
             return {
                 "success": False,
-                "error": "权限不足，请检查API权限或服务账号权限"
+                "error": "权限不足，请检查API权限"
             }
         elif response.status_code == 404:
             return {
                 "success": False,
-                "error": f"API端点不存在 (404): {url}。可能原因：1) Veo API在该地区不可用 2) 模型名称错误 3) 项目配置问题"
+                "error": f"API端点不存在 (404): {url}"
             }
         elif response.status_code == 429:
             return {
@@ -361,274 +327,6 @@ class VeoAPIService:
                 "success": False,
                 "error": f"API调用失败 ({response.status_code}): {error_message}"
             }
-    
-    def get_video_status(self, operation_name: str) -> Dict[str, Any]:
-        """
-        获取视频生成状态 - 同步版本，支持Gemini API和Vertex AI
-        """
-        try:
-            if self.use_gemini_api:
-                return self._get_video_status_gemini(operation_name)
-            else:
-                return self._get_video_status_vertex(operation_name)
-                
-        except Exception as e:
-            return {
-                "status": "error",
-                "progress": 0,
-                "error": f"状态查询失败: {str(e)}"
-            }
-    
-    def _get_video_status_gemini(self, operation_name: str) -> Dict[str, Any]:
-        """使用Gemini API获取视频状态"""
-        try:
-            # 构建请求头
-            headers = {
-                "x-goog-api-key": self.api_key,
-                "Content-Type": "application/json"
-            }
-            
-            # 构建操作状态查询URL
-            url = f"https://generativelanguage.googleapis.com/v1beta/{operation_name}"
-            
-            response = requests.get(url, headers=headers, timeout=30)
-            
-            if response.status_code == 200:
-                result = response.json()
-                print(f"[DEBUG] Gemini状态响应: {json.dumps(result, indent=2, ensure_ascii=False)}")
-                
-                # 检查操作是否完成
-                if result.get("done", False):
-                    if "error" in result:
-                        return {
-                            "status": "failed",
-                            "progress": 0,
-                            "error": result["error"].get("message", "生成失败")
-                        }
-                    else:
-                        # 提取视频URL - 更全面的字段检查
-                        video_url = None
-                        if "response" in result:
-                            response_data = result["response"]
-                            print(f"[DEBUG] 完整响应数据: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
-                            
-                            # 方法1: 检查predictions结构
-                            if "predictions" in response_data:
-                                predictions = response_data["predictions"]
-                                if predictions and len(predictions) > 0:
-                                    prediction = predictions[0]
-                                    print(f"[DEBUG] 预测数据: {json.dumps(prediction, indent=2, ensure_ascii=False)}")
-                                    
-                                    # 检查视频数据对象
-                                    if "video" in prediction:
-                                        video_data = prediction["video"]
-                                        video_url = (video_data.get("uri") or 
-                                                   video_data.get("gcsUri") or
-                                                   video_data.get("url") or
-                                                   video_data.get("downloadUrl") or
-                                                   video_data.get("signedUrl") or
-                                                   video_data.get("videoUri") or
-                                                   video_data.get("fileUri"))
-                                    
-                                    # 检查预测对象的直接字段
-                                    if not video_url:
-                                        video_url = (prediction.get("uri") or 
-                                                   prediction.get("gcsUri") or
-                                                   prediction.get("url") or
-                                                   prediction.get("downloadUrl") or
-                                                   prediction.get("signedUrl") or
-                                                   prediction.get("videoUri") or
-                                                   prediction.get("fileUri") or
-                                                   prediction.get("video_uri"))
-                            
-                            # 方法2: 检查generatedVideos结构
-                            if not video_url and "generatedVideos" in response_data:
-                                generated_videos = response_data["generatedVideos"]
-                                if generated_videos and len(generated_videos) > 0:
-                                    video_info = generated_videos[0]
-                                    print(f"[DEBUG] 生成视频信息: {json.dumps(video_info, indent=2, ensure_ascii=False)}")
-                                    
-                                    if "video" in video_info:
-                                        video_data = video_info["video"]
-                                        video_url = (video_data.get("uri") or 
-                                                   video_data.get("gcsUri") or
-                                                   video_data.get("url") or
-                                                   video_data.get("downloadUrl") or
-                                                   video_data.get("signedUrl") or
-                                                   video_data.get("videoUri") or
-                                                   video_data.get("fileUri"))
-                                    
-                                    # 直接检查video_info的字段
-                                    if not video_url:
-                                        video_url = (video_info.get("uri") or 
-                                                   video_info.get("gcsUri") or
-                                                   video_info.get("url") or
-                                                   video_info.get("downloadUrl") or
-                                                   video_info.get("signedUrl") or
-                                                   video_info.get("videoUri") or
-                                                   video_info.get("fileUri"))
-                            
-                            # 方法3: 检查response的直接字段
-                            if not video_url:
-                                video_url = (response_data.get("uri") or 
-                                           response_data.get("gcsUri") or
-                                           response_data.get("url") or
-                                           response_data.get("downloadUrl") or
-                                           response_data.get("signedUrl") or
-                                           response_data.get("videoUri") or
-                                           response_data.get("fileUri") or
-                                           response_data.get("video_uri"))
-                            
-                            # 方法4: 递归搜索所有可能的URL字段
-                            if not video_url:
-                                def find_url_in_dict(data, depth=0):
-                                    if depth > 5:  # 防止无限递归
-                                        return None
-                                    if isinstance(data, dict):
-                                        # 检查常见的URL字段名
-                                        url_fields = ['uri', 'url', 'gcsUri', 'downloadUrl', 'signedUrl', 'videoUri', 'fileUri', 'video_uri', 'download_url', 'publicUrl', 'viewUrl']
-                                        for field in url_fields:
-                                            if field in data and isinstance(data[field], str) and data[field].startswith(('http', 'gs://')):
-                                                return data[field]
-                                        # 递归搜索嵌套对象
-                                        for value in data.values():
-                                            result = find_url_in_dict(value, depth + 1)
-                                            if result:
-                                                return result
-                                    elif isinstance(data, list):
-                                        for item in data:
-                                            result = find_url_in_dict(item, depth + 1)
-                                            if result:
-                                                return result
-                                    return None
-                                
-                                video_url = find_url_in_dict(response_data)
-                            
-                            # 方法5: 尝试查找公开访问的URL
-                            public_url = None
-                            if not video_url or video_url.startswith('gs://'):
-                                def find_public_url(data, depth=0):
-                                    if depth > 5:
-                                        return None
-                                    if isinstance(data, dict):
-                                        # 优先查找公开访问的URL字段
-                                        public_fields = ['publicUrl', 'viewUrl', 'downloadUrl', 'signedUrl', 'streamUrl']
-                                        for field in public_fields:
-                                            if field in data and isinstance(data[field], str) and data[field].startswith('http'):
-                                                return data[field]
-                                        # 递归搜索
-                                        for value in data.values():
-                                            result = find_public_url(value, depth + 1)
-                                            if result:
-                                                return result
-                                    elif isinstance(data, list):
-                                        for item in data:
-                                            result = find_public_url(item, depth + 1)
-                                            if result:
-                                                return result
-                                    return None
-                                
-                                public_url = find_public_url(response_data)
-                                if public_url:
-                                    video_url = public_url
-                                    print(f"[DEBUG] 找到公开URL: {public_url}")
-                        
-                        print(f"[DEBUG] 最终提取的视频URL: {video_url}")
-                        
-                        return {
-                            "status": "completed",
-                            "progress": 100,
-                            "video_url": video_url,
-                            "message": "视频生成完成",
-                            "raw_response": result  # 添加原始响应用于调试
-                        }
-                else:
-                    # 仍在处理中
-                    return {
-                        "status": "processing",
-                        "progress": 50,  # 默认进度
-                        "message": "正在生成视频..."
-                    }
-            else:
-                return {
-                    "status": "error",
-                    "progress": 0,
-                    "error": f"无法获取状态: HTTP {response.status_code}"
-                }
-                
-        except requests.RequestException as e:
-            return {
-                "status": "error",
-                "progress": 0,
-                "error": f"网络错误: {str(e)}"
-            }
-    
-    def _get_video_status_vertex(self, operation_name: str) -> Dict[str, Any]:
-        """使用Vertex AI获取视频状态"""
-        try:
-            # 获取访问令牌
-            access_token = self._get_access_token()
-            
-            # 构建请求头
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
-            
-            # 构建操作状态查询URL
-            url = f"https://{self.location}-aiplatform.googleapis.com/v1/{operation_name}"
-            
-            response = requests.get(url, headers=headers, timeout=30)
-            
-            if response.status_code == 200:
-                result = response.json()
-                
-                # 检查操作是否完成
-                if result.get("done", False):
-                    if "error" in result:
-                        return {
-                            "status": "failed",
-                            "progress": 0,
-                            "error": result["error"].get("message", "生成失败")
-                        }
-                    else:
-                        # 提取视频URL
-                        video_url = None
-                        if "response" in result:
-                            predictions = result["response"].get("predictions", [])
-                            if predictions:
-                                video_data = predictions[0].get("video", {})
-                                # 检查不同的URL字段
-                                video_url = (video_data.get("uri") or 
-                                           video_data.get("gcsUri") or
-                                           video_data.get("url"))
-                        
-                        return {
-                            "status": "completed",
-                            "progress": 100,
-                            "video_url": video_url,
-                            "message": "视频生成完成"
-                        }
-                else:
-                    # 仍在处理中
-                    return {
-                        "status": "processing",
-                        "progress": 50,  # 默认进度
-                        "message": "正在生成视频..."
-                    }
-            else:
-                return {
-                    "status": "error",
-                    "progress": 0,
-                    "error": f"无法获取状态: HTTP {response.status_code}"
-                }
-                
-        except requests.RequestException as e:
-            return {
-                "status": "error",
-                "progress": 0,
-                "error": f"网络错误: {str(e)}"
-            }
 
 
 # 全局服务实例
@@ -640,12 +338,9 @@ def get_veo_service() -> Optional[VeoAPIService]:
     global _veo_service
     
     try:
-        # 检查API配置
-        has_gemini_key = "GOOGLE_API_KEY" in st.secrets
-        has_vertex_config = all(key in st.secrets for key in ["GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_CREDENTIALS"])
-        
-        if not has_gemini_key and not has_vertex_config:
-            print("[DEBUG] 没有找到有效的API配置")
+        # 只检查Gemini API密钥
+        if "GOOGLE_API_KEY" not in st.secrets:
+            print("[DEBUG] 没有找到GOOGLE_API_KEY")
             return None
         
         if _veo_service is None:
@@ -672,7 +367,7 @@ def generate_video_sync(
     if not service:
         return {
             "success": False,
-            "error": "Veo服务未配置，请检查Google Cloud凭据"
+            "error": "Veo服务未配置，请检查GOOGLE_API_KEY"
         }
     
     return service.generate_video(
