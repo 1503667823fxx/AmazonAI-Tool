@@ -30,6 +30,7 @@ STYLE_CHINESE_NAMES = {
 
 # 模型中文映射
 MODEL_CHINESE_NAMES = {
+    "veo": "Google Veo 3.1 (谷歌视频生成)",
     "luma": "Luma Dream Machine (梦境机器)",
     "runway": "Runway ML (跑道实验室)",
     "pika": "Pika Labs (皮卡实验室)"
