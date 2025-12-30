@@ -62,13 +62,16 @@ class VeoAPIService:
             config_params = {
                 "aspect_ratio": aspect_ratio,
                 "duration_seconds": duration,
-                "resolution": quality.lower(),
-                "generate_audio": generate_audio
+                "resolution": quality.lower()
             }
             
-            # 添加可选参数
+            # 添加可选参数（排除不支持的参数）
             if seed is not None:
                 config_params["seed"] = seed
+            
+            # 注意：generate_audio 在Gemini API中不支持，只在Vertex AI中支持
+            # if generate_audio:
+            #     config_params["generate_audio"] = generate_audio
             
             print(f"[DEBUG] 配置参数: {config_params}")
             
