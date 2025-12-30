@@ -160,17 +160,23 @@ class VeoAPIService:
                             "error": result["error"].get("message", "生成失败")
                         }
                     else:
-                        # 提取视频URL - 全面搜索
+                        # 提取视频数据 - 优先字节数据，备用URL
+                        video_data = None
                         video_url = None
+                        video_bytes = None
+                        
                         if "response" in result:
                             response_data = result["response"]
-                            video_url = self._extract_video_url(response_data)
+                            video_info = self._extract_video_data(response_data)
+                            video_bytes = video_info.get("video_bytes")
+                            video_url = video_info.get("video_url")
                         
-                        print(f"[DEBUG] 最终提取的视频URL: {video_url}")
+                        print(f"[DEBUG] 提取结果 - 字节数据: {'有' if video_bytes else '无'}, URL: {video_url}")
                         
                         return {
                             "status": "completed",
                             "progress": 100,
+                            "video_bytes": video_bytes,
                             "video_url": video_url,
                             "message": "视频生成完成",
                             "raw_response": result
@@ -202,8 +208,10 @@ class VeoAPIService:
                 "error": f"状态查询失败: {str(e)}"
             }
     
-    def _extract_video_url(self, response_data: dict) -> Optional[str]:
-        """从响应数据中提取视频URL"""
+    def _extract_video_data(self, response_data: dict) -> Dict[str, Any]:
+        """从响应数据中提取视频数据（优先获取字节数据）"""
+        result = {"video_url": None, "video_bytes": None}
+        
         # 方法1: 检查predictions结构
         if "predictions" in response_data:
             predictions = response_data["predictions"]
@@ -213,80 +221,124 @@ class VeoAPIService:
                 # 检查视频数据对象
                 if "video" in prediction:
                     video_data = prediction["video"]
-                    video_url = (video_data.get("uri") or 
-                               video_data.get("gcsUri") or
-                               video_data.get("url") or
-                               video_data.get("downloadUrl") or
-                               video_data.get("signedUrl") or
-                               video_data.get("videoUri") or
-                               video_data.get("fileUri"))
-                    if video_url:
-                        return video_url
+                    
+                    # 优先获取字节数据（官方推荐方式）
+                    if "video_bytes" in video_data:
+                        result["video_bytes"] = video_data["video_bytes"]
+                    elif "videoBytes" in video_data:
+                        result["video_bytes"] = video_data["videoBytes"]
+                    elif "bytesBase64Encoded" in video_data:
+                        result["video_bytes"] = video_data["bytesBase64Encoded"]
+                    
+                    # 备用：获取URL
+                    if not result["video_bytes"]:
+                        video_url = (video_data.get("uri") or 
+                                   video_data.get("gcsUri") or
+                                   video_data.get("url") or
+                                   video_data.get("downloadUrl") or
+                                   video_data.get("signedUrl") or
+                                   video_data.get("videoUri") or
+                                   video_data.get("fileUri"))
+                        if video_url:
+                            result["video_url"] = video_url
                 
                 # 检查预测对象的直接字段
-                video_url = (prediction.get("uri") or 
-                           prediction.get("gcsUri") or
-                           prediction.get("url") or
-                           prediction.get("downloadUrl") or
-                           prediction.get("signedUrl") or
-                           prediction.get("videoUri") or
-                           prediction.get("fileUri") or
-                           prediction.get("video_uri"))
-                if video_url:
-                    return video_url
+                if not result["video_bytes"] and not result["video_url"]:
+                    # 检查字节数据
+                    if "video_bytes" in prediction:
+                        result["video_bytes"] = prediction["video_bytes"]
+                    elif "videoBytes" in prediction:
+                        result["video_bytes"] = prediction["videoBytes"]
+                    elif "bytesBase64Encoded" in prediction:
+                        result["video_bytes"] = prediction["bytesBase64Encoded"]
+                    
+                    # 检查URL
+                    if not result["video_bytes"]:
+                        video_url = (prediction.get("uri") or 
+                                   prediction.get("gcsUri") or
+                                   prediction.get("url") or
+                                   prediction.get("downloadUrl") or
+                                   prediction.get("signedUrl") or
+                                   prediction.get("videoUri") or
+                                   prediction.get("fileUri") or
+                                   prediction.get("video_uri"))
+                        if video_url:
+                            result["video_url"] = video_url
         
         # 方法2: 检查generatedVideos结构
-        if "generatedVideos" in response_data:
+        if not result["video_bytes"] and not result["video_url"] and "generatedVideos" in response_data:
             generated_videos = response_data["generatedVideos"]
             if generated_videos and len(generated_videos) > 0:
                 video_info = generated_videos[0]
                 
                 if "video" in video_info:
                     video_data = video_info["video"]
-                    video_url = (video_data.get("uri") or 
-                               video_data.get("gcsUri") or
-                               video_data.get("url") or
-                               video_data.get("downloadUrl") or
-                               video_data.get("signedUrl") or
-                               video_data.get("videoUri") or
-                               video_data.get("fileUri"))
-                    if video_url:
-                        return video_url
+                    
+                    # 优先获取字节数据
+                    if "video_bytes" in video_data:
+                        result["video_bytes"] = video_data["video_bytes"]
+                    elif "videoBytes" in video_data:
+                        result["video_bytes"] = video_data["videoBytes"]
+                    elif "bytesBase64Encoded" in video_data:
+                        result["video_bytes"] = video_data["bytesBase64Encoded"]
+                    
+                    # 备用：获取URL
+                    if not result["video_bytes"]:
+                        video_url = (video_data.get("uri") or 
+                                   video_data.get("gcsUri") or
+                                   video_data.get("url") or
+                                   video_data.get("downloadUrl") or
+                                   video_data.get("signedUrl") or
+                                   video_data.get("videoUri") or
+                                   video_data.get("fileUri"))
+                        if video_url:
+                            result["video_url"] = video_url
+        
+        # 方法3: 递归搜索所有可能的字节数据和URL字段
+        if not result["video_bytes"] and not result["video_url"]:
+            def find_video_data_in_dict(data, depth=0):
+                if depth > 5:  # 防止无限递归
+                    return {"video_url": None, "video_bytes": None}
                 
-                # 直接检查video_info的字段
-                video_url = (video_info.get("uri") or 
-                           video_info.get("gcsUri") or
-                           video_info.get("url") or
-                           video_info.get("downloadUrl") or
-                           video_info.get("signedUrl") or
-                           video_info.get("videoUri") or
-                           video_info.get("fileUri"))
-                if video_url:
-                    return video_url
+                found_result = {"video_url": None, "video_bytes": None}
+                
+                if isinstance(data, dict):
+                    # 检查字节数据字段
+                    bytes_fields = ['video_bytes', 'videoBytes', 'bytesBase64Encoded', 'base64Data', 'videoData']
+                    for field in bytes_fields:
+                        if field in data and data[field]:
+                            found_result["video_bytes"] = data[field]
+                            return found_result
+                    
+                    # 检查URL字段
+                    url_fields = ['uri', 'url', 'gcsUri', 'downloadUrl', 'signedUrl', 'videoUri', 'fileUri', 'video_uri', 'download_url', 'publicUrl', 'viewUrl']
+                    for field in url_fields:
+                        if field in data and isinstance(data[field], str) and data[field].startswith(('http', 'gs://')):
+                            found_result["video_url"] = data[field]
+                            if not found_result["video_bytes"]:  # 只有没有字节数据时才返回URL
+                                return found_result
+                    
+                    # 递归搜索嵌套对象
+                    for value in data.values():
+                        nested_result = find_video_data_in_dict(value, depth + 1)
+                        if nested_result["video_bytes"]:
+                            return nested_result
+                        elif nested_result["video_url"] and not found_result["video_url"]:
+                            found_result["video_url"] = nested_result["video_url"]
+                
+                elif isinstance(data, list):
+                    for item in data:
+                        nested_result = find_video_data_in_dict(item, depth + 1)
+                        if nested_result["video_bytes"]:
+                            return nested_result
+                        elif nested_result["video_url"] and not found_result["video_url"]:
+                            found_result["video_url"] = nested_result["video_url"]
+                
+                return found_result
+            
+            result = find_video_data_in_dict(response_data)
         
-        # 方法3: 递归搜索所有可能的URL字段
-        def find_url_in_dict(data, depth=0):
-            if depth > 5:  # 防止无限递归
-                return None
-            if isinstance(data, dict):
-                # 检查常见的URL字段名
-                url_fields = ['uri', 'url', 'gcsUri', 'downloadUrl', 'signedUrl', 'videoUri', 'fileUri', 'video_uri', 'download_url', 'publicUrl', 'viewUrl']
-                for field in url_fields:
-                    if field in data and isinstance(data[field], str) and data[field].startswith(('http', 'gs://')):
-                        return data[field]
-                # 递归搜索嵌套对象
-                for value in data.values():
-                    result = find_url_in_dict(value, depth + 1)
-                    if result:
-                        return result
-            elif isinstance(data, list):
-                for item in data:
-                    result = find_url_in_dict(item, depth + 1)
-                    if result:
-                        return result
-            return None
-        
-        return find_url_in_dict(response_data)
+        return result
     
     def _handle_error_response(self, response: requests.Response, url: str) -> Dict[str, Any]:
         """处理错误响应"""
