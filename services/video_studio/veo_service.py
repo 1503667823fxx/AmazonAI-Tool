@@ -111,12 +111,10 @@ class VeoAPIService:
                 formats = image_result["formats"]
                 last_error = None
                 
-                # 按优先级尝试不同格式和方法
+                # 按优先级尝试不同方法
                 attempts = [
                     ("standard_dict", formats["standard"]),
-                    ("standard_sdk", None),  # 使用SDK方法
-                    ("raw_bytes_sdk", formats["raw_bytes"]),
-                    ("simple_dict", formats["simple"])
+                    ("raw_bytes_sdk", formats["raw_bytes"])
                 ]
                 
                 for attempt_name, format_data in attempts:
@@ -124,7 +122,7 @@ class VeoAPIService:
                     
                     try:
                         if attempt_name == "standard_dict":
-                            # 直接使用字典格式
+                            # 直接使用标准字典格式
                             operation = self.client.models.generate_videos(
                                 model=self.model_id,
                                 prompt=prompt,
@@ -132,38 +130,22 @@ class VeoAPIService:
                                 config=config
                             )
                         
-                        elif attempt_name == "standard_sdk":
-                            # 使用SDK的Image对象
-                            if hasattr(types, 'Image') and hasattr(types.Image, 'from_bytes'):
-                                image_obj = types.Image.from_bytes(formats["raw_bytes"])
-                                operation = self.client.models.generate_videos(
-                                    model=self.model_id,
-                                    prompt=prompt,
-                                    image=image_obj,
-                                    config=config
-                                )
-                            else:
-                                raise RuntimeError("SDK Image.from_bytes 不可用")
-                        
                         elif attempt_name == "raw_bytes_sdk":
-                            # 使用Part对象
-                            if hasattr(types, 'Part') and hasattr(types.Part, 'from_bytes'):
-                                part_obj = types.Part.from_bytes(data=format_data, mime_type="image/jpeg")
-                                operation = self.client.models.generate_videos(
-                                    model=self.model_id,
-                                    prompt=prompt,
-                                    image=part_obj,
-                                    config=config
-                                )
+                            # 使用SDK对象
+                            image_obj = None
+                            
+                            # 尝试不同的SDK方法
+                            if hasattr(types, 'Image') and hasattr(types.Image, 'from_bytes'):
+                                image_obj = types.Image.from_bytes(format_data)
+                            elif hasattr(types, 'Part') and hasattr(types.Part, 'from_bytes'):
+                                image_obj = types.Part.from_bytes(data=format_data, mime_type="image/jpeg")
                             else:
-                                raise RuntimeError("SDK Part.from_bytes 不可用")
-                        
-                        elif attempt_name == "simple_dict":
-                            # 简化字典格式
+                                raise RuntimeError("SDK对象创建方法不可用")
+                            
                             operation = self.client.models.generate_videos(
                                 model=self.model_id,
                                 prompt=prompt,
-                                image=format_data,
+                                image=image_obj,
                                 config=config
                             )
                         

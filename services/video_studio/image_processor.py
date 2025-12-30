@@ -122,17 +122,12 @@ class VideoStudioImageProcessor:
             
             # 创建多种API格式，提高兼容性
             formats = {
-                # 格式1: 标准格式
+                # 格式1: 标准格式 (API要求的确切字段名)
                 "standard": {
                     "bytesBase64Encoded": base64_data,
                     "mimeType": "image/jpeg"
                 },
-                # 格式2: 简化格式
-                "simple": {
-                    "data": base64_data,
-                    "type": "image/jpeg"
-                },
-                # 格式3: 原始字节
+                # 格式2: 原始字节
                 "raw_bytes": optimized_bytes
             }
             
