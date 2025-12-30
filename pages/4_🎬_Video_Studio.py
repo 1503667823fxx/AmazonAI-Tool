@@ -300,68 +300,83 @@ with col_output:
                         st.caption("复制URL在浏览器中打开（可能需要登录Google账号）")
                 
                 elif video_url.startswith('http'):
-                    # HTTP URL - 尝试直接显示
+                    # HTTP URL - 使用代理服务测试可访问性
                     st.success("✅ **HTTP视频URL**")
                     
-                    try:
-                        # 尝试使用带认证头的方式
-                        st.markdown("**在线播放：**")
-                        
-                        # 创建一个带认证的iframe或直接显示
-                        video_html = f"""
-                        <video width="100%" height="400" controls>
-                            <source src="{video_url}" type="video/mp4">
-                            您的浏览器不支持视频播放。
-                        </video>
-                        """
-                        st.markdown(video_html, unsafe_allow_html=True)
-                        
-                    except Exception as e:
-                        st.warning(f"直接播放失败: {str(e)}")
-                        st.info("请尝试下载或在新窗口中打开")
+                    # 测试视频可访问性
+                    with st.spinner("🔍 测试视频可访问性..."):
+                        try:
+                            from services.video_studio.video_proxy import test_video_accessibility, create_authenticated_download
+                            
+                            video_info = test_video_accessibility(video_url)
+                            
+                            if video_info["accessible"]:
+                                st.success("✅ 视频URL可以通过认证访问")
+                                
+                                # 尝试创建认证下载
+                                st.markdown("**下载选项：**")
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    if st.button("📥 认证下载", key="auth_download"):
+                                        with st.spinner("正在准备下载..."):
+                                            download_url = create_authenticated_download(video_url, job['job_id'])
+                                            if download_url:
+                                                st.success("✅ 下载准备完成")
+                                                # 创建下载链接
+                                                download_html = f"""
+                                                <a href="{download_url}" download="veo_video_{job['job_id']}.mp4">
+                                                    <button style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                                        📥 点击下载视频
+                                                    </button>
+                                                </a>
+                                                """
+                                                st.markdown(download_html, unsafe_allow_html=True)
+                                            else:
+                                                st.error("❌ 下载准备失败")
+                                
+                                with col2:
+                                    st.markdown(f"[🔗 新窗口打开]({video_url})")
+                                    st.caption("需要登录Google账号")
+                                
+                            else:
+                                st.warning(f"⚠️ 视频URL无法直接访问: {video_info['reason']}")
+                                
+                        except ImportError:
+                            st.warning("⚠️ 视频代理服务不可用")
+                        except Exception as e:
+                            st.error(f"❌ 测试失败: {str(e)}")
                     
-                    # 提供下载选项
-                    st.markdown("**下载选项：**")
-                    col1, col2, col3 = st.columns(3)
+                    # 显示URL供用户复制
+                    st.markdown("**视频URL：**")
+                    st.code(video_url)
+                    
+                    # 推荐访问方式
+                    st.markdown("**推荐访问方式：**")
+                    
+                    col1, col2 = st.columns(2)
                     
                     with col1:
-                        # 创建一个带认证的下载链接
-                        download_js = f"""
-                        <script>
-                        function downloadWithAuth() {{
-                            fetch('{video_url}', {{
-                                headers: {{
-                                    'Authorization': 'Bearer {st.secrets.get("GOOGLE_API_KEY", "")}',
-                                    'x-goog-api-key': '{st.secrets.get("GOOGLE_API_KEY", "")}'
-                                }}
-                            }})
-                            .then(response => response.blob())
-                            .then(blob => {{
-                                const url = window.URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = 'veo_video_{job["job_id"]}.mp4';
-                                a.click();
-                                window.URL.revokeObjectURL(url);
-                            }})
-                            .catch(error => {{
-                                console.error('下载失败:', error);
-                                alert('下载失败，请尝试直接访问URL');
-                            }});
-                        }}
-                        </script>
-                        <button onclick="downloadWithAuth()" style="padding: 8px 16px; background: #ff6b6b; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                            📥 认证下载
-                        </button>
-                        """
-                        st.markdown(download_js, unsafe_allow_html=True)
+                        st.markdown("**方式1：Google AI Studio（最推荐）**")
+                        st.markdown(f"[🔗 打开AI Studio](https://aistudio.google.com/)")
+                        st.code(f"任务ID: {job['job_id']}")
+                        st.caption("✅ 100%可靠，官方推荐")
                     
                     with col2:
-                        st.markdown(f"[🔗 新窗口打开]({video_url})")
+                        st.markdown("**方式2：浏览器直接访问**")
+                        st.markdown(f"[🔗 新窗口打开URL]({video_url})")
+                        st.caption("⚠️ 需要登录Google账号")
                     
-                    with col3:
-                        if st.button("📋 复制URL"):
-                            st.code(video_url)
+                    # 技术说明
+                    st.info("""
+                    💡 **为什么无法在线播放？**
+                    
+                    1. **认证要求**：Google Veo的视频URL需要API密钥认证
+                    2. **CORS限制**：浏览器安全策略阻止跨域视频访问
+                    3. **Streamlit限制**：云环境的网络访问限制
+                    
+                    **最佳解决方案**：使用Google AI Studio查看和下载视频
+                    """)
                 
                 else:
                     st.warning(f"⚠️ 未知URL格式: {video_url[:50]}...")
