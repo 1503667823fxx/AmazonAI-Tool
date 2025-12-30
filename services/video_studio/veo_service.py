@@ -17,18 +17,57 @@ import streamlit as st
 class VeoAPIService:
     """Google Veo 3.1 API服务"""
     
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        # 注意：这里使用的是Google AI Studio API端点
-        # 实际的Veo API端点可能不同，需要根据Google的官方文档调整
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta"
+    def __init__(self):
+        # 从Streamlit secrets获取配置
+        self.project_id = st.secrets["GOOGLE_CLOUD_PROJECT_ID"]
+        self.location = st.secrets["GOOGLE_CLOUD_LOCATION"]
+        self.model_id = "veo-3.1-generate-preview"
+        
+        # 构建API端点
+        self.base_url = f"https://{self.location}-aiplatform.googleapis.com/v1/projects/{self.project_id}/locations/{self.location}/publishers/google/models/{self.model_id}"
+        
         self.session: Optional[aiohttp.ClientSession] = None
+        self._access_token: Optional[str] = None
+        self._token_expiry: Optional[datetime] = None
+    
+    async def _get_access_token(self) -> str:
+        """获取Google Cloud访问令牌"""
+        # 检查缓存的令牌是否仍然有效
+        if self._access_token and self._token_expiry and datetime.now() < self._token_expiry:
+            return self._access_token
+        
+        try:
+            # 从Streamlit secrets获取服务账号凭据
+            credentials_json = st.secrets["GOOGLE_CLOUD_CREDENTIALS"]
+            credentials_info = json.loads(credentials_json)
+            
+            # 使用Google OAuth2库获取访问令牌
+            from google.oauth2 import service_account
+            from google.auth.transport.requests import Request
+            
+            credentials = service_account.Credentials.from_service_account_info(
+                credentials_info,
+                scopes=['https://www.googleapis.com/auth/cloud-platform']
+            )
+            
+            # 刷新令牌
+            credentials.refresh(Request())
+            
+            self._access_token = credentials.token
+            # 设置过期时间为50分钟后（令牌通常1小时有效）
+            self._token_expiry = datetime.now() + timedelta(minutes=50)
+            
+            return self._access_token
+            
+        except Exception as e:
+            raise RuntimeError(f"获取访问令牌失败: {str(e)}")
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """获取HTTP会话"""
         if self.session is None or self.session.closed:
+            access_token = await self._get_access_token()
             headers = {
-                "Authorization": f"Bearer {self.api_key}",
+                "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
                 "User-Agent": "VideoStudio-Veo/1.0"
             }
@@ -69,52 +108,73 @@ class VeoAPIService:
         try:
             session = await self._get_session()
             
-            # 构建请求数据
-            request_data = {
-                "prompt": prompt,
-                "parameters": {
-                    "aspectRatio": aspect_ratio,
-                    "durationSeconds": min(duration, 8),  # 限制最大8秒
-                    "resolution": quality,
-                    "sampleCount": 1
-                }
+            # 构建实例数据
+            instance = {
+                "prompt": prompt
             }
             
             # 添加参考图片
             if reference_image:
                 base64_image = base64.b64encode(reference_image).decode('utf-8')
-                request_data["referenceImage"] = {
-                    "data": base64_image,
+                instance["image"] = {
+                    "bytesBase64Encoded": base64_image,
                     "mimeType": "image/jpeg"
                 }
             
+            # 构建参数
+            parameters = {
+                "aspectRatio": aspect_ratio,
+                "durationSeconds": min(duration, 8),  # 限制最大8秒
+                "resolution": quality,
+                "sampleCount": 1
+            }
+            
             # 添加可选参数
             if negative_prompt:
-                request_data["parameters"]["negativePrompt"] = negative_prompt
+                parameters["negativePrompt"] = negative_prompt
             
             if seed is not None:
-                request_data["parameters"]["seed"] = seed
+                parameters["seed"] = seed
             
             if generate_audio:
-                request_data["parameters"]["generateAudio"] = True
+                parameters["generateAudio"] = True
             
-            # 发送请求
-            # 注意：这里的端点是假设的，实际需要根据Google官方文档调整
-            url = f"{self.base_url}/models/veo-3.1-generate-preview:generateVideo"
+            # 构建完整请求数据
+            request_data = {
+                "instances": [instance],
+                "parameters": parameters
+            }
+            
+            # 发送请求到真实的Google Veo API
+            url = f"{self.base_url}:predictLongRunning"
             
             async with session.post(url, json=request_data) as response:
                 if response.status == 200:
                     result = await response.json()
+                    operation_name = result.get("name")
+                    
+                    if not operation_name:
+                        raise RuntimeError("API返回中没有操作名称")
+                    
+                    # 提取操作ID
+                    operation_id = operation_name.split("/")[-1]
+                    
                     return {
                         "success": True,
-                        "job_id": result.get("operationId", f"veo_{datetime.now().strftime('%Y%m%d_%H%M%S')}"),
+                        "job_id": operation_id,
+                        "operation_name": operation_name,
                         "status": "processing",
                         "message": "视频生成任务已创建"
                     }
                 elif response.status == 401:
                     return {
                         "success": False,
-                        "error": "API密钥无效或已过期"
+                        "error": "认证失败，请检查Google Cloud凭据"
+                    }
+                elif response.status == 403:
+                    return {
+                        "success": False,
+                        "error": "权限不足，请检查服务账号权限"
                     }
                 elif response.status == 429:
                     return {
@@ -125,7 +185,7 @@ class VeoAPIService:
                     error_data = await response.json()
                     return {
                         "success": False,
-                        "error": f"API调用失败: {error_data.get('message', '未知错误')}"
+                        "error": f"API调用失败 ({response.status}): {error_data.get('error', {}).get('message', '未知错误')}"
                     }
                     
         except aiohttp.ClientError as e:
@@ -139,12 +199,12 @@ class VeoAPIService:
                 "error": f"生成失败: {str(e)}"
             }
     
-    async def get_video_status(self, job_id: str) -> Dict[str, Any]:
+    async def get_video_status(self, operation_name: str) -> Dict[str, Any]:
         """
         获取视频生成状态
         
         Args:
-            job_id: 任务ID
+            operation_name: 完整的操作名称
             
         Returns:
             包含状态信息的字典
@@ -152,14 +212,14 @@ class VeoAPIService:
         try:
             session = await self._get_session()
             
-            # 注意：这里的端点是假设的，实际需要根据Google官方文档调整
-            url = f"{self.base_url}/operations/{job_id}"
+            # 构建操作状态查询URL
+            url = f"https://{self.location}-aiplatform.googleapis.com/v1/{operation_name}"
             
             async with session.get(url) as response:
                 if response.status == 200:
                     result = await response.json()
                     
-                    # 解析状态
+                    # 检查操作是否完成
                     if result.get("done", False):
                         if "error" in result:
                             return {
@@ -174,7 +234,10 @@ class VeoAPIService:
                                 predictions = result["response"].get("predictions", [])
                                 if predictions:
                                     video_data = predictions[0].get("video", {})
-                                    video_url = video_data.get("uri") or video_data.get("gcsUri")
+                                    # 检查不同的URL字段
+                                    video_url = (video_data.get("uri") or 
+                                               video_data.get("gcsUri") or
+                                               video_data.get("url"))
                             
                             return {
                                 "status": "completed",
@@ -184,9 +247,13 @@ class VeoAPIService:
                             }
                     else:
                         # 仍在处理中
+                        # 尝试从metadata获取进度信息
+                        metadata = result.get("metadata", {})
+                        progress = 50  # 默认进度
+                        
                         return {
                             "status": "processing",
-                            "progress": 50,  # 假设进度
+                            "progress": progress,
                             "message": "正在生成视频..."
                         }
                 else:
@@ -218,12 +285,14 @@ def get_veo_service() -> Optional[VeoAPIService]:
     global _veo_service
     
     try:
-        api_key = st.secrets.get("GOOGLE_API_KEY")
-        if not api_key:
-            return None
+        # 检查必要的配置
+        required_keys = ["GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_CREDENTIALS"]
+        for key in required_keys:
+            if key not in st.secrets:
+                return None
         
         if _veo_service is None:
-            _veo_service = VeoAPIService(api_key)
+            _veo_service = VeoAPIService()
         
         return _veo_service
     except Exception:
@@ -245,7 +314,7 @@ async def generate_video_async(
     if not service:
         return {
             "success": False,
-            "error": "Veo服务未配置，请检查GOOGLE_API_KEY"
+            "error": "Veo服务未配置，请检查Google Cloud凭据"
         }
     
     return await service.generate_video(
@@ -260,7 +329,7 @@ async def generate_video_async(
     )
 
 
-async def get_video_status_async(job_id: str) -> Dict[str, Any]:
+async def get_video_status_async(operation_name: str) -> Dict[str, Any]:
     """异步获取视频状态"""
     service = get_veo_service()
     if not service:
@@ -269,7 +338,7 @@ async def get_video_status_async(job_id: str) -> Dict[str, Any]:
             "error": "Veo服务未配置"
         }
     
-    return await service.get_video_status(job_id)
+    return await service.get_video_status(operation_name)
 
 
 def generate_video_sync(*args, **kwargs) -> Dict[str, Any]:
@@ -283,10 +352,10 @@ def generate_video_sync(*args, **kwargs) -> Dict[str, Any]:
         }
 
 
-def get_video_status_sync(job_id: str) -> Dict[str, Any]:
+def get_video_status_sync(operation_name: str) -> Dict[str, Any]:
     """同步获取视频状态（用于Streamlit）"""
     try:
-        return asyncio.run(get_video_status_async(job_id))
+        return asyncio.run(get_video_status_async(operation_name))
     except Exception as e:
         return {
             "status": "error",
