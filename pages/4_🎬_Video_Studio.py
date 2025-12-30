@@ -207,8 +207,14 @@ with col_output:
         
         # 自动刷新状态（如果任务还在进行中）
         if job["status"] == "processing":
+            # 显示进度状态
+            st.info("🔄 正在生成中...")
+            progress_bar = st.progress(job["progress"] / 100)
+            st.write(f"进度: {job['progress']}%")
+            
             # 获取最新状态
-            status_result = get_video_status_sync(job["operation_name"])  # 使用完整的操作名称
+            with st.spinner("检查生成状态..."):
+                status_result = get_video_status_sync(job["operation_name"])
             
             # 更新任务状态
             job["status"] = status_result["status"]
@@ -221,19 +227,26 @@ with col_output:
             
             if "error" in status_result:
                 job["error"] = status_result["error"]
-        
-        # 显示状态
-        if job["status"] == "processing":
-            st.info("🔄 正在生成中...")
-            progress_bar = st.progress(job["progress"] / 100)
-            st.write(f"进度: {job['progress']}%")
             
-            # 手动刷新按钮
-            if st.button("🔄 刷新状态"):
+            # 如果仍在处理中，使用自动刷新
+            if job["status"] == "processing":
+                st.info("⏳ 视频生成中，页面将在5秒后自动刷新...")
+                
+                # 创建一个占位符用于倒计时
+                countdown_placeholder = st.empty()
+                for i in range(5, 0, -1):
+                    countdown_placeholder.info(f"⏳ {i}秒后自动刷新...")
+                    time.sleep(1)
+                
+                countdown_placeholder.empty()
                 st.rerun()
-            
-            st.info("💡 点击'刷新状态'按钮查看最新进度")
-            
+            else:
+                # 状态已改变，立即显示结果
+                st.success("🎉 状态更新，正在显示结果...")
+                time.sleep(1)  # 短暂延迟让用户看到状态变化
+                st.rerun()
+        
+        # 显示最终状态
         elif job["status"] == "completed":
             st.success("✅ 生成完成")
             
@@ -320,6 +333,41 @@ with col_output:
                 if "raw_response" in job:
                     with st.expander("🔍 API响应数据"):
                         st.json(job["raw_response"])
+            # 添加操作按钮
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("🆕 生成新视频", type="primary"):
+                    st.session_state.current_job = None
+                    st.rerun()
+            
+            with col2:
+                if st.button("📋 保存到历史"):
+                    # 添加到历史记录
+                    if "generation_history" not in st.session_state:
+                        st.session_state.generation_history = []
+                    
+                    history_item = {
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "prompt": job.get("prompt", ""),
+                        "duration": job.get("duration", 0),
+                        "quality": job.get("quality", ""),
+                        "aspect_ratio": job.get("aspect_ratio", ""),
+                        "job_id": job.get("job_id", ""),
+                        "video_bytes": job.get("video_bytes"),
+                        "video_url": job.get("video_url")
+                    }
+                    
+                    st.session_state.generation_history.insert(0, history_item)
+                    
+                    # 只保留最近10个
+                    if len(st.session_state.generation_history) > 10:
+                        st.session_state.generation_history = st.session_state.generation_history[:10]
+                    
+                    st.success("✅ 已保存到历史记录")
+                    time.sleep(1)
+                    st.rerun()
         
         elif job["status"] == "failed":
             st.error("❌ 生成失败")
@@ -327,9 +375,16 @@ with col_output:
                 st.error(f"错误信息: {job['error']}")
             
             # 重试按钮
-            if st.button("🔄 重新生成"):
-                st.session_state.current_job = None
-                st.rerun()
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔄 重新生成", type="primary"):
+                    st.session_state.current_job = None
+                    st.rerun()
+            
+            with col2:
+                if st.button("🗑️ 清除任务"):
+                    st.session_state.current_job = None
+                    st.rerun()
         
         else:
             st.warning(f"⚠️ 未知状态: {job['status']}")
@@ -348,30 +403,71 @@ if st.session_state.generation_history:
     
     # 显示最近的5个任务
     for i, task in enumerate(st.session_state.generation_history[:5]):
-        with st.expander(f"任务 {i+1}: {task['prompt'][:50]}..."):
-            col_info, col_action = st.columns([3, 1])
+        with st.expander(f"任务 {i+1}: {task['prompt'][:50]}..." if task.get('prompt') else f"任务 {i+1}: {task['timestamp']}"):
+            col_info, col_video = st.columns([1, 2])
             
             with col_info:
-                status_emoji = {
-                    "completed": "✅",
-                    "processing": "🔄", 
-                    "failed": "❌"
-                }.get(task["status"], "❓")
-                
-                st.write(f"**状态**: {status_emoji} {task['status']}")
+                st.write(f"**时间**: {task['timestamp']}")
                 st.write(f"**时长**: {task['duration']}秒")
                 st.write(f"**分辨率**: {task['quality']}")
-                st.write(f"**创建时间**: {task['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                st.write(f"**宽高比**: {task['aspect_ratio']}")
                 st.write(f"**任务ID**: {task['job_id']}")
-            
-            with col_action:
-                if task['status'] == 'completed' and task.get('video_url'):
-                    st.markdown(f"[📥 下载]({task['video_url']})")
                 
+                # 重新生成按钮
                 if st.button(f"🔄 重新生成", key=f"regenerate_{i}"):
-                    # 重新填充参数并清除当前任务
                     st.session_state.current_job = None
                     st.rerun()
+            
+            with col_video:
+                # 显示历史视频
+                video_displayed = False
+                
+                # 优先使用字节数据
+                if task.get("video_bytes"):
+                    try:
+                        import base64
+                        import tempfile
+                        import os
+                        
+                        video_bytes = base64.b64decode(task["video_bytes"])
+                        
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                            tmp_file.write(video_bytes)
+                            tmp_file_path = tmp_file.name
+                        
+                        st.video(tmp_file_path)
+                        video_displayed = True
+                        
+                        # 下载按钮
+                        st.download_button(
+                            label="📥 下载视频",
+                            data=video_bytes,
+                            file_name=f"veo_history_{task['job_id']}.mp4",
+                            mime="video/mp4",
+                            key=f"download_{i}"
+                        )
+                        
+                        try:
+                            os.unlink(tmp_file_path)
+                        except:
+                            pass
+                            
+                    except Exception as e:
+                        st.error(f"历史视频加载失败: {str(e)}")
+                
+                # 备用URL方式
+                if not video_displayed and task.get('video_url'):
+                    st.warning("使用URL方式（可能需要认证）")
+                    try:
+                        st.video(task['video_url'])
+                        video_displayed = True
+                    except Exception as e:
+                        st.error(f"URL播放失败: {str(e)}")
+                    
+                    st.markdown(f"[📥 尝试下载]({task['video_url']})")
+                
+                if not video_displayed:
+                    st.info("视频数据不可用")
 
 # --- 7. 使用提示 ---
 st.markdown("---")
