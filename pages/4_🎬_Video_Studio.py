@@ -274,178 +274,29 @@ with col_output:
             if job.get("video_url"):
                 video_url = job["video_url"]
                 
-                st.info("🎥 **视频已生成完成**")
+                # 直接尝试播放视频
+                st.video(video_url)
                 
-                # 检查URL类型并提供相应的访问方式
-                if video_url.startswith('gs://'):
-                    st.warning("""
-                    ⚠️ **Google Cloud Storage URL**
-                    
-                    视频存储在Google Cloud Storage中，直接访问可能需要特殊权限。
-                    """)
-                    
-                    # 提供替代访问方式
-                    st.markdown("**推荐访问方式：**")
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown("**方式1：Google AI Studio**")
-                        st.markdown(f"[🔗 打开AI Studio](https://aistudio.google.com/)")
-                        st.code(f"任务ID: {job['job_id']}")
-                        st.caption("在AI Studio中搜索任务ID查看视频")
-                    
-                    with col2:
-                        st.markdown("**方式2：原始URL**")
+                # 简单的下载选项
+                col_download, col_copy = st.columns(2)
+                with col_download:
+                    st.markdown(f"[📥 下载视频]({video_url})")
+                
+                with col_copy:
+                    if st.button("📋 复制链接"):
                         st.code(video_url)
-                        st.caption("复制URL在浏览器中打开（可能需要登录Google账号）")
-                
-                elif video_url.startswith('http'):
-                    # HTTP URL - 使用代理服务测试可访问性
-                    st.success("✅ **HTTP视频URL**")
-                    
-                    # 测试视频可访问性
-                    with st.spinner("🔍 测试视频可访问性..."):
-                        try:
-                            from services.video_studio.video_proxy import test_video_accessibility, create_authenticated_download
-                            
-                            video_info = test_video_accessibility(video_url)
-                            
-                            if video_info["accessible"]:
-                                st.success("✅ 视频URL可以通过认证访问")
-                                
-                                # 尝试创建认证下载
-                                st.markdown("**下载选项：**")
-                                col1, col2 = st.columns(2)
-                                
-                                with col1:
-                                    if st.button("📥 认证下载", key="auth_download"):
-                                        with st.spinner("正在准备下载..."):
-                                            download_url = create_authenticated_download(video_url, job['job_id'])
-                                            if download_url:
-                                                st.success("✅ 下载准备完成")
-                                                # 创建下载链接
-                                                download_html = f"""
-                                                <a href="{download_url}" download="veo_video_{job['job_id']}.mp4">
-                                                    <button style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                                        📥 点击下载视频
-                                                    </button>
-                                                </a>
-                                                """
-                                                st.markdown(download_html, unsafe_allow_html=True)
-                                            else:
-                                                st.error("❌ 下载准备失败")
-                                
-                                with col2:
-                                    st.markdown(f"[🔗 新窗口打开]({video_url})")
-                                    st.caption("需要登录Google账号")
-                                
-                            else:
-                                st.warning(f"⚠️ 视频URL无法直接访问: {video_info['reason']}")
-                                
-                        except ImportError:
-                            st.warning("⚠️ 视频代理服务不可用")
-                        except Exception as e:
-                            st.error(f"❌ 测试失败: {str(e)}")
-                    
-                    # 显示URL供用户复制
-                    st.markdown("**视频URL：**")
-                    st.code(video_url)
-                    
-                    # 推荐访问方式
-                    st.markdown("**推荐访问方式：**")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown("**方式1：Google AI Studio（最推荐）**")
-                        st.markdown(f"[🔗 打开AI Studio](https://aistudio.google.com/)")
-                        st.code(f"任务ID: {job['job_id']}")
-                        st.caption("✅ 100%可靠，官方推荐")
-                    
-                    with col2:
-                        st.markdown("**方式2：浏览器直接访问**")
-                        st.markdown(f"[🔗 新窗口打开URL]({video_url})")
-                        st.caption("⚠️ 需要登录Google账号")
-                    
-                    # 技术说明
-                    st.info("""
-                    💡 **为什么无法在线播放？**
-                    
-                    1. **认证要求**：Google Veo的视频URL需要API密钥认证
-                    2. **CORS限制**：浏览器安全策略阻止跨域视频访问
-                    3. **Streamlit限制**：云环境的网络访问限制
-                    
-                    **最佳解决方案**：使用Google AI Studio查看和下载视频
-                    """)
-                
-                else:
-                    st.warning(f"⚠️ 未知URL格式: {video_url[:50]}...")
-                    st.code(video_url)
-                
-                # 显示调试信息
-                with st.expander("🔍 技术详情"):
-                    st.write("**URL信息：**")
-                    st.write(f"- URL类型: {type(video_url)}")
-                    st.write(f"- URL长度: {len(video_url) if video_url else 0}")
-                    st.write(f"- 协议: {'GCS' if video_url.startswith('gs://') else 'HTTP' if video_url.startswith('http') else '未知'}")
-                    
-                    st.write("**访问建议：**")
-                    if video_url.startswith('gs://'):
-                        st.write("- GCS URL需要Google Cloud权限")
-                        st.write("- 建议在Google AI Studio中查看")
-                        st.write("- 或者登录Google账号后直接访问")
-                    else:
-                        st.write("- HTTP URL应该可以直接访问")
-                        st.write("- 如果403错误，可能是Streamlit Cloud的网络限制")
+                        st.success("链接已显示，请手动复制")
             else:
                 st.warning("⚠️ 视频URL不可用")
+                st.info("💡 视频生成成功但URL提取失败，请检查API响应数据")
                 
-                # 显示可能的原因和解决方案
-                st.info("""
-                **可能的原因：**
-                - 视频可能需要额外的处理时间
-                - API响应格式可能有变化  
-                - 需要特殊权限才能访问生成的视频
-                - Generative Language API 可能未启用
-                
-                **解决方案：**
-                1. **检查API密钥项目**：
-                   - 访问 [Google AI Studio](https://aistudio.google.com/)
-                   - 确认你的API密钥对应的项目
-                   - 在该项目中启用 Generative Language API
-                
-                2. **或者重新生成API密钥**：
-                   - 在Google AI Studio中生成新的API密钥
-                   - 确保选择正确的项目
-                   - 更新Streamlit配置中的API密钥
-                
-                3. **通用API启用链接**：
-                   - 访问 [Google Cloud Console APIs](https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com)
-                   - 选择正确的项目
-                   - 启用 Generative Language API
-                
-                4. **等待生效**：等待几分钟后重新测试
-                """)
-                
-                # 显示任务ID和有用链接
+                # 显示任务ID
                 st.code(f"任务ID: {job['job_id']}")
-                
-                col_api, col_studio, col_refresh = st.columns(3)
-                with col_api:
-                    st.markdown("[🔧 启用API](https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com)")
-                
-                with col_studio:
-                    st.markdown("[🔗 AI Studio](https://aistudio.google.com/)")
-                
-                with col_refresh:
-                    if st.button("🔄 刷新状态", key="refresh_for_url"):
-                        st.rerun()
                 
                 # 显示调试信息
                 if "raw_response" in job:
-                    with st.expander("🔍 API响应调试信息"):
+                    with st.expander("🔍 API响应数据"):
                         st.json(job["raw_response"])
-                        st.info("💡 如果看到这个信息，说明视频生成成功但URL提取有问题。请检查上面的API响应数据中是否包含视频链接。")
         
         elif job["status"] == "failed":
             st.error("❌ 生成失败")
