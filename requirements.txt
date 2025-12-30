@@ -19,6 +19,8 @@ pytest              # 测试框架
 # Video Studio 依赖
 aiohttp             # 异步HTTP客户端，用于模型适配器API调用
 psutil              # 系统性能监控
+google-auth         # Google Cloud 认证
+google-auth-oauthlib # Google OAuth 认证
 
 # Template Library Management System 依赖
 pydantic>=2.0.0     # 数据验证和序列化
