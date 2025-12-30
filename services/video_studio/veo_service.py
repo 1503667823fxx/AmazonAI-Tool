@@ -406,51 +406,105 @@ class VeoAPIService:
                             "error": result["error"].get("message", "生成失败")
                         }
                     else:
-                        # 提取视频URL - 检查更多可能的字段
+                        # 提取视频URL - 更全面的字段检查
                         video_url = None
                         if "response" in result:
                             response_data = result["response"]
                             print(f"[DEBUG] 完整响应数据: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
                             
-                            # 检查不同的响应结构
+                            # 方法1: 检查predictions结构
                             if "predictions" in response_data:
                                 predictions = response_data["predictions"]
                                 if predictions and len(predictions) > 0:
                                     prediction = predictions[0]
                                     print(f"[DEBUG] 预测数据: {json.dumps(prediction, indent=2, ensure_ascii=False)}")
                                     
-                                    # 检查视频数据
+                                    # 检查视频数据对象
                                     if "video" in prediction:
                                         video_data = prediction["video"]
                                         video_url = (video_data.get("uri") or 
                                                    video_data.get("gcsUri") or
                                                    video_data.get("url") or
                                                    video_data.get("downloadUrl") or
-                                                   video_data.get("signedUrl"))
+                                                   video_data.get("signedUrl") or
+                                                   video_data.get("videoUri") or
+                                                   video_data.get("fileUri"))
                                     
-                                    # 直接检查预测中的URL字段
+                                    # 检查预测对象的直接字段
                                     if not video_url:
                                         video_url = (prediction.get("uri") or 
                                                    prediction.get("gcsUri") or
                                                    prediction.get("url") or
                                                    prediction.get("downloadUrl") or
                                                    prediction.get("signedUrl") or
-                                                   prediction.get("videoUri"))
+                                                   prediction.get("videoUri") or
+                                                   prediction.get("fileUri") or
+                                                   prediction.get("video_uri"))
                             
-                            # 检查生成的视频列表
+                            # 方法2: 检查generatedVideos结构
                             if not video_url and "generatedVideos" in response_data:
                                 generated_videos = response_data["generatedVideos"]
                                 if generated_videos and len(generated_videos) > 0:
                                     video_info = generated_videos[0]
+                                    print(f"[DEBUG] 生成视频信息: {json.dumps(video_info, indent=2, ensure_ascii=False)}")
+                                    
                                     if "video" in video_info:
                                         video_data = video_info["video"]
                                         video_url = (video_data.get("uri") or 
                                                    video_data.get("gcsUri") or
                                                    video_data.get("url") or
                                                    video_data.get("downloadUrl") or
-                                                   video_data.get("signedUrl"))
+                                                   video_data.get("signedUrl") or
+                                                   video_data.get("videoUri") or
+                                                   video_data.get("fileUri"))
+                                    
+                                    # 直接检查video_info的字段
+                                    if not video_url:
+                                        video_url = (video_info.get("uri") or 
+                                                   video_info.get("gcsUri") or
+                                                   video_info.get("url") or
+                                                   video_info.get("downloadUrl") or
+                                                   video_info.get("signedUrl") or
+                                                   video_info.get("videoUri") or
+                                                   video_info.get("fileUri"))
+                            
+                            # 方法3: 检查response的直接字段
+                            if not video_url:
+                                video_url = (response_data.get("uri") or 
+                                           response_data.get("gcsUri") or
+                                           response_data.get("url") or
+                                           response_data.get("downloadUrl") or
+                                           response_data.get("signedUrl") or
+                                           response_data.get("videoUri") or
+                                           response_data.get("fileUri") or
+                                           response_data.get("video_uri"))
+                            
+                            # 方法4: 递归搜索所有可能的URL字段
+                            if not video_url:
+                                def find_url_in_dict(data, depth=0):
+                                    if depth > 5:  # 防止无限递归
+                                        return None
+                                    if isinstance(data, dict):
+                                        # 检查常见的URL字段名
+                                        url_fields = ['uri', 'url', 'gcsUri', 'downloadUrl', 'signedUrl', 'videoUri', 'fileUri', 'video_uri', 'download_url']
+                                        for field in url_fields:
+                                            if field in data and isinstance(data[field], str) and data[field].startswith(('http', 'gs://')):
+                                                return data[field]
+                                        # 递归搜索嵌套对象
+                                        for value in data.values():
+                                            result = find_url_in_dict(value, depth + 1)
+                                            if result:
+                                                return result
+                                    elif isinstance(data, list):
+                                        for item in data:
+                                            result = find_url_in_dict(item, depth + 1)
+                                            if result:
+                                                return result
+                                    return None
+                                
+                                video_url = find_url_in_dict(response_data)
                         
-                        print(f"[DEBUG] 提取的视频URL: {video_url}")
+                        print(f"[DEBUG] 最终提取的视频URL: {video_url}")
                         
                         return {
                             "status": "completed",
