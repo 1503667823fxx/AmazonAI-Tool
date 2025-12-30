@@ -214,6 +214,8 @@ with col_output:
             job["status"] = status_result["status"]
             job["progress"] = status_result["progress"]
             
+            if "video_bytes" in status_result:
+                job["video_bytes"] = status_result["video_bytes"]
             if "video_url" in status_result:
                 job["video_url"] = status_result["video_url"]
             
@@ -244,25 +246,72 @@ with col_output:
             - 任务ID: {job['job_id']}
             """)
             
-            # 显示视频（如果有URL）
-            if job.get("video_url"):
+            # 显示视频（优先使用字节数据）
+            video_displayed = False
+            
+            # 方法1: 使用视频字节数据（官方推荐）
+            if job.get("video_bytes"):
+                try:
+                    import base64
+                    import tempfile
+                    import os
+                    
+                    # 解码base64视频数据
+                    video_bytes = base64.b64decode(job["video_bytes"])
+                    
+                    # 创建临时文件
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                        tmp_file.write(video_bytes)
+                        tmp_file_path = tmp_file.name
+                    
+                    # 显示视频
+                    st.video(tmp_file_path)
+                    video_displayed = True
+                    
+                    # 提供下载选项
+                    st.download_button(
+                        label="📥 下载视频",
+                        data=video_bytes,
+                        file_name=f"veo_video_{job['job_id']}.mp4",
+                        mime="video/mp4"
+                    )
+                    
+                    # 清理临时文件
+                    try:
+                        os.unlink(tmp_file_path)
+                    except:
+                        pass
+                        
+                except Exception as e:
+                    st.error(f"视频字节数据处理失败: {str(e)}")
+            
+            # 方法2: 备用URL方式（如果字节数据不可用）
+            if not video_displayed and job.get("video_url"):
                 video_url = job["video_url"]
                 
+                st.warning("⚠️ 使用URL方式播放（可能需要认证）")
+                
                 # 直接尝试播放视频
-                st.video(video_url)
+                try:
+                    st.video(video_url)
+                    video_displayed = True
+                except Exception as e:
+                    st.error(f"URL播放失败: {str(e)}")
                 
                 # 简单的下载选项
                 col_download, col_copy = st.columns(2)
                 with col_download:
-                    st.markdown(f"[📥 下载视频]({video_url})")
+                    st.markdown(f"[📥 尝试下载视频]({video_url})")
                 
                 with col_copy:
                     if st.button("📋 复制链接"):
                         st.code(video_url)
                         st.success("链接已显示，请手动复制")
-            else:
-                st.warning("⚠️ 视频URL不可用")
-                st.info("💡 视频生成成功但URL提取失败，请检查API响应数据")
+            
+            # 如果都没有可用的视频数据
+            if not video_displayed:
+                st.warning("⚠️ 视频数据不可用")
+                st.info("💡 视频生成成功但无法获取视频数据，请检查API响应")
                 
                 # 显示任务ID
                 st.code(f"任务ID: {job['job_id']}")
