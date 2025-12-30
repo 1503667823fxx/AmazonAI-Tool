@@ -72,6 +72,8 @@ except Exception as e:
     st.info("💡 这通常是由于缺少 API 密钥配置导致的。请在 Streamlit Secrets 中配置以下密钥：")
     st.code("""
 # 在 Streamlit Cloud 的 Secrets 中添加：
+GOOGLE_API_KEY = "your_google_api_key"
+GOOGLE_CLOUD_PROJECT_ID = "your_project_id"
 LUMA_API_KEY = "your_luma_api_key"
 RUNWAY_API_KEY = "your_runway_api_key"  
 PIKA_API_KEY = "your_pika_api_key"
@@ -340,8 +342,9 @@ with tab_assets:
             
             generation_model = st.selectbox(
                 "选择生成模型",
-                options=["luma", "runway", "pika"],
-                format_func=get_model_chinese_name
+                options=["veo", "luma", "runway", "pika"],
+                format_func=get_model_chinese_name,
+                help="推荐使用Google Veo 3.1获得最佳效果"
             )
             
             from app_utils.video_studio.localization import get_quality_chinese_name
