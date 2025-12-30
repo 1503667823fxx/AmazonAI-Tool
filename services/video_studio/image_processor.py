@@ -68,7 +68,15 @@ class VideoStudioImageProcessor:
             
             # 获取图片信息
             width, height = image.size
-            aspect_ratio = self._calculate_aspect_ratio(width, height)
+            
+            # 简单计算宽高比
+            ratio = width / height
+            if abs(ratio - 16/9) < 0.1:
+                aspect_ratio = "16:9"
+            elif abs(ratio - 9/16) < 0.1:
+                aspect_ratio = "9:16"
+            else:
+                aspect_ratio = f"{width}:{height}"
             
             return {
                 "valid": True,
