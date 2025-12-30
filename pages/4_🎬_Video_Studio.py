@@ -20,6 +20,24 @@ st.set_page_config(
     initial_sidebar_state="collapsed"  # 隐藏侧边栏
 )
 
+# --- 3. SDK状态检查 ---
+try:
+    from services.video_studio.veo_service import get_veo_service
+    service = get_veo_service()
+    if not service:
+        st.error("⚠️ Veo服务初始化失败")
+        st.info("💡 可能的原因：")
+        st.markdown("""
+        - Google GenAI SDK 未安装：`pip install google-genai`
+        - API密钥未配置：检查 GOOGLE_API_KEY
+        - 云端环境限制：某些包可能无法在云端正确安装
+        """)
+        st.stop()
+except Exception as e:
+    st.error(f"⚠️ 导入Veo服务失败: {str(e)}")
+    st.info("💡 这通常表示依赖包未正确安装")
+    st.stop()
+
 st.title("🎬 Google Veo 3.1 AI视频生成器")
 st.caption("从文字描述到高质量短视频，最长8秒，支持720p/1080p")
 
