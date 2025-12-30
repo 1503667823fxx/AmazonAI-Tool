@@ -274,53 +274,114 @@ with col_output:
             if job.get("video_url"):
                 video_url = job["video_url"]
                 
-                # 尝试直接显示视频
-                try:
-                    st.video(video_url)
-                except Exception as e:
-                    st.warning(f"⚠️ 直接播放失败: {str(e)}")
-                    st.info("💡 视频可能需要特殊权限访问，请尝试下载链接")
+                st.info("🎥 **视频已生成完成**")
                 
-                # 下载和访问选项
-                col_download, col_share, col_debug = st.columns(3)
-                with col_download:
-                    st.markdown(f"[📥 下载视频]({video_url})")
-                
-                with col_share:
-                    if st.button("🔗 复制链接"):
-                        st.code(video_url)
-                        st.success("链接已显示，请手动复制")
-                
-                with col_debug:
-                    if st.button("🔍 检查URL"):
-                        st.info(f"视频URL类型: {type(video_url)}")
-                        st.code(video_url)
-                        
-                        # 检查URL格式
-                        if video_url.startswith('gs://'):
-                            st.warning("⚠️ 这是Google Cloud Storage URL，可能需要特殊权限")
-                            st.info("💡 建议：在Google AI Studio中查看视频")
-                        elif video_url.startswith('http'):
-                            st.info("✅ 这是HTTP URL，应该可以直接访问")
-                        else:
-                            st.warning(f"⚠️ 未知URL格式: {video_url[:50]}...")
-                
-                # 如果是GCS URL，提供替代方案
-                if video_url and video_url.startswith('gs://'):
+                # 检查URL类型并提供相应的访问方式
+                if video_url.startswith('gs://'):
                     st.warning("""
-                    🚨 **Google Cloud Storage URL检测**
+                    ⚠️ **Google Cloud Storage URL**
                     
-                    这个视频存储在Google Cloud Storage中，可能需要特殊权限才能直接访问。
-                    
-                    **建议解决方案：**
-                    1. 在 [Google AI Studio](https://aistudio.google.com/) 中查看视频
-                    2. 使用任务ID搜索你的生成历史
-                    3. 在AI Studio中下载视频
+                    视频存储在Google Cloud Storage中，直接访问可能需要特殊权限。
                     """)
                     
-                    # 提供AI Studio链接
-                    st.markdown(f"[🔗 在Google AI Studio中查看](https://aistudio.google.com/)")
-                    st.code(f"任务ID: {job['job_id']}")
+                    # 提供替代访问方式
+                    st.markdown("**推荐访问方式：**")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("**方式1：Google AI Studio**")
+                        st.markdown(f"[🔗 打开AI Studio](https://aistudio.google.com/)")
+                        st.code(f"任务ID: {job['job_id']}")
+                        st.caption("在AI Studio中搜索任务ID查看视频")
+                    
+                    with col2:
+                        st.markdown("**方式2：原始URL**")
+                        st.code(video_url)
+                        st.caption("复制URL在浏览器中打开（可能需要登录Google账号）")
+                
+                elif video_url.startswith('http'):
+                    # HTTP URL - 尝试直接显示
+                    st.success("✅ **HTTP视频URL**")
+                    
+                    try:
+                        # 尝试使用带认证头的方式
+                        st.markdown("**在线播放：**")
+                        
+                        # 创建一个带认证的iframe或直接显示
+                        video_html = f"""
+                        <video width="100%" height="400" controls>
+                            <source src="{video_url}" type="video/mp4">
+                            您的浏览器不支持视频播放。
+                        </video>
+                        """
+                        st.markdown(video_html, unsafe_allow_html=True)
+                        
+                    except Exception as e:
+                        st.warning(f"直接播放失败: {str(e)}")
+                        st.info("请尝试下载或在新窗口中打开")
+                    
+                    # 提供下载选项
+                    st.markdown("**下载选项：**")
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        # 创建一个带认证的下载链接
+                        download_js = f"""
+                        <script>
+                        function downloadWithAuth() {{
+                            fetch('{video_url}', {{
+                                headers: {{
+                                    'Authorization': 'Bearer {st.secrets.get("GOOGLE_API_KEY", "")}',
+                                    'x-goog-api-key': '{st.secrets.get("GOOGLE_API_KEY", "")}'
+                                }}
+                            }})
+                            .then(response => response.blob())
+                            .then(blob => {{
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'veo_video_{job["job_id"]}.mp4';
+                                a.click();
+                                window.URL.revokeObjectURL(url);
+                            }})
+                            .catch(error => {{
+                                console.error('下载失败:', error);
+                                alert('下载失败，请尝试直接访问URL');
+                            }});
+                        }}
+                        </script>
+                        <button onclick="downloadWithAuth()" style="padding: 8px 16px; background: #ff6b6b; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            📥 认证下载
+                        </button>
+                        """
+                        st.markdown(download_js, unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown(f"[🔗 新窗口打开]({video_url})")
+                    
+                    with col3:
+                        if st.button("📋 复制URL"):
+                            st.code(video_url)
+                
+                else:
+                    st.warning(f"⚠️ 未知URL格式: {video_url[:50]}...")
+                    st.code(video_url)
+                
+                # 显示调试信息
+                with st.expander("🔍 技术详情"):
+                    st.write("**URL信息：**")
+                    st.write(f"- URL类型: {type(video_url)}")
+                    st.write(f"- URL长度: {len(video_url) if video_url else 0}")
+                    st.write(f"- 协议: {'GCS' if video_url.startswith('gs://') else 'HTTP' if video_url.startswith('http') else '未知'}")
+                    
+                    st.write("**访问建议：**")
+                    if video_url.startswith('gs://'):
+                        st.write("- GCS URL需要Google Cloud权限")
+                        st.write("- 建议在Google AI Studio中查看")
+                        st.write("- 或者登录Google账号后直接访问")
+                    else:
+                        st.write("- HTTP URL应该可以直接访问")
+                        st.write("- 如果403错误，可能是Streamlit Cloud的网络限制")
             else:
                 st.warning("⚠️ 视频URL不可用")
                 
