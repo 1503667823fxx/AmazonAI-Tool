@@ -214,7 +214,7 @@ with col_output:
             
             # 获取最新状态
             with st.spinner("检查生成状态..."):
-                status_result = get_video_status_sync(job["operation_name"])
+                status_result = get_video_status_sync(job["operation_name"], job.get("operation"))
             
             # 更新任务状态
             job["status"] = status_result["status"]
@@ -224,6 +224,8 @@ with col_output:
                 job["video_bytes"] = status_result["video_bytes"]
             if "video_url" in status_result:
                 job["video_url"] = status_result["video_url"]
+            if "operation" in status_result:
+                job["operation"] = status_result["operation"]
             
             if "error" in status_result:
                 job["error"] = status_result["error"]
