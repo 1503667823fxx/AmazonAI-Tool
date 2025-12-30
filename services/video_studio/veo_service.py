@@ -99,7 +99,7 @@ class VeoAPIService:
             if reference_image:
                 print(f"[DEBUG] 处理参考图片，大小: {len(reference_image)} bytes")
                 
-                # 尝试图片处理
+                # 处理图片
                 image_result = process_image_for_video_generation(reference_image)
                 
                 if not image_result["success"]:
@@ -107,89 +107,75 @@ class VeoAPIService:
                 
                 print(f"[DEBUG] 图片处理成功")
                 
-                # 尝试最简单的方法 - 直接使用base64字符串
-                base64_data = image_result["base64_data"]
-                
-                print(f"[DEBUG] 尝试直接base64方法")
+                # 绕过SDK限制，直接调用HTTP API
+                print(f"[DEBUG] 绕过SDK，直接调用HTTP API")
                 
                 try:
-                    # 方法1: 创建包含base64和mime类型的字典
-                    image_dict = {
-                        "bytesBase64Encoded": base64_data,
-                        "mimeType": "image/jpeg"
+                    import requests
+                    import json
+                    
+                    # 准备图片数据
+                    base64_data = image_result["base64_data"]
+                    
+                    # 构建请求数据
+                    request_data = {
+                        "prompt": prompt,
+                        "image": {
+                            "bytesBase64Encoded": base64_data,
+                            "mimeType": "image/jpeg"
+                        },
+                        "config": {
+                            "aspectRatio": aspect_ratio,
+                            "durationSeconds": duration,
+                            "resolution": adjusted_quality
+                        }
                     }
                     
-                    operation = self.client.models.generate_videos(
-                        model=self.model_id,
-                        prompt=prompt,
-                        image=image_dict,
-                        config=config
-                    )
+                    # 添加可选参数
+                    if seed is not None:
+                        request_data["config"]["seed"] = seed
                     
-                    print(f"[DEBUG] 直接字典方法成功!")
+                    # 构建请求头
+                    headers = {
+                        "x-goog-api-key": self.api_key,
+                        "Content-Type": "application/json"
+                    }
                     
-                except Exception as e1:
-                    print(f"[DEBUG] 直接字典方法失败: {str(e1)}")
+                    # 直接调用API
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_id}:generateVideos"
                     
-                    # 方法2: 尝试使用SDK创建Image对象
-                    try:
-                        print(f"[DEBUG] 尝试SDK Image对象方法")
+                    print(f"[DEBUG] 直接HTTP请求: {url}")
+                    
+                    response = requests.post(url, headers=headers, json=request_data, timeout=60)
+                    
+                    print(f"[DEBUG] HTTP响应状态: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        operation_name = result.get("name", "")
+                        print(f"[DEBUG] HTTP API调用成功: {operation_name}")
                         
-                        # 使用原始字节数据创建Image对象
-                        raw_bytes = image_result["optimized_bytes"]
+                        # 创建一个模拟的operation对象
+                        class MockOperation:
+                            def __init__(self, name):
+                                self.name = name
                         
-                        if hasattr(types, 'Image'):
-                            if hasattr(types.Image, 'from_bytes'):
-                                image_obj = types.Image.from_bytes(raw_bytes)
-                            elif hasattr(types.Image, '__init__'):
-                                # 尝试直接构造
-                                image_obj = types.Image(
-                                    bytesBase64Encoded=base64_data,
-                                    mimeType="image/jpeg"
-                                )
-                            else:
-                                raise RuntimeError("无法创建Image对象")
-                        else:
-                            raise RuntimeError("types.Image不存在")
+                        operation = MockOperation(operation_name)
                         
-                        operation = self.client.models.generate_videos(
-                            model=self.model_id,
-                            prompt=prompt,
-                            image=image_obj,
-                            config=config
-                        )
-                        
-                        print(f"[DEBUG] SDK Image对象方法成功!")
-                        
-                    except Exception as e2:
-                        print(f"[DEBUG] SDK Image对象方法失败: {str(e2)}")
-                        
-                        # 方法3: 尝试Part对象
+                    else:
+                        # HTTP请求失败，尝试解析错误
                         try:
-                            print(f"[DEBUG] 尝试SDK Part对象方法")
-                            
-                            if hasattr(types, 'Part') and hasattr(types.Part, 'from_bytes'):
-                                part_obj = types.Part.from_bytes(
-                                    data=raw_bytes, 
-                                    mime_type="image/jpeg"
-                                )
-                                
-                                operation = self.client.models.generate_videos(
-                                    model=self.model_id,
-                                    prompt=prompt,
-                                    image=part_obj,
-                                    config=config
-                                )
-                                
-                                print(f"[DEBUG] SDK Part对象方法成功!")
-                            else:
-                                raise RuntimeError("types.Part.from_bytes不存在")
-                                
-                        except Exception as e3:
-                            print(f"[DEBUG] SDK Part对象方法失败: {str(e3)}")
-                            
-                            # 所有方法都失败了
-                            raise RuntimeError(f"所有图片处理方法都失败了。错误: 字典方法={str(e1)}, Image对象={str(e2)}, Part对象={str(e3)}")
+                            error_data = response.json()
+                            error_msg = error_data.get("error", {}).get("message", f"HTTP {response.status_code}")
+                        except:
+                            error_msg = f"HTTP请求失败: {response.status_code} - {response.text}"
+                        
+                        print(f"[DEBUG] HTTP API失败: {error_msg}")
+                        raise RuntimeError(f"HTTP API调用失败: {error_msg}")
+                    
+                except Exception as e:
+                    print(f"[DEBUG] HTTP API方法失败: {str(e)}")
+                    raise RuntimeError(f"图片到视频生成失败: {str(e)}")
                         
             else:
                 print(f"[DEBUG] 文本到视频生成")
