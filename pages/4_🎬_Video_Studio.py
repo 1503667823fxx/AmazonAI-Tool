@@ -236,9 +236,11 @@ with col_output:
                     "negative_prompt": negative_prompt,
                     "generate_audio": generate_audio,
                     "status": "processing",
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # 添加timestamp
                     "created_at": datetime.now(),
                     "progress": 0,
-                    "video_url": None
+                    "video_url": None,
+                    "video_bytes": None
                 }
                 
                 st.session_state.current_job = task_info
@@ -382,28 +384,42 @@ with col_output:
             
             with col2:
                 if st.button("📋 保存到历史"):
-                    # 添加到历史记录
-                    if "generation_history" not in st.session_state:
-                        st.session_state.generation_history = []
+                    # 更新当前任务的完成状态
+                    if job.get("video_bytes") or job.get("video_url"):
+                        # 任务已经在历史记录中，只需要更新状态
+                        for i, history_item in enumerate(st.session_state.generation_history):
+                            if history_item.get("job_id") == job.get("job_id"):
+                                # 更新历史记录中的任务状态
+                                st.session_state.generation_history[i].update({
+                                    "status": "completed",
+                                    "video_bytes": job.get("video_bytes"),
+                                    "video_url": job.get("video_url"),
+                                    "completed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                })
+                                break
+                        else:
+                            # 如果历史记录中没有找到，创建新的记录
+                            history_item = {
+                                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "prompt": job.get("prompt", "未知"),
+                                "duration": job.get("duration", 0),
+                                "quality": job.get("quality", "未知"),
+                                "aspect_ratio": job.get("aspect_ratio", "未知"),
+                                "job_id": job.get("job_id", "未知"),
+                                "status": "completed",
+                                "video_bytes": job.get("video_bytes"),
+                                "video_url": job.get("video_url")
+                            }
+                            st.session_state.generation_history.insert(0, history_item)
+                        
+                        # 只保留最近10个
+                        if len(st.session_state.generation_history) > 10:
+                            st.session_state.generation_history = st.session_state.generation_history[:10]
+                        
+                        st.success("✅ 已更新历史记录")
+                    else:
+                        st.warning("⚠️ 视频数据不完整，无法保存到历史")
                     
-                    history_item = {
-                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "prompt": job.get("prompt", ""),
-                        "duration": job.get("duration", 0),
-                        "quality": job.get("quality", ""),
-                        "aspect_ratio": job.get("aspect_ratio", ""),
-                        "job_id": job.get("job_id", ""),
-                        "video_bytes": job.get("video_bytes"),
-                        "video_url": job.get("video_url")
-                    }
-                    
-                    st.session_state.generation_history.insert(0, history_item)
-                    
-                    # 只保留最近10个
-                    if len(st.session_state.generation_history) > 10:
-                        st.session_state.generation_history = st.session_state.generation_history[:10]
-                    
-                    st.success("✅ 已保存到历史记录")
                     time.sleep(1)
                     st.rerun()
         
@@ -439,17 +455,43 @@ if st.session_state.generation_history:
     st.markdown("---")
     st.subheader("📚 生成历史")
     
+    # 添加清理按钮
+    col_title, col_clear = st.columns([3, 1])
+    with col_clear:
+        if st.button("🗑️ 清空历史"):
+            st.session_state.generation_history = []
+            st.rerun()
+    
+    # 过滤和清理历史记录
+    valid_history = []
+    for task in st.session_state.generation_history:
+        if isinstance(task, dict):
+            valid_history.append(task)
+    
+    # 更新历史记录
+    st.session_state.generation_history = valid_history
+    
     # 显示最近的5个任务
     for i, task in enumerate(st.session_state.generation_history[:5]):
-        with st.expander(f"任务 {i+1}: {task['prompt'][:50]}..." if task.get('prompt') else f"任务 {i+1}: {task['timestamp']}"):
+        # 安全获取任务标题
+        task_title = ""
+        if task.get('prompt'):
+            task_title = f"任务 {i+1}: {task['prompt'][:50]}..."
+        elif task.get('timestamp'):
+            task_title = f"任务 {i+1}: {task['timestamp']}"
+        else:
+            task_title = f"任务 {i+1}"
+            
+        with st.expander(task_title):
             col_info, col_video = st.columns([1, 2])
             
             with col_info:
-                st.write(f"**时间**: {task['timestamp']}")
-                st.write(f"**时长**: {task['duration']}秒")
-                st.write(f"**分辨率**: {task['quality']}")
-                st.write(f"**宽高比**: {task['aspect_ratio']}")
-                st.write(f"**任务ID**: {task['job_id']}")
+                # 安全显示任务信息
+                st.write(f"**时间**: {task.get('timestamp', '未知')}")
+                st.write(f"**时长**: {task.get('duration', '未知')}秒")
+                st.write(f"**分辨率**: {task.get('quality', '未知')}")
+                st.write(f"**宽高比**: {task.get('aspect_ratio', '未知')}")
+                st.write(f"**任务ID**: {task.get('job_id', '未知')}")
                 
                 # 重新生成按钮
                 if st.button(f"🔄 重新生成", key=f"regenerate_{i}"):
