@@ -1,4 +1,3 @@
-
 """
 Video Studio Services
 
@@ -9,16 +8,12 @@ from .veo_service import (
     VeoAPIService,
     get_veo_service,
     generate_video_sync,
-    get_video_status_sync,
-    generate_video_async,
-    get_video_status_async
+    get_video_status_sync
 )
 
 __all__ = [
     'VeoAPIService',
     'get_veo_service', 
     'generate_video_sync',
-    'get_video_status_sync',
-    'generate_video_async',
-    'get_video_status_async'
+    'get_video_status_sync'
 ]
