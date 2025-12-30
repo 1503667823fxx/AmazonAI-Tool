@@ -486,7 +486,7 @@ class VeoAPIService:
                                         return None
                                     if isinstance(data, dict):
                                         # 检查常见的URL字段名
-                                        url_fields = ['uri', 'url', 'gcsUri', 'downloadUrl', 'signedUrl', 'videoUri', 'fileUri', 'video_uri', 'download_url']
+                                        url_fields = ['uri', 'url', 'gcsUri', 'downloadUrl', 'signedUrl', 'videoUri', 'fileUri', 'video_uri', 'download_url', 'publicUrl', 'viewUrl']
                                         for field in url_fields:
                                             if field in data and isinstance(data[field], str) and data[field].startswith(('http', 'gs://')):
                                                 return data[field]
@@ -503,6 +503,35 @@ class VeoAPIService:
                                     return None
                                 
                                 video_url = find_url_in_dict(response_data)
+                            
+                            # 方法5: 尝试查找公开访问的URL
+                            public_url = None
+                            if not video_url or video_url.startswith('gs://'):
+                                def find_public_url(data, depth=0):
+                                    if depth > 5:
+                                        return None
+                                    if isinstance(data, dict):
+                                        # 优先查找公开访问的URL字段
+                                        public_fields = ['publicUrl', 'viewUrl', 'downloadUrl', 'signedUrl', 'streamUrl']
+                                        for field in public_fields:
+                                            if field in data and isinstance(data[field], str) and data[field].startswith('http'):
+                                                return data[field]
+                                        # 递归搜索
+                                        for value in data.values():
+                                            result = find_public_url(value, depth + 1)
+                                            if result:
+                                                return result
+                                    elif isinstance(data, list):
+                                        for item in data:
+                                            result = find_public_url(item, depth + 1)
+                                            if result:
+                                                return result
+                                    return None
+                                
+                                public_url = find_public_url(response_data)
+                                if public_url:
+                                    video_url = public_url
+                                    print(f"[DEBUG] 找到公开URL: {public_url}")
                         
                         print(f"[DEBUG] 最终提取的视频URL: {video_url}")
                         
