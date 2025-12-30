@@ -227,14 +227,28 @@ class VeoAPIService:
                                 
                                 # 搜索视频字节数据
                                 video_bytes = self._extract_video_bytes_from_response(response_data)
+                            else:
+                                print(f"[DEBUG] 响应中没有'response'字段，尝试直接搜索")
+                                # 有些API可能直接在根级别返回数据
+                                video_bytes = self._extract_video_bytes_from_response(result)
                             
                             print(f"[DEBUG] 视频字节数据: {'有' if video_bytes else '无'}")
+                            
+                            # 如果没找到视频数据，输出完整响应用于调试
+                            if not video_bytes:
+                                print(f"[DEBUG] 未找到视频数据，完整响应:")
+                                import json
+                                try:
+                                    print(json.dumps(result, indent=2, ensure_ascii=False))
+                                except:
+                                    print(str(result))
                             
                             return {
                                 "status": "completed",
                                 "progress": 100,
                                 "video_bytes": video_bytes,
-                                "message": "视频生成完成"
+                                "message": "视频生成完成",
+                                "raw_response": result  # 保存原始响应用于调试
                             }
                     else:
                         print(f"[DEBUG] 操作仍在进行中")
@@ -291,33 +305,69 @@ class VeoAPIService:
     
     def _extract_video_bytes_from_response(self, response_data: dict) -> str:
         """从响应数据中提取视频字节数据"""
+        print(f"[DEBUG] 开始提取视频数据，响应结构: {response_data}")
+        
         # 递归搜索视频字节数据
-        def find_video_bytes(data, depth=0):
-            if depth > 5:
+        def find_video_bytes(data, depth=0, path=""):
+            if depth > 10:  # 增加搜索深度
                 return None
             
             if isinstance(data, dict):
-                # 检查字节数据字段
-                bytes_fields = ['video_bytes', 'videoBytes', 'bytesBase64Encoded', 'base64Data', 'videoData']
+                print(f"[DEBUG] 搜索字典 (深度{depth}, 路径:{path}): {list(data.keys())}")
+                
+                # 扩展字节数据字段搜索
+                bytes_fields = [
+                    'video_bytes', 'videoBytes', 'bytesBase64Encoded', 'base64Data', 'videoData',
+                    'data', 'content', 'bytes', 'video', 'media', 'file', 'blob',
+                    'generatedVideo', 'generated_video', 'output', 'result'
+                ]
+                
                 for field in bytes_fields:
                     if field in data and data[field]:
-                        return data[field]
+                        value = data[field]
+                        # 检查是否是base64字符串
+                        if isinstance(value, str) and len(value) > 100:
+                            print(f"[DEBUG] 找到可能的视频数据字段: {field}, 长度: {len(value)}")
+                            return value
                 
-                # 递归搜索
-                for value in data.values():
-                    result = find_video_bytes(value, depth + 1)
+                # 递归搜索所有值
+                for key, value in data.items():
+                    result = find_video_bytes(value, depth + 1, f"{path}.{key}" if path else key)
                     if result:
                         return result
             
             elif isinstance(data, list):
-                for item in data:
-                    result = find_video_bytes(item, depth + 1)
+                print(f"[DEBUG] 搜索列表 (深度{depth}, 路径:{path}): 长度{len(data)}")
+                for i, item in enumerate(data):
+                    result = find_video_bytes(item, depth + 1, f"{path}[{i}]" if path else f"[{i}]")
                     if result:
                         return result
             
+            elif isinstance(data, str) and len(data) > 100:
+                # 检查是否是base64编码的视频数据
+                print(f"[DEBUG] 检查字符串 (深度{depth}, 路径:{path}): 长度{len(data)}")
+                try:
+                    import base64
+                    # 尝试解码前几个字符看是否是有效的base64
+                    test_decode = base64.b64decode(data[:100])
+                    print(f"[DEBUG] 可能的base64视频数据，路径: {path}")
+                    return data
+                except:
+                    pass
+            
             return None
         
-        return find_video_bytes(response_data)
+        result = find_video_bytes(response_data)
+        
+        if result:
+            print(f"[DEBUG] 成功提取视频数据，长度: {len(result)}")
+        else:
+            print(f"[DEBUG] 未找到视频数据")
+            # 输出完整的响应结构用于调试
+            import json
+            print(f"[DEBUG] 完整响应结构: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
+        
+        return result
 
 
 # 全局服务实例
