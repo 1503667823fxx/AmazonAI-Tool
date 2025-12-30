@@ -261,10 +261,7 @@ with col_output:
             - 任务ID: {job['job_id']}
             """)
             
-            # 显示视频（优先使用字节数据）
-            video_displayed = False
-            
-            # 方法1: 使用视频字节数据（官方推荐）
+            # 显示视频（只使用字节数据）
             if job.get("video_bytes"):
                 try:
                     import base64
@@ -281,7 +278,6 @@ with col_output:
                     
                     # 显示视频
                     st.video(tmp_file_path)
-                    video_displayed = True
                     
                     # 提供下载选项
                     st.download_button(
@@ -298,42 +294,28 @@ with col_output:
                         pass
                         
                 except Exception as e:
-                    st.error(f"视频字节数据处理失败: {str(e)}")
-            
-            # 方法2: 备用URL方式（如果字节数据不可用）
-            if not video_displayed and job.get("video_url"):
-                video_url = job["video_url"]
-                
-                st.warning("⚠️ 使用URL方式播放（可能需要认证）")
-                
-                # 直接尝试播放视频
-                try:
-                    st.video(video_url)
-                    video_displayed = True
-                except Exception as e:
-                    st.error(f"URL播放失败: {str(e)}")
-                
-                # 简单的下载选项
-                col_download, col_copy = st.columns(2)
-                with col_download:
-                    st.markdown(f"[📥 尝试下载视频]({video_url})")
-                
-                with col_copy:
-                    if st.button("📋 复制链接"):
-                        st.code(video_url)
-                        st.success("链接已显示，请手动复制")
-            
-            # 如果都没有可用的视频数据
-            if not video_displayed:
-                st.warning("⚠️ 视频数据不可用")
-                st.info("💡 视频生成成功但无法获取视频数据，请检查API响应")
+                    st.error(f"视频处理失败: {str(e)}")
+                    
+                    # 显示调试信息
+                    with st.expander("🔍 调试信息"):
+                        st.write(f"任务ID: {job['job_id']}")
+                        if "raw_response" in job:
+                            st.json(job["raw_response"])
+            else:
+                st.error("⚠️ 视频数据不可用")
+                st.info("💡 视频生成成功但无法获取视频数据，请检查SDK配置")
                 
                 # 显示任务ID
                 st.code(f"任务ID: {job['job_id']}")
                 
                 # 显示调试信息
-                if "raw_response" in job:
-                    with st.expander("🔍 API响应数据"):
+                with st.expander("🔍 调试信息"):
+                    if hasattr(job, 'operation'):
+                        st.write("操作对象存在")
+                    else:
+                        st.write("操作对象不存在")
+                    
+                    if "raw_response" in job:
                         st.json(job["raw_response"])
             # 添加操作按钮
             st.markdown("---")
@@ -421,10 +403,7 @@ if st.session_state.generation_history:
                     st.rerun()
             
             with col_video:
-                # 显示历史视频
-                video_displayed = False
-                
-                # 优先使用字节数据
+                # 显示历史视频（只使用字节数据）
                 if task.get("video_bytes"):
                     try:
                         import base64
@@ -438,7 +417,6 @@ if st.session_state.generation_history:
                             tmp_file_path = tmp_file.name
                         
                         st.video(tmp_file_path)
-                        video_displayed = True
                         
                         # 下载按钮
                         st.download_button(
@@ -456,19 +434,7 @@ if st.session_state.generation_history:
                             
                     except Exception as e:
                         st.error(f"历史视频加载失败: {str(e)}")
-                
-                # 备用URL方式
-                if not video_displayed and task.get('video_url'):
-                    st.warning("使用URL方式（可能需要认证）")
-                    try:
-                        st.video(task['video_url'])
-                        video_displayed = True
-                    except Exception as e:
-                        st.error(f"URL播放失败: {str(e)}")
-                    
-                    st.markdown(f"[📥 尝试下载]({task['video_url']})")
-                
-                if not video_displayed:
+                else:
                     st.info("视频数据不可用")
 
 # --- 7. 使用提示 ---
