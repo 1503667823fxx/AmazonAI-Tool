@@ -111,44 +111,73 @@ class VeoAPIService:
                 formats = image_result["formats"]
                 last_error = None
                 
-                # 按优先级尝试不同格式
-                for format_name in ["standard", "simple", "raw_bytes"]:
-                    if format_name not in formats:
-                        continue
-                    
-                    print(f"[DEBUG] 尝试格式: {format_name}")
+                # 按优先级尝试不同格式和方法
+                attempts = [
+                    ("standard_dict", formats["standard"]),
+                    ("standard_sdk", None),  # 使用SDK方法
+                    ("raw_bytes_sdk", formats["raw_bytes"]),
+                    ("simple_dict", formats["simple"])
+                ]
+                
+                for attempt_name, format_data in attempts:
+                    print(f"[DEBUG] 尝试方法: {attempt_name}")
                     
                     try:
-                        if format_name == "raw_bytes":
-                            # 使用原始字节数据
-                            if hasattr(types.Image, 'from_bytes'):
-                                image = types.Image.from_bytes(formats[format_name])
-                            elif hasattr(types, 'Part'):
-                                image = types.Part.from_bytes(data=formats[format_name], mime_type="image/jpeg")
+                        if attempt_name == "standard_dict":
+                            # 直接使用字典格式
+                            operation = self.client.models.generate_videos(
+                                model=self.model_id,
+                                prompt=prompt,
+                                image=format_data,
+                                config=config
+                            )
+                        
+                        elif attempt_name == "standard_sdk":
+                            # 使用SDK的Image对象
+                            if hasattr(types, 'Image') and hasattr(types.Image, 'from_bytes'):
+                                image_obj = types.Image.from_bytes(formats["raw_bytes"])
+                                operation = self.client.models.generate_videos(
+                                    model=self.model_id,
+                                    prompt=prompt,
+                                    image=image_obj,
+                                    config=config
+                                )
                             else:
-                                raise RuntimeError("无法创建图片对象")
-                        else:
-                            # 使用字典格式
-                            image = formats[format_name]
+                                raise RuntimeError("SDK Image.from_bytes 不可用")
                         
-                        operation = self.client.models.generate_videos(
-                            model=self.model_id,
-                            prompt=prompt,
-                            image=image,
-                            config=config
-                        )
+                        elif attempt_name == "raw_bytes_sdk":
+                            # 使用Part对象
+                            if hasattr(types, 'Part') and hasattr(types.Part, 'from_bytes'):
+                                part_obj = types.Part.from_bytes(data=format_data, mime_type="image/jpeg")
+                                operation = self.client.models.generate_videos(
+                                    model=self.model_id,
+                                    prompt=prompt,
+                                    image=part_obj,
+                                    config=config
+                                )
+                            else:
+                                raise RuntimeError("SDK Part.from_bytes 不可用")
                         
-                        print(f"[DEBUG] 格式 {format_name} 成功!")
+                        elif attempt_name == "simple_dict":
+                            # 简化字典格式
+                            operation = self.client.models.generate_videos(
+                                model=self.model_id,
+                                prompt=prompt,
+                                image=format_data,
+                                config=config
+                            )
+                        
+                        print(f"[DEBUG] 方法 {attempt_name} 成功!")
                         break
                         
                     except Exception as e:
                         error_msg = str(e)
-                        print(f"[DEBUG] 格式 {format_name} 失败: {error_msg}")
+                        print(f"[DEBUG] 方法 {attempt_name} 失败: {error_msg}")
                         last_error = error_msg
                         continue
                 else:
-                    # 所有格式都失败了
-                    raise RuntimeError(f"所有图片格式都失败了。最后错误: {last_error}")
+                    # 所有方法都失败了
+                    raise RuntimeError(f"所有图片处理方法都失败了。最后错误: {last_error}")
                         
             else:
                 print(f"[DEBUG] 文本到视频生成")
