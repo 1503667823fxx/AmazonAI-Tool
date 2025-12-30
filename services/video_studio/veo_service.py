@@ -307,9 +307,108 @@ class VeoAPIService:
         """从响应数据中提取视频字节数据"""
         print(f"[DEBUG] 开始提取视频数据，响应结构: {response_data}")
         
+        # 首先尝试提取视频URI（Google Veo API的实际格式）
+        video_uri = self._extract_video_uri_from_response(response_data)
+        if video_uri:
+            print(f"[DEBUG] 找到视频URI: {video_uri}")
+            # 下载视频并转换为base64
+            return self._download_video_from_uri(video_uri)
+        
+        # 如果没有URI，尝试直接搜索base64数据（备用方案）
+        return self._search_direct_video_bytes(response_data)
+    
+    def _extract_video_uri_from_response(self, response_data: dict) -> str:
+        """从响应中提取视频URI"""
+        try:
+            # Google Veo API的实际响应结构
+            if "generateVideoResponse" in response_data:
+                generate_response = response_data["generateVideoResponse"]
+                if "generatedSamples" in generate_response:
+                    samples = generate_response["generatedSamples"]
+                    if samples and len(samples) > 0:
+                        first_sample = samples[0]
+                        if "video" in first_sample and "uri" in first_sample["video"]:
+                            return first_sample["video"]["uri"]
+            
+            # 递归搜索URI字段（备用方案）
+            def find_uri(data, depth=0):
+                if depth > 10:
+                    return None
+                
+                if isinstance(data, dict):
+                    # 搜索URI相关字段
+                    uri_fields = ['uri', 'url', 'download_url', 'video_url', 'file_url']
+                    for field in uri_fields:
+                        if field in data and isinstance(data[field], str):
+                            uri = data[field]
+                            if uri.startswith('http') and 'generativelanguage.googleapis.com' in uri:
+                                return uri
+                    
+                    # 递归搜索
+                    for value in data.values():
+                        result = find_uri(value, depth + 1)
+                        if result:
+                            return result
+                
+                elif isinstance(data, list):
+                    for item in data:
+                        result = find_uri(item, depth + 1)
+                        if result:
+                            return result
+                
+                return None
+            
+            return find_uri(response_data)
+            
+        except Exception as e:
+            print(f"[DEBUG] 提取URI时出错: {str(e)}")
+            return None
+    
+    def _download_video_from_uri(self, video_uri: str) -> str:
+        """从URI下载视频并转换为base64"""
+        try:
+            print(f"[DEBUG] 开始下载视频: {video_uri}")
+            
+            import requests
+            import base64
+            
+            # 使用API密钥下载视频
+            headers = {
+                "x-goog-api-key": self.api_key
+            }
+            
+            response = requests.get(video_uri, headers=headers, timeout=60)
+            print(f"[DEBUG] 下载响应状态: {response.status_code}")
+            
+            if response.status_code == 200:
+                video_bytes = response.content
+                print(f"[DEBUG] 视频下载成功，大小: {len(video_bytes)} bytes")
+                
+                # 转换为base64
+                video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+                print(f"[DEBUG] Base64转换成功，长度: {len(video_base64)}")
+                
+                return video_base64
+            else:
+                print(f"[DEBUG] 视频下载失败: HTTP {response.status_code}")
+                try:
+                    error_data = response.json()
+                    print(f"[DEBUG] 错误详情: {error_data}")
+                except:
+                    print(f"[DEBUG] 响应文本: {response.text}")
+                return None
+                
+        except Exception as e:
+            print(f"[DEBUG] 下载视频时出错: {str(e)}")
+            return None
+    
+    def _search_direct_video_bytes(self, response_data: dict) -> str:
+        """搜索直接的视频字节数据（备用方案）"""
+        print(f"[DEBUG] 搜索直接的视频字节数据")
+        
         # 递归搜索视频字节数据
         def find_video_bytes(data, depth=0, path=""):
-            if depth > 10:  # 增加搜索深度
+            if depth > 10:
                 return None
             
             if isinstance(data, dict):
