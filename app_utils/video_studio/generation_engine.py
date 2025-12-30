@@ -147,13 +147,22 @@ class GenerationEngine:
     
     def _initialize_adapters(self):
         """Initialize model adapters from configuration."""
-        from .adapters import LumaAdapter, RunwayAdapter, PikaAdapter
+        from .adapters import (
+            LumaAdapter, RunwayAdapter, PikaAdapter, VeoAdapter,
+            LUMA_AVAILABLE, RUNWAY_AVAILABLE, PIKA_AVAILABLE, VEO_AVAILABLE
+        )
         
-        adapter_classes = {
-            "luma": LumaAdapter,
-            "runway": RunwayAdapter,
-            "pika": PikaAdapter
-        }
+        adapter_classes = {}
+        
+        # Only add adapters that are available
+        if LUMA_AVAILABLE:
+            adapter_classes["luma"] = LumaAdapter
+        if RUNWAY_AVAILABLE:
+            adapter_classes["runway"] = RunwayAdapter
+        if PIKA_AVAILABLE:
+            adapter_classes["pika"] = PikaAdapter
+        if VEO_AVAILABLE:
+            adapter_classes["veo"] = VeoAdapter
         
         for model_name, model_config in self.config.models.items():
             if model_config.enabled and model_name in adapter_classes:
