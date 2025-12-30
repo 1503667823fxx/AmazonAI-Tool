@@ -85,27 +85,60 @@ class VeoAPIService:
             # 生成视频
             if reference_image:
                 print(f"[DEBUG] 处理参考图片，大小: {len(reference_image)} bytes")
+                
+                # 根据错误信息，API需要特定的数据结构
+                # 错误：Input instance with image should contain both bytesBase64Encoded and mimeType
+                # 这表明我们需要使用原始的数据结构而不是SDK包装的对象
+                
                 try:
-                    # 尝试不同的图片创建方式
-                    if hasattr(types.Image, 'from_bytes'):
-                        image = types.Image.from_bytes(reference_image)
-                    elif hasattr(types, 'Part'):
-                        # 备用方式
-                        image = types.Part.from_bytes(data=reference_image, mime_type="image/jpeg")
-                    else:
-                        raise RuntimeError("无法找到合适的图片创建方法")
+                    import base64
+                    base64_image = base64.b64encode(reference_image).decode('utf-8')
                     
-                    print(f"[DEBUG] 图片对象创建成功")
+                    # 创建符合API要求的图片数据结构
+                    image_data = {
+                        "bytesBase64Encoded": base64_image,
+                        "mimeType": "image/jpeg"
+                    }
                     
+                    print(f"[DEBUG] 创建图片数据结构: mimeType=image/jpeg, base64长度={len(base64_image)}")
+                    
+                    # 尝试使用原始数据结构
                     operation = self.client.models.generate_videos(
                         model=self.model_id,
                         prompt=prompt,
-                        image=image,
+                        image=image_data,  # 直接使用字典而不是SDK对象
                         config=config
                     )
+                    
+                    print(f"[DEBUG] 使用原始数据结构成功")
+                    
                 except Exception as e:
-                    print(f"[DEBUG] 图片处理失败: {str(e)}")
-                    raise RuntimeError(f"图片处理失败: {str(e)}")
+                    print(f"[DEBUG] 原始数据结构失败: {str(e)}")
+                    
+                    # 如果原始数据结构也失败，尝试SDK方式
+                    try:
+                        if hasattr(types.Image, 'from_bytes'):
+                            image = types.Image.from_bytes(reference_image)
+                            print(f"[DEBUG] 回退到SDK Image.from_bytes")
+                        elif hasattr(types, 'Part'):
+                            image = types.Part.from_bytes(data=reference_image, mime_type="image/jpeg")
+                            print(f"[DEBUG] 回退到SDK Part.from_bytes")
+                        else:
+                            raise RuntimeError("无法找到合适的图片创建方法")
+                        
+                        operation = self.client.models.generate_videos(
+                            model=self.model_id,
+                            prompt=prompt,
+                            image=image,
+                            config=config
+                        )
+                        
+                        print(f"[DEBUG] SDK方式成功")
+                        
+                    except Exception as e2:
+                        print(f"[DEBUG] SDK方式也失败: {str(e2)}")
+                        raise RuntimeError(f"图片处理失败 - 原始方式: {str(e)}, SDK方式: {str(e2)}")
+                        
             else:
                 print(f"[DEBUG] 文本到视频生成")
                 try:
