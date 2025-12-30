@@ -249,6 +249,12 @@ with col_output:
                         st.success("链接已显示，请手动复制")
             else:
                 st.warning("⚠️ 视频URL不可用")
+                
+                # 显示调试信息
+                if "raw_response" in job:
+                    with st.expander("🔍 API响应调试信息"):
+                        st.json(job["raw_response"])
+                        st.info("💡 如果看到这个信息，说明视频生成成功但URL提取有问题。请检查上面的API响应数据。")
         
         elif job["status"] == "failed":
             st.error("❌ 生成失败")
