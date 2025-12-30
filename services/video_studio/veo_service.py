@@ -167,7 +167,6 @@ class VeoAPIService:
                 "success": True,
                 "job_id": operation.name.split("/")[-1],
                 "operation_name": operation.name,
-                "operation": operation,  # 保存操作对象
                 "status": "processing",
                 "message": "视频生成任务已创建"
             }
@@ -180,33 +179,23 @@ class VeoAPIService:
                 "error": error_msg
             }
     
-    def get_video_status(self, operation_name: str, operation=None) -> Dict[str, Any]:
+    def get_video_status(self, operation_name: str) -> Dict[str, Any]:
         """获取视频生成状态"""
         try:
-            if not operation:
-                print(f"[DEBUG] 根据名称重新获取操作: {operation_name}")
-                try:
-                    # 尝试从操作名称重新获取操作对象
-                    operation = self.client.operations.get(operation_name)
-                except Exception as e:
-                    print(f"[DEBUG] 无法重新获取操作对象: {str(e)}")
-                    return {
-                        "status": "error",
-                        "progress": 0,
-                        "error": f"无法获取操作状态: {str(e)}"
-                    }
-            else:
-                print(f"[DEBUG] 刷新现有操作状态")
-                try:
-                    # 刷新操作状态
-                    operation = self.client.operations.get(operation)
-                except Exception as e:
-                    print(f"[DEBUG] 刷新操作状态失败: {str(e)}")
-                    return {
-                        "status": "error",
-                        "progress": 0,
-                        "error": f"刷新操作状态失败: {str(e)}"
-                    }
+            # 统一处理：总是使用operation_name来获取最新状态
+            print(f"[DEBUG] 获取操作状态: {operation_name}")
+            
+            try:
+                # 直接使用operation_name获取操作对象
+                operation = self.client.operations.get(operation_name)
+                print(f"[DEBUG] 成功获取操作对象")
+            except Exception as e:
+                print(f"[DEBUG] 无法获取操作对象: {str(e)}")
+                return {
+                    "status": "error",
+                    "progress": 0,
+                    "error": f"无法获取操作状态: {str(e)}"
+                }
             
             if operation.done:
                 print(f"[DEBUG] 操作已完成")
@@ -259,8 +248,7 @@ class VeoAPIService:
                             "status": "completed",
                             "progress": 100,
                             "video_bytes": video_bytes,
-                            "message": "视频生成完成",
-                            "operation": operation  # 保持操作对象
+                            "message": "视频生成完成"
                         }
                         
                     except Exception as e:
@@ -276,8 +264,7 @@ class VeoAPIService:
                 return {
                     "status": "processing",
                     "progress": 50,
-                    "message": "正在生成视频...",
-                    "operation": operation  # 保持操作对象
+                    "message": "正在生成视频..."
                 }
                 
         except Exception as e:
@@ -349,7 +336,7 @@ def generate_video_sync(
     )
 
 
-def get_video_status_sync(operation_name: str, operation=None) -> Dict[str, Any]:
+def get_video_status_sync(operation_name: str) -> Dict[str, Any]:
     """同步获取视频状态（用于Streamlit）"""
     service = get_veo_service()
     if not service:
@@ -358,4 +345,4 @@ def get_video_status_sync(operation_name: str, operation=None) -> Dict[str, Any]
             "error": "Veo服务未配置"
         }
     
-    return service.get_video_status(operation_name, operation)
+    return service.get_video_status(operation_name)
