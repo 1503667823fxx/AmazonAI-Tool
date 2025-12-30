@@ -72,8 +72,7 @@ except Exception as e:
     st.info("💡 这通常是由于缺少 API 密钥配置导致的。请在 Streamlit Secrets 中配置以下密钥：")
     st.code("""
 # 在 Streamlit Cloud 的 Secrets 中添加：
-GOOGLE_API_KEY = "your_google_api_key"
-GOOGLE_CLOUD_PROJECT_ID = "your_project_id"
+GOOGLE_API_KEY = "your_google_api_key"  # 用于Google Veo 3.1
 LUMA_API_KEY = "your_luma_api_key"
 RUNWAY_API_KEY = "your_runway_api_key"  
 PIKA_API_KEY = "your_pika_api_key"
@@ -174,13 +173,15 @@ with tab_script:
         # 自定义参数（如果选择了模板）
         if st.session_state.selected_template:
             st.subheader("⚙️ 自定义参数")
-            custom_duration = st.slider("视频时长 (秒)", 5, 60, 
-                                      st.session_state.selected_template.config.duration)
+            custom_duration = st.slider("视频时长 (秒)", 1, 8, 
+                                      min(st.session_state.selected_template.config.duration, 8))
+            st.info("💡 Google Veo 3.1 最大支持8秒视频")
             custom_quality = st.selectbox("视频质量", 
-                                        ["720p", "1080p", "4k"],
+                                        ["720p", "1080p"],  # 移除4k，Veo不支持
                                         index=1)
         else:
-            target_duration = st.slider("目标视频时长 (秒)", 10, 60, 15)
+            target_duration = st.slider("目标视频时长 (秒)", 1, 8, 4)
+            st.info("💡 Google Veo 3.1 最大支持8秒视频")
         
         generate_btn = st.button("✨ AI 生成分镜脚本", type="primary", use_container_width=True)
 
