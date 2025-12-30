@@ -58,11 +58,20 @@ class VeoAPIService:
     ) -> Dict[str, Any]:
         """生成视频"""
         try:
-            # 构建配置
+            # 构建配置 - 处理分辨率和时长的限制
+            # 根据API错误：1080p只支持8秒，720p支持4、6、8秒
+            
+            # 自动调整分辨率和时长的组合
+            if quality.lower() == "1080p" and duration != 8:
+                print(f"[DEBUG] 1080p分辨率需要8秒时长，当前时长{duration}秒，自动调整为720p")
+                adjusted_quality = "720p"
+            else:
+                adjusted_quality = quality.lower()
+            
             config_params = {
                 "aspect_ratio": aspect_ratio,
                 "duration_seconds": duration,
-                "resolution": quality.lower()
+                "resolution": adjusted_quality
             }
             
             # 添加可选参数（排除不支持的参数）
@@ -74,6 +83,7 @@ class VeoAPIService:
             #     config_params["generate_audio"] = generate_audio
             
             print(f"[DEBUG] 配置参数: {config_params}")
+            print(f"[DEBUG] 原始质量: {quality}, 调整后质量: {adjusted_quality}")
             
             try:
                 config = types.GenerateVideosConfig(**config_params)
