@@ -105,10 +105,12 @@ with col_input:
     
     col_duration, col_ratio = st.columns(2)
     with col_duration:
-        # 如果有参考图片，强制设置为8秒
+        # 如果有参考图片，显示固定值而不是滑块
         if reference_image is not None:
-            duration = st.slider("时长（秒）", 8, 8, 8, step=2, help="参考图片转视频仅支持8秒", disabled=True)
+            st.markdown("**时长（秒）**")
+            duration = 8
             st.info("💡 使用参考图片时，时长固定为8秒")
+            st.markdown(f"<div style='padding: 10px; background-color: #f0f2f6; border-radius: 5px; text-align: center; font-size: 18px; font-weight: bold;'>{duration} 秒</div>", unsafe_allow_html=True)
         else:
             duration = st.slider("时长（秒）", 4, 8, 4, step=2, help="Veo 3.1支持4、6、8秒")
         
