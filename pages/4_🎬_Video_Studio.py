@@ -81,18 +81,46 @@ with col_input:
         help="详细描述视频内容，包括场景、动作、风格等"
     )
     
-    # 参考图片上传（暂时禁用）
-    st.markdown("**参考图片（暂时不可用）**")
-    st.warning("⚠️ 图片到视频功能暂时禁用，正在修复API兼容性问题")
-    st.info("💡 请先使用文本到视频功能，图片功能将在下个版本中修复")
+    # 参考图片上传
+    st.markdown("**参考图片**")
     
-    # 隐藏的图片上传器（用于保持代码兼容性）
-    reference_image = None
-    # reference_image = st.file_uploader(
-    #     "参考图片（可选）",
-    #     type=['jpg', 'jpeg', 'png'],
-    #     help="上传一张参考图片来引导视频生成"
-    # )
+    reference_image = st.file_uploader(
+        "参考图片（可选）",
+        type=['jpg', 'jpeg', 'png', 'webp'],
+        help="上传一张参考图片来引导视频生成，支持JPG、PNG、WEBP格式"
+    )
+    
+    # 验证图片
+    if reference_image is not None:
+        from services.video_studio import validate_uploaded_image
+        
+        image_bytes = reference_image.read()
+        validation = validate_uploaded_image(image_bytes)
+        
+        if validation["valid"]:
+            st.success("✅ 图片验证通过")
+            col_img, col_info = st.columns([1, 1])
+            
+            with col_img:
+                st.image(reference_image, caption="参考图片", use_container_width=True)
+            
+            with col_info:
+                st.info(f"""
+                **图片信息**
+                - 格式: {validation['format']}
+                - 尺寸: {validation['size'][0]} x {validation['size'][1]}
+                - 文件大小: {validation['file_size']/1024:.1f} KB
+                """)
+                
+                st.warning("""
+                📋 **图片到视频限制**
+                - 时长: 固定8秒
+                - 质量: 推荐720p
+                - 处理时间: 5-15分钟
+                """)
+        else:
+            st.error(f"❌ 图片验证失败: {validation['error']}")
+            reference_image = None
     
     # 视频参数设置
     st.markdown("**视频参数**")
@@ -209,6 +237,8 @@ with col_output:
             # 处理参考图片
             reference_image_bytes = None
             if reference_image is not None:
+                # 重新读取图片数据（因为之前验证时已经读取过）
+                reference_image.seek(0)  # 重置文件指针
                 reference_image_bytes = reference_image.read()
             
             # 调用真正的API
