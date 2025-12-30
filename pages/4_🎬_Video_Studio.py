@@ -6,6 +6,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from auth import check_password  # 引入门禁系统
+from services.video_studio.veo_service import generate_video_sync, get_video_status_sync
 
 # --- 1. 门禁检查 ---
 if not check_password():
@@ -116,60 +117,84 @@ with col_output:
     st.subheader("🎥 生成结果")
     
     if generate_btn and prompt.strip():
-        # 模拟生成过程
-        with st.spinner("🚀 正在生成视频..."):
-            # 创建任务
-            job_id = f"veo_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # 真正的API调用
+        with st.spinner("🚀 正在调用Google Veo API..."):
+            # 处理参考图片
+            reference_image_bytes = None
+            if reference_image is not None:
+                reference_image_bytes = reference_image.read()
             
-            # 保存任务信息
-            task_info = {
-                "job_id": job_id,
-                "prompt": prompt,
-                "duration": duration,
-                "aspect_ratio": aspect_ratio,
-                "quality": quality,
-                "seed": seed,
-                "negative_prompt": negative_prompt,
-                "generate_audio": generate_audio,
-                "status": "processing",
-                "created_at": datetime.now(),
-                "progress": 0
-            }
+            # 调用真正的API
+            result = generate_video_sync(
+                prompt=prompt,
+                duration=duration,
+                aspect_ratio=aspect_ratio,
+                quality=quality,
+                reference_image=reference_image_bytes,
+                negative_prompt=negative_prompt if negative_prompt.strip() else None,
+                seed=seed,
+                generate_audio=generate_audio
+            )
             
-            st.session_state.current_job = task_info
-            st.session_state.generation_history.insert(0, task_info)
-            
-            # 显示进度
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            # 模拟进度更新
-            for i in range(101):
-                progress_bar.progress(i)
-                if i < 30:
-                    status_text.text("🔄 正在处理提示词...")
-                elif i < 60:
-                    status_text.text("🎨 正在生成视频帧...")
-                elif i < 90:
-                    status_text.text("🎞️ 正在合成视频...")
-                else:
-                    status_text.text("✅ 生成完成！")
+            if result["success"]:
+                # 创建任务信息
+                task_info = {
+                    "job_id": result["job_id"],
+                    "prompt": prompt,
+                    "duration": duration,
+                    "aspect_ratio": aspect_ratio,
+                    "quality": quality,
+                    "seed": seed,
+                    "negative_prompt": negative_prompt,
+                    "generate_audio": generate_audio,
+                    "status": "processing",
+                    "created_at": datetime.now(),
+                    "progress": 0,
+                    "video_url": None
+                }
                 
-                time.sleep(0.05)  # 模拟处理时间
-            
-            # 更新任务状态
-            st.session_state.current_job["status"] = "completed"
-            st.session_state.current_job["progress"] = 100
-            st.session_state.current_job["video_url"] = "https://example.com/mock_video.mp4"
-            
-            st.success("🎉 视频生成完成！")
-            st.rerun()
+                st.session_state.current_job = task_info
+                st.session_state.generation_history.insert(0, task_info)
+                
+                st.success(f"✅ {result['message']}")
+                st.info(f"任务ID: {result['job_id']}")
+                st.info("⏳ 视频生成通常需要3-10分钟，请耐心等待...")
+                st.rerun()
+            else:
+                st.error(f"❌ 生成失败: {result['error']}")
     
-    # 显示当前任务结果
+    # 显示当前任务结果和状态更新
     if st.session_state.current_job:
         job = st.session_state.current_job
         
-        if job["status"] == "completed":
+        # 自动刷新状态（如果任务还在进行中）
+        if job["status"] == "processing":
+            # 获取最新状态
+            status_result = get_video_status_sync(job["job_id"])
+            
+            # 更新任务状态
+            job["status"] = status_result["status"]
+            job["progress"] = status_result["progress"]
+            
+            if "video_url" in status_result:
+                job["video_url"] = status_result["video_url"]
+            
+            if "error" in status_result:
+                job["error"] = status_result["error"]
+        
+        # 显示状态
+        if job["status"] == "processing":
+            st.info("🔄 正在生成中...")
+            progress_bar = st.progress(job["progress"] / 100)
+            st.write(f"进度: {job['progress']}%")
+            
+            # 手动刷新按钮
+            if st.button("🔄 刷新状态"):
+                st.rerun()
+            
+            st.info("💡 点击'刷新状态'按钮查看最新进度")
+            
+        elif job["status"] == "completed":
             st.success("✅ 生成完成")
             
             # 显示视频信息
@@ -181,26 +206,34 @@ with col_output:
             - 任务ID: {job['job_id']}
             """)
             
-            # 模拟视频预览
-            st.video("https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4")
-            
-            # 下载按钮
-            col_download, col_share = st.columns(2)
-            with col_download:
-                st.download_button(
-                    "📥 下载视频",
-                    data=b"mock_video_data",  # 实际应该是视频文件
-                    file_name=f"{job['job_id']}.mp4",
-                    mime="video/mp4"
-                )
-            
-            with col_share:
-                if st.button("🔗 复制链接"):
-                    st.success("链接已复制到剪贴板")
+            # 显示视频（如果有URL）
+            if job.get("video_url"):
+                st.video(job["video_url"])
+                
+                # 下载按钮
+                col_download, col_share = st.columns(2)
+                with col_download:
+                    st.markdown(f"[📥 下载视频]({job['video_url']})")
+                
+                with col_share:
+                    if st.button("🔗 复制链接"):
+                        st.code(job["video_url"])
+                        st.success("链接已显示，请手动复制")
+            else:
+                st.warning("⚠️ 视频URL不可用")
         
-        elif job["status"] == "processing":
-            st.info("🔄 正在生成中...")
-            st.progress(job["progress"] / 100)
+        elif job["status"] == "failed":
+            st.error("❌ 生成失败")
+            if "error" in job:
+                st.error(f"错误信息: {job['error']}")
+            
+            # 重试按钮
+            if st.button("🔄 重新生成"):
+                st.session_state.current_job = None
+                st.rerun()
+        
+        else:
+            st.warning(f"⚠️ 未知状态: {job['status']}")
 
 # --- 6. 生成历史 ---
 if st.session_state.generation_history:
@@ -213,17 +246,26 @@ if st.session_state.generation_history:
             col_info, col_action = st.columns([3, 1])
             
             with col_info:
-                st.write(f"**状态**: {'✅ 完成' if task['status'] == 'completed' else '🔄 处理中'}")
+                status_emoji = {
+                    "completed": "✅",
+                    "processing": "🔄", 
+                    "failed": "❌"
+                }.get(task["status"], "❓")
+                
+                st.write(f"**状态**: {status_emoji} {task['status']}")
                 st.write(f"**时长**: {task['duration']}秒")
                 st.write(f"**分辨率**: {task['quality']}")
                 st.write(f"**创建时间**: {task['created_at'].strftime('%Y-%m-%d %H:%M')}")
+                st.write(f"**任务ID**: {task['job_id']}")
             
             with col_action:
-                if task['status'] == 'completed':
-                    if st.button(f"重新生成", key=f"regenerate_{i}"):
-                        # 重新填充参数
-                        st.session_state.regenerate_params = task
-                        st.rerun()
+                if task['status'] == 'completed' and task.get('video_url'):
+                    st.markdown(f"[📥 下载]({task['video_url']})")
+                
+                if st.button(f"🔄 重新生成", key=f"regenerate_{i}"):
+                    # 重新填充参数并清除当前任务
+                    st.session_state.current_job = None
+                    st.rerun()
 
 # --- 7. 使用提示 ---
 st.markdown("---")
@@ -245,15 +287,48 @@ with st.expander("💡 使用提示"):
     - 支持分辨率：720p, 1080p
     - 支持宽高比：16:9, 9:16
     - 生成时间：通常3-10分钟
+    
+    **API状态说明：**
+    - 🔄 processing: 正在生成中
+    - ✅ completed: 生成完成
+    - ❌ failed: 生成失败
     """)
 
-# --- 8. 页脚信息 ---
+# --- 8. API状态信息 ---
+with st.expander("🔧 API状态信息"):
+    st.warning("⚠️ **重要说明**: 当前使用模拟API端点，因为Google Veo 3.1 API尚未公开发布")
+    
+    st.write("**当前配置:**")
+    st.write(f"- API密钥: {'✅ 已配置' if api_key_configured else '❌ 未配置'}")
+    st.write(f"- 服务状态: {'🟡 模拟模式' if api_key_configured else '🔴 不可用'}")
+    st.write("- API端点: 模拟端点（等待官方发布）")
+    
+    st.info("""
+    **关于真实API:**
+    - Google Veo 3.1目前仍处于预览阶段
+    - 官方API端点和文档尚未公开
+    - 当前实现提供完整的UI和框架
+    - 一旦官方API发布，只需更新端点即可启用真实功能
+    """)
+    
+    if st.session_state.current_job:
+        st.write("**当前任务:**")
+        st.json({
+            "job_id": st.session_state.current_job["job_id"],
+            "status": st.session_state.current_job["status"],
+            "progress": st.session_state.current_job["progress"],
+            "created_at": st.session_state.current_job["created_at"].isoformat(),
+            "note": "模拟任务 - 非真实API调用"
+        })
+
+# --- 9. 页脚信息 ---
 st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center; color: #666; font-size: 0.8em;'>
         Powered by Google Veo 3.1 | 
-        <a href='https://deepmind.google/technologies/veo/' target='_blank'>了解更多</a>
+        <a href='https://deepmind.google/technologies/veo/' target='_blank'>了解更多</a> |
+        ⚠️ 注意：当前使用模拟API端点，实际部署需要配置正确的Google Veo API
     </div>
     """,
     unsafe_allow_html=True
