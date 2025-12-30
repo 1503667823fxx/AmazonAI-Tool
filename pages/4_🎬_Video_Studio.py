@@ -270,7 +270,17 @@ with col_output:
             
             # 获取最新状态
             with st.spinner("检查生成状态..."):
-                status_result = get_video_status_sync(job["operation_name"])
+                try:
+                    status_result = get_video_status_sync(job["operation_name"])
+                    print(f"[DEBUG] 状态查询结果: {status_result}")
+                except Exception as e:
+                    print(f"[DEBUG] 状态查询异常: {str(e)}")
+                    st.error(f"状态查询失败: {str(e)}")
+                    status_result = {
+                        "status": "error",
+                        "progress": 0,
+                        "error": f"状态查询异常: {str(e)}"
+                    }
             
             # 更新任务状态
             job["status"] = status_result["status"]
