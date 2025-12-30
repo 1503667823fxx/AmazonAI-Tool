@@ -182,99 +182,142 @@ class VeoAPIService:
     def get_video_status(self, operation_name: str) -> Dict[str, Any]:
         """获取视频生成状态"""
         try:
-            # 统一处理：总是使用operation_name来获取最新状态
             print(f"[DEBUG] 获取操作状态: {operation_name}")
             
+            # 使用HTTP请求直接查询状态，避免SDK序列化问题
             try:
-                # 直接使用operation_name获取操作对象
-                operation = self.client.operations.get(operation_name)
-                print(f"[DEBUG] 成功获取操作对象")
-            except Exception as e:
-                print(f"[DEBUG] 无法获取操作对象: {str(e)}")
-                return {
-                    "status": "error",
-                    "progress": 0,
-                    "error": f"无法获取操作状态: {str(e)}"
-                }
-            
-            if operation.done:
-                print(f"[DEBUG] 操作已完成")
+                import requests
                 
-                if hasattr(operation, 'error') and operation.error:
-                    error_msg = str(operation.error)
-                    print(f"[DEBUG] 操作错误: {error_msg}")
+                # 构建请求头
+                headers = {
+                    "x-goog-api-key": self.api_key,
+                    "Content-Type": "application/json"
+                }
+                
+                # 构建URL - 直接使用operation_name作为路径
+                url = f"https://generativelanguage.googleapis.com/v1beta/{operation_name}"
+                print(f"[DEBUG] 请求URL: {url}")
+                
+                response = requests.get(url, headers=headers, timeout=30)
+                print(f"[DEBUG] HTTP响应状态: {response.status_code}")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    print(f"[DEBUG] 成功获取操作状态")
+                    
+                    # 检查操作是否完成
+                    if result.get("done", False):
+                        print(f"[DEBUG] 操作已完成")
+                        
+                        if "error" in result:
+                            error_msg = result["error"].get("message", "生成失败")
+                            print(f"[DEBUG] 操作错误: {error_msg}")
+                            return {
+                                "status": "failed",
+                                "progress": 0,
+                                "error": error_msg
+                            }
+                        else:
+                            # 尝试提取视频数据
+                            video_bytes = None
+                            
+                            if "response" in result:
+                                response_data = result["response"]
+                                print(f"[DEBUG] 响应数据结构: {list(response_data.keys())}")
+                                
+                                # 搜索视频字节数据
+                                video_bytes = self._extract_video_bytes_from_response(response_data)
+                            
+                            print(f"[DEBUG] 视频字节数据: {'有' if video_bytes else '无'}")
+                            
+                            return {
+                                "status": "completed",
+                                "progress": 100,
+                                "video_bytes": video_bytes,
+                                "message": "视频生成完成"
+                            }
+                    else:
+                        print(f"[DEBUG] 操作仍在进行中")
+                        return {
+                            "status": "processing",
+                            "progress": 50,
+                            "message": "正在生成视频..."
+                        }
+                elif response.status_code == 404:
+                    print(f"[DEBUG] 操作不存在或已过期")
                     return {
-                        "status": "failed",
+                        "status": "error",
+                        "progress": 0,
+                        "error": "操作不存在或已过期"
+                    }
+                else:
+                    # 尝试解析错误响应
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("error", {}).get("message", f"HTTP {response.status_code}")
+                    except:
+                        error_msg = f"HTTP请求失败: {response.status_code}"
+                    
+                    print(f"[DEBUG] {error_msg}")
+                    return {
+                        "status": "error",
                         "progress": 0,
                         "error": error_msg
                     }
-                else:
-                    try:
-                        # 获取生成的视频
-                        generated_video = operation.response.generated_videos[0]
-                        print(f"[DEBUG] 获取到生成的视频对象")
-                        
-                        print(f"[DEBUG] 开始下载视频文件...")
-                        
-                        # 尝试不同的方式获取视频数据
-                        video_bytes = None
-                        
-                        # 方式1: 直接从video对象获取字节数据
-                        if hasattr(generated_video.video, 'video_bytes'):
-                            video_bytes = base64.b64encode(generated_video.video.video_bytes).decode('utf-8')
-                            print(f"[DEBUG] 从video_bytes获取数据，大小: {len(generated_video.video.video_bytes)} bytes")
-                        
-                        # 方式2: 通过下载文件获取
-                        elif hasattr(self.client.files, 'download'):
-                            try:
-                                video_file = self.client.files.download(file=generated_video.video)
-                                if hasattr(video_file, 'read'):
-                                    video_content = video_file.read()
-                                    video_bytes = base64.b64encode(video_content).decode('utf-8')
-                                    print(f"[DEBUG] 从下载文件获取数据，大小: {len(video_content)} bytes")
-                                elif isinstance(video_file, bytes):
-                                    video_bytes = base64.b64encode(video_file).decode('utf-8')
-                                    print(f"[DEBUG] 直接从字节数据获取，大小: {len(video_file)} bytes")
-                            except Exception as e:
-                                print(f"[DEBUG] 文件下载失败: {str(e)}")
-                        
-                        if video_bytes:
-                            print(f"[DEBUG] 视频下载完成，base64编码长度: {len(video_bytes)}")
-                        else:
-                            print(f"[DEBUG] 警告：无法获取视频字节数据")
-                            print(f"[DEBUG] 可用属性: {dir(generated_video.video)}")
-                        
-                        return {
-                            "status": "completed",
-                            "progress": 100,
-                            "video_bytes": video_bytes,
-                            "message": "视频生成完成"
-                        }
-                        
-                    except Exception as e:
-                        error_msg = f"处理完成的视频失败: {str(e)}"
-                        print(f"[DEBUG] {error_msg}")
-                        return {
-                            "status": "error",
-                            "progress": 0,
-                            "error": error_msg
-                        }
-            else:
-                print(f"[DEBUG] 操作仍在进行中")
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"[DEBUG] HTTP请求异常: {str(e)}")
                 return {
-                    "status": "processing",
-                    "progress": 50,
-                    "message": "正在生成视频..."
+                    "status": "error",
+                    "progress": 0,
+                    "error": f"网络请求失败: {str(e)}"
+                }
+            except Exception as e:
+                print(f"[DEBUG] 其他异常: {str(e)}")
+                return {
+                    "status": "error",
+                    "progress": 0,
+                    "error": f"状态查询失败: {str(e)}"
                 }
                 
         except Exception as e:
-            error_msg = f"状态查询失败: {str(e)}"
+            error_msg = f"无法获取操作状态: {str(e)}"
             print(f"[DEBUG] {error_msg}")
             return {
                 "status": "error",
                 "progress": 0,
                 "error": error_msg
             }
+    
+    def _extract_video_bytes_from_response(self, response_data: dict) -> str:
+        """从响应数据中提取视频字节数据"""
+        # 递归搜索视频字节数据
+        def find_video_bytes(data, depth=0):
+            if depth > 5:
+                return None
+            
+            if isinstance(data, dict):
+                # 检查字节数据字段
+                bytes_fields = ['video_bytes', 'videoBytes', 'bytesBase64Encoded', 'base64Data', 'videoData']
+                for field in bytes_fields:
+                    if field in data and data[field]:
+                        return data[field]
+                
+                # 递归搜索
+                for value in data.values():
+                    result = find_video_bytes(value, depth + 1)
+                    if result:
+                        return result
+            
+            elif isinstance(data, list):
+                for item in data:
+                    result = find_video_bytes(item, depth + 1)
+                    if result:
+                        return result
+            
+            return None
+        
+        return find_video_bytes(response_data)
 
 
 # 全局服务实例
@@ -338,11 +381,26 @@ def generate_video_sync(
 
 def get_video_status_sync(operation_name: str) -> Dict[str, Any]:
     """同步获取视频状态（用于Streamlit）"""
-    service = get_veo_service()
-    if not service:
+    try:
+        print(f"[DEBUG] get_video_status_sync 调用，operation_name: {operation_name}")
+        print(f"[DEBUG] operation_name 类型: {type(operation_name)}")
+        
+        service = get_veo_service()
+        if not service:
+            return {
+                "status": "error",
+                "error": "Veo服务未配置"
+            }
+        
+        result = service.get_video_status(operation_name)
+        print(f"[DEBUG] get_video_status_sync 返回: {result}")
+        return result
+        
+    except Exception as e:
+        error_msg = f"get_video_status_sync 异常: {str(e)}"
+        print(f"[DEBUG] {error_msg}")
         return {
             "status": "error",
-            "error": "Veo服务未配置"
+            "progress": 0,
+            "error": error_msg
         }
-    
-    return service.get_video_status(operation_name)
