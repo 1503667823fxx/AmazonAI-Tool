@@ -101,6 +101,10 @@ with col_input:
     - 时长限制：仅支持 **4秒、6秒、8秒**
     - 参考图片：使用参考图片时只能生成 **8秒** 视频
     - 分辨率：支持720p、1080p
+    
+    ⚠️ **API权限提醒**：如果遇到403错误，请确保已启用以下API：
+    - Generative Language API
+    - Vertex AI API (如使用Vertex AI)
     """)
     
     col_duration, col_ratio = st.columns(2)
@@ -268,17 +272,55 @@ with col_output:
             
             # 显示视频（如果有URL）
             if job.get("video_url"):
-                st.video(job["video_url"])
+                video_url = job["video_url"]
                 
-                # 下载按钮
-                col_download, col_share = st.columns(2)
+                # 尝试直接显示视频
+                try:
+                    st.video(video_url)
+                except Exception as e:
+                    st.warning(f"⚠️ 直接播放失败: {str(e)}")
+                    st.info("💡 视频可能需要特殊权限访问，请尝试下载链接")
+                
+                # 下载和访问选项
+                col_download, col_share, col_debug = st.columns(3)
                 with col_download:
-                    st.markdown(f"[📥 下载视频]({job['video_url']})")
+                    st.markdown(f"[📥 下载视频]({video_url})")
                 
                 with col_share:
                     if st.button("🔗 复制链接"):
-                        st.code(job["video_url"])
+                        st.code(video_url)
                         st.success("链接已显示，请手动复制")
+                
+                with col_debug:
+                    if st.button("🔍 检查URL"):
+                        st.info(f"视频URL类型: {type(video_url)}")
+                        st.code(video_url)
+                        
+                        # 检查URL格式
+                        if video_url.startswith('gs://'):
+                            st.warning("⚠️ 这是Google Cloud Storage URL，可能需要特殊权限")
+                            st.info("💡 建议：在Google AI Studio中查看视频")
+                        elif video_url.startswith('http'):
+                            st.info("✅ 这是HTTP URL，应该可以直接访问")
+                        else:
+                            st.warning(f"⚠️ 未知URL格式: {video_url[:50]}...")
+                
+                # 如果是GCS URL，提供替代方案
+                if video_url and video_url.startswith('gs://'):
+                    st.warning("""
+                    🚨 **Google Cloud Storage URL检测**
+                    
+                    这个视频存储在Google Cloud Storage中，可能需要特殊权限才能直接访问。
+                    
+                    **建议解决方案：**
+                    1. 在 [Google AI Studio](https://aistudio.google.com/) 中查看视频
+                    2. 使用任务ID搜索你的生成历史
+                    3. 在AI Studio中下载视频
+                    """)
+                    
+                    # 提供AI Studio链接
+                    st.markdown(f"[🔗 在Google AI Studio中查看](https://aistudio.google.com/)")
+                    st.code(f"任务ID: {job['job_id']}")
             else:
                 st.warning("⚠️ 视频URL不可用")
                 
@@ -286,21 +328,38 @@ with col_output:
                 st.info("""
                 **可能的原因：**
                 - 视频可能需要额外的处理时间
-                - API响应格式可能有变化
+                - API响应格式可能有变化  
                 - 需要特殊权限才能访问生成的视频
+                - Generative Language API 可能未启用
                 
-                **建议解决方案：**
-                1. 等待几分钟后点击"🔄 刷新状态"
-                2. 使用任务ID在Google AI Studio中查看视频
-                3. 检查下方的API响应调试信息
+                **解决方案：**
+                1. **检查API密钥项目**：
+                   - 访问 [Google AI Studio](https://aistudio.google.com/)
+                   - 确认你的API密钥对应的项目
+                   - 在该项目中启用 Generative Language API
+                
+                2. **或者重新生成API密钥**：
+                   - 在Google AI Studio中生成新的API密钥
+                   - 确保选择正确的项目
+                   - 更新Streamlit配置中的API密钥
+                
+                3. **通用API启用链接**：
+                   - 访问 [Google Cloud Console APIs](https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com)
+                   - 选择正确的项目
+                   - 启用 Generative Language API
+                
+                4. **等待生效**：等待几分钟后重新测试
                 """)
                 
                 # 显示任务ID和有用链接
                 st.code(f"任务ID: {job['job_id']}")
                 
-                col_studio, col_refresh = st.columns(2)
+                col_api, col_studio, col_refresh = st.columns(3)
+                with col_api:
+                    st.markdown("[🔧 启用API](https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com)")
+                
                 with col_studio:
-                    st.markdown("[🔗 打开Google AI Studio](https://aistudio.google.com/)")
+                    st.markdown("[🔗 AI Studio](https://aistudio.google.com/)")
                 
                 with col_refresh:
                     if st.button("🔄 刷新状态", key="refresh_for_url"):
@@ -390,6 +449,10 @@ with st.expander("💡 使用提示"):
     - 🔄 processing: 正在生成中
     - ✅ completed: 生成完成
     - ❌ failed: 生成失败
+    
+    **遇到问题？**
+    - 查看 [故障排除指南](docs/troubleshooting/veo_video_studio_issues.md)
+    - 视频无法播放通常是API权限问题
     """)
 
 # --- 8. API状态信息 ---
@@ -422,6 +485,14 @@ with st.expander("🔧 API状态信息"):
                     if service.use_gemini_api:
                         st.success("✅ Gemini API连接测试成功！")
                         st.info("使用API密钥认证")
+                        
+                        # 额外的权限检查提醒
+                        st.warning("""
+                        ⚠️ **重要提醒**：如果视频生成成功但无法播放，可能需要启用以下API：
+                        - Generative Language API
+                        - 确保API密钥有足够权限
+                        """)
+                        
                     else:
                         # 尝试获取访问令牌
                         token = service._get_access_token()
@@ -434,6 +505,34 @@ with st.expander("🔧 API状态信息"):
                     st.error("❌ 无法初始化Veo服务")
             except Exception as e:
                 st.error(f"❌ API连接测试失败: {str(e)}")
+                
+                # 如果是权限错误，提供具体指导
+                if "403" in str(e) or "PERMISSION_DENIED" in str(e):
+                    st.error("🚨 **权限错误检测**")
+                    
+                    # 尝试从错误信息中提取项目ID
+                    error_str = str(e)
+                    if "project" in error_str:
+                        import re
+                        project_match = re.search(r'project (\d+)', error_str)
+                        if project_match:
+                            error_project_id = project_match.group(1)
+                            st.warning(f"⚠️ 错误中的项目ID: {error_project_id}")
+                            st.info("这个项目ID可能不是你的实际项目，请检查你的API密钥配置")
+                    
+                    st.markdown("""
+                    **解决步骤：**
+                    1. 访问 [Google AI Studio](https://aistudio.google.com/) 确认你的项目
+                    2. 访问 [Google Cloud Console](https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com)
+                    3. 选择**你的实际项目**（不是错误信息中的项目ID）
+                    4. 启用 "Generative Language API"
+                    5. 等待几分钟让权限生效
+                    6. 重新测试
+                    
+                    **如果仍有问题**：
+                    - 在Google AI Studio中重新生成API密钥
+                    - 确保API密钥对应正确的项目
+                    """)
     
     if st.session_state.current_job:
         st.write("**当前任务:**")
