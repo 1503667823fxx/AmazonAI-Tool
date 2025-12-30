@@ -135,17 +135,15 @@ class VeoAPIService:
             if reference_image:
                 base64_image = base64.b64encode(reference_image).decode('utf-8')
                 instance["image"] = {
-                    "inlineData": {
-                        "data": base64_image,
-                        "mimeType": "image/jpeg"
-                    }
+                    "bytesBase64Encoded": base64_image,
+                    "mimeType": "image/jpeg"
                 }
             
-            # 构建参数
+            # 构建参数 - 使用Gemini API格式
             parameters = {
                 "aspectRatio": aspect_ratio,
                 "durationSeconds": min(duration, 8),  # 限制最大8秒
-                "resolution": quality,
+                "resolution": quality.lower(),  # 确保是小写格式，如 "720p", "1080p"
                 "sampleCount": 1
             }
             
