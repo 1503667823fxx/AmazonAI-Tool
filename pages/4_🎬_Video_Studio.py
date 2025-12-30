@@ -163,6 +163,10 @@ with col_output:
                 st.rerun()
             else:
                 st.error(f"❌ 生成失败: {result['error']}")
+                
+                # 显示详细错误信息
+                with st.expander("🔍 详细错误信息"):
+                    st.json(result)
     
     # 显示当前任务结果和状态更新
     if st.session_state.current_job:
@@ -235,6 +239,13 @@ with col_output:
         
         else:
             st.warning(f"⚠️ 未知状态: {job['status']}")
+            # 显示详细错误信息
+            if "error" in job:
+                st.error(f"错误详情: {job['error']}")
+            
+            # 显示完整的任务信息用于调试
+            with st.expander("🔍 调试信息"):
+                st.json(job)
 
 # --- 6. 生成历史 ---
 if st.session_state.generation_history:
@@ -305,6 +316,25 @@ with st.expander("🔧 API状态信息"):
     st.write(f"- 模型: veo-3.1-generate-preview")
     st.write(f"- 服务状态: {'🟢 已配置' if api_key_configured else '🔴 未配置'}")
     
+    # 测试API连接按钮
+    if st.button("🧪 测试API连接"):
+        with st.spinner("测试中..."):
+            try:
+                from services.video_studio.veo_service import get_veo_service
+                service = get_veo_service()
+                if service:
+                    # 尝试获取访问令牌
+                    token = service._get_access_token()
+                    if token:
+                        st.success("✅ API连接测试成功！")
+                        st.info(f"访问令牌已获取（长度: {len(token)} 字符）")
+                    else:
+                        st.error("❌ 无法获取访问令牌")
+                else:
+                    st.error("❌ 无法初始化Veo服务")
+            except Exception as e:
+                st.error(f"❌ API连接测试失败: {str(e)}")
+    
     if st.session_state.current_job:
         st.write("**当前任务:**")
         st.json({
@@ -312,7 +342,8 @@ with st.expander("🔧 API状态信息"):
             "status": st.session_state.current_job["status"],
             "progress": st.session_state.current_job["progress"],
             "created_at": st.session_state.current_job["created_at"].isoformat(),
-            "operation_name": st.session_state.current_job.get("operation_name", "N/A")
+            "operation_name": st.session_state.current_job.get("operation_name", "N/A"),
+            "error": st.session_state.current_job.get("error", "无错误")
         })
 
 # --- 9. 页脚信息 ---
