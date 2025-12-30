@@ -377,6 +377,7 @@ class VeoAPIService:
             
             if response.status_code == 200:
                 result = response.json()
+                print(f"[DEBUG] Gemini状态响应: {json.dumps(result, indent=2, ensure_ascii=False)}")
                 
                 # 检查操作是否完成
                 if result.get("done", False):
@@ -387,22 +388,58 @@ class VeoAPIService:
                             "error": result["error"].get("message", "生成失败")
                         }
                     else:
-                        # 提取视频URL
+                        # 提取视频URL - 检查更多可能的字段
                         video_url = None
                         if "response" in result:
-                            predictions = result["response"].get("predictions", [])
-                            if predictions:
-                                video_data = predictions[0].get("video", {})
-                                # 检查不同的URL字段
-                                video_url = (video_data.get("uri") or 
-                                           video_data.get("gcsUri") or
-                                           video_data.get("url"))
+                            response_data = result["response"]
+                            print(f"[DEBUG] 完整响应数据: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
+                            
+                            # 检查不同的响应结构
+                            if "predictions" in response_data:
+                                predictions = response_data["predictions"]
+                                if predictions and len(predictions) > 0:
+                                    prediction = predictions[0]
+                                    print(f"[DEBUG] 预测数据: {json.dumps(prediction, indent=2, ensure_ascii=False)}")
+                                    
+                                    # 检查视频数据
+                                    if "video" in prediction:
+                                        video_data = prediction["video"]
+                                        video_url = (video_data.get("uri") or 
+                                                   video_data.get("gcsUri") or
+                                                   video_data.get("url") or
+                                                   video_data.get("downloadUrl") or
+                                                   video_data.get("signedUrl"))
+                                    
+                                    # 直接检查预测中的URL字段
+                                    if not video_url:
+                                        video_url = (prediction.get("uri") or 
+                                                   prediction.get("gcsUri") or
+                                                   prediction.get("url") or
+                                                   prediction.get("downloadUrl") or
+                                                   prediction.get("signedUrl") or
+                                                   prediction.get("videoUri"))
+                            
+                            # 检查生成的视频列表
+                            if not video_url and "generatedVideos" in response_data:
+                                generated_videos = response_data["generatedVideos"]
+                                if generated_videos and len(generated_videos) > 0:
+                                    video_info = generated_videos[0]
+                                    if "video" in video_info:
+                                        video_data = video_info["video"]
+                                        video_url = (video_data.get("uri") or 
+                                                   video_data.get("gcsUri") or
+                                                   video_data.get("url") or
+                                                   video_data.get("downloadUrl") or
+                                                   video_data.get("signedUrl"))
+                        
+                        print(f"[DEBUG] 提取的视频URL: {video_url}")
                         
                         return {
                             "status": "completed",
                             "progress": 100,
                             "video_url": video_url,
-                            "message": "视频生成完成"
+                            "message": "视频生成完成",
+                            "raw_response": result  # 添加原始响应用于调试
                         }
                 else:
                     # 仍在处理中
