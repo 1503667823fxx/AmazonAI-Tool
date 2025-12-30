@@ -112,8 +112,9 @@ with col_input:
                 - 文件大小: {validation['file_size']/1024:.1f} KB
                 """)
                 
-                st.warning("""
-                📋 **图片到视频限制**
+                st.info("""
+                📋 **图片到视频说明**
+                - 绕过SDK限制，直接调用HTTP API
                 - 时长: 固定8秒
                 - 质量: 推荐720p
                 - 处理时间: 5-15分钟
