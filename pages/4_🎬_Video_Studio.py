@@ -100,9 +100,11 @@ with col_input:
     # 重要限制提醒
     st.info("""
     📋 **Veo 3.1 重要限制**
-    - 时长限制：仅支持 **4秒、6秒、8秒**
-    - 参考图片：使用参考图片时只能生成 **8秒** 视频
-    - 分辨率：支持720p、1080p
+    - **分辨率和时长组合限制：**
+      - 🔸 **720p**: 支持 4秒、6秒、8秒
+      - 🔸 **1080p**: 仅支持 8秒
+    - **参考图片**: 使用参考图片时只能生成 **8秒** 视频
+    - **自动调整**: 如果选择不兼容的组合，系统会自动调整为720p
     """)
     
     col_duration, col_ratio = st.columns(2)
@@ -129,7 +131,16 @@ with col_input:
     
     col_quality, col_seed = st.columns(2)
     with col_quality:
-        quality = st.selectbox("分辨率", ["720p", "1080p"], index=1)
+        quality = st.selectbox("分辨率", ["720p", "1080p"], index=0)  # 默认选择720p
+        
+        # 动态显示分辨率限制
+        if quality == "1080p":
+            if duration != 8:
+                st.warning("⚠️ 1080p分辨率仅支持8秒时长，系统将自动调整为720p")
+            else:
+                st.success("✅ 1080p + 8秒 - 兼容组合")
+        else:  # 720p
+            st.info(f"✅ 720p + {duration}秒 - 兼容组合")
     
     with col_seed:
         use_seed = st.checkbox("固定种子")
@@ -157,13 +168,23 @@ with col_input:
     
     # 验证参数组合
     validation_errors = []
+    warnings = []
+    
     if duration not in [4, 6, 8]:
         validation_errors.append(f"时长 {duration}秒 不支持，请选择4、6或8秒")
     
-    # 显示验证错误
+    # 检查分辨率和时长组合
+    if quality == "1080p" and duration != 8:
+        warnings.append(f"1080p分辨率需要8秒时长，系统将自动调整为720p")
+    
+    # 显示验证错误和警告
     if validation_errors:
         for error in validation_errors:
             st.error(f"❌ {error}")
+    
+    if warnings:
+        for warning in warnings:
+            st.warning(f"⚠️ {warning}")
     
     generate_btn = st.button(
         "🎬 生成视频",
@@ -176,6 +197,8 @@ with col_input:
         st.warning("⚠️ 请输入视频描述")
     elif validation_errors:
         st.warning("⚠️ 请修正上述参数问题")
+    elif warnings:
+        st.info("💡 系统将自动调整参数以确保兼容性")
 
 with col_output:
     st.subheader("🎥 生成结果")
@@ -488,11 +511,12 @@ with st.expander("💡 使用提示"):
     - ⚠️ 图片到视频：暂时禁用（API兼容性问题）
     - ❌ 音频生成：暂不支持（Gemini API限制）
     
-    **当前API版本限制（Gemini API）：**
-    - 支持时长：仅支持4秒、6秒、8秒（不支持其他时长）
-    - 支持分辨率：720p, 1080p
-    - 支持宽高比：16:9, 9:16
-    - 生成时间：通常3-10分钟
+    **分辨率和时长限制：**
+    - 🔸 **720p**: 支持 4秒、6秒、8秒
+    - 🔸 **1080p**: 仅支持 8秒时长
+    - 🔸 **自动调整**: 不兼容组合会自动调整为720p
+    - 🔸 **宽高比**: 16:9（横屏）、9:16（竖屏）
+    - 🔸 **生成时间**: 通常3-10分钟
     
     **API状态说明：**
     - 🔄 processing: 正在生成中
