@@ -137,7 +137,14 @@ with col_input:
             height=60
         )
         
-        generate_audio = st.checkbox("生成音频", help="为视频生成配套音频")
+        # 注意：Gemini API暂不支持音频生成
+        generate_audio = st.checkbox(
+            "生成音频", 
+            help="⚠️ 当前Gemini API版本暂不支持音频生成功能",
+            disabled=True,
+            value=False
+        )
+        st.info("💡 音频生成功能仅在Vertex AI版本中可用，Gemini API版本暂不支持")
     
     # 生成按钮
     st.markdown("---")
@@ -470,6 +477,12 @@ with st.expander("💡 使用提示"):
     - "城市夜景中霓虹灯闪烁，车流如光河般流淌，现代都市风格"
     - "海浪轻柔地拍打着沙滩，夕阳西下，天空呈现橙红色渐变"
     
+    **当前API版本限制（Gemini API）：**
+    - ❌ 音频生成：暂不支持（仅Vertex AI支持）
+    - ✅ 视频生成：完全支持
+    - ✅ 图片到视频：完全支持
+    - ✅ 文本到视频：完全支持
+    
     **技术限制：**
     - 支持时长：仅支持4秒、6秒、8秒（不支持其他时长）
     - 参考图片转视频：仅支持8秒时长
@@ -489,7 +502,20 @@ with st.expander("💡 使用提示"):
 
 # --- 8. API状态信息 ---
 with st.expander("🔧 API状态信息"):
-    st.success("✅ **使用 Gemini API**")
+    st.success("✅ **使用 Google GenAI SDK (Gemini API)**")
+    st.info("💡 **当前版本特性：**")
+    st.markdown("""
+    - ✅ 文本到视频生成
+    - ✅ 图片到视频生成  
+    - ✅ 高质量视频输出
+    - ✅ 多种分辨率支持
+    - ❌ 音频生成（仅Vertex AI支持）
+    
+    **如需音频功能，请考虑：**
+    - 升级到Vertex AI版本
+    - 使用第三方音频生成工具
+    - 后期添加背景音乐
+    """)
     
     st.write("**当前配置:**")
     st.write(f"- API类型: Gemini API")
