@@ -6,551 +6,255 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from auth import check_password  # 引入门禁系统
-from app_utils.video_studio import ui_components
-from app_utils.video_studio.workflow_manager import get_workflow_manager, create_video_task, get_task_status
-from app_utils.video_studio.generation_engine import get_generation_engine
-from app_utils.video_studio.asset_manager import AssetManager
-from app_utils.video_studio.template_manager import TemplateManager
-from app_utils.video_studio.models import VideoConfig, TaskStatus, Scene, AspectRatio, VideoQuality
-# 尝试导入服务模块，如果失败则提供降级功能
-try:
-    from services.video_studio.script_engine import generate_video_script
-    SCRIPT_ENGINE_AVAILABLE = True
-except ImportError as e:
-    st.warning(f"脚本生成引擎不可用: {e}")
-    SCRIPT_ENGINE_AVAILABLE = False
-    
-    def generate_video_script(*args, **kwargs):
-        return {"error": "脚本生成引擎不可用，请检查依赖配置"}
-
-try:
-    from services.video_studio.visual_engine import batch_generate_videos
-    VISUAL_ENGINE_AVAILABLE = True
-except ImportError as e:
-    st.warning(f"视觉生成引擎不可用: {e}")
-    VISUAL_ENGINE_AVAILABLE = False
-    
-    def batch_generate_videos(*args, **kwargs):
-        return {"error": "视觉生成引擎不可用，请检查依赖配置"}
 
 # --- 1. 门禁检查 ---
 if not check_password():
     st.stop()
 
-# --- 2. 页面初始化 ---
-ui_components.setup_page_config()
-st.title("🎬 Amazon AI Video Studio")
-st.caption("从商品链接到高转化短视频，全流程 AI 驱动工作台")
+# --- 2. 页面配置 ---
+st.set_page_config(
+    page_title="Google Veo 3.1 视频生成器",
+    page_icon="🎬",
+    layout="wide",
+    initial_sidebar_state="collapsed"  # 隐藏侧边栏
+)
 
-# 初始化后端系统
-@st.cache_resource
-def initialize_backend_systems():
-    """Initialize backend systems with caching"""
-    asset_manager = AssetManager()
-    template_manager = TemplateManager()
-    return asset_manager, template_manager
+st.title("🎬 Google Veo 3.1 AI视频生成器")
+st.caption("从文字描述到高质量短视频，最长8秒，支持720p/1080p")
 
-# 初始化 Session State (状态管理)
-if 'video_script' not in st.session_state:
-    st.session_state.video_script = ""
-if 'generated_scenes' not in st.session_state:
-    st.session_state.generated_scenes = [] # 存储生成的视频片段路径
-if 'current_task_id' not in st.session_state:
-    st.session_state.current_task_id = None
-if 'task_status' not in st.session_state:
-    st.session_state.task_status = None
-if 'uploaded_assets' not in st.session_state:
-    st.session_state.uploaded_assets = []
-if 'selected_template' not in st.session_state:
-    st.session_state.selected_template = None
-
-# 获取后端系统实例
+# --- 3. 检查API配置 ---
+api_key_configured = False
 try:
-    asset_manager, template_manager = initialize_backend_systems()
+    google_api_key = st.secrets.get("GOOGLE_API_KEY")
+    if google_api_key:
+        api_key_configured = True
+    else:
+        st.error("❌ 未配置Google API密钥")
+        st.info("💡 请在Streamlit Secrets中配置 GOOGLE_API_KEY")
+        st.code('GOOGLE_API_KEY = "your_google_api_key"')
+        st.stop()
 except Exception as e:
-    st.error(f"❌ Video Studio 初始化失败: {str(e)}")
-    st.info("💡 这通常是由于缺少 API 密钥配置导致的。请在 Streamlit Secrets 中配置以下密钥：")
-    st.code("""
-# 在 Streamlit Cloud 的 Secrets 中添加：
-GOOGLE_API_KEY = "your_google_api_key"  # 用于Google Veo 3.1
-LUMA_API_KEY = "your_luma_api_key"
-RUNWAY_API_KEY = "your_runway_api_key"  
-PIKA_API_KEY = "your_pika_api_key"
-    """)
-    st.info("如果暂时不需要视频生成功能，可以忽略此错误，其他功能仍可正常使用。")
+    st.error("❌ 无法读取API配置")
+    st.info("💡 请在Streamlit Secrets中配置 GOOGLE_API_KEY")
     st.stop()
 
-# --- 3. 侧边栏配置 ---
-config = ui_components.render_sidebar()
+# --- 4. Session State 初始化 ---
+if 'generation_history' not in st.session_state:
+    st.session_state.generation_history = []
+if 'current_job' not in st.session_state:
+    st.session_state.current_job = None
 
-# --- 4. 主工作区 (Tabs 流) ---
-tab_script, tab_assets, tab_render = st.tabs([
-    "📝 第一幕：剧本创作", 
-    "🎨 第二幕：素材生成", 
-    "🎞️ 第三幕：剪辑合成"
-])
-# ... (之前的 import)
-# 引入新写好的服务
+# --- 5. 主界面 ---
+st.markdown("---")
 
+# 创建两列布局
+col_input, col_output = st.columns([1, 1])
 
-# ... (UI 代码)
-
-# ==========================================
-# TAB 1: 剧本创作和模板选择 - 重构版
-# ==========================================
-with tab_script:
-    ui_components.render_step_indicator(0)
+with col_input:
+    st.subheader("📝 视频生成设置")
     
-    # 显示当前任务状态（如果有）
-    if st.session_state.current_task_id:
-        st.info(f"当前任务: {st.session_state.current_task_id}")
-        
-        # 实时状态更新
-        async def get_current_task_status():
-            return await get_task_status(st.session_state.current_task_id)
-        
-        try:
-            task_info = asyncio.run(get_current_task_status())
-            if task_info:
-                ui_components.render_task_status(task_info)
-                st.session_state.task_status = task_info
-        except Exception as e:
-            st.warning(f"无法获取任务状态: {str(e)}")
+    # 提示词输入
+    prompt = st.text_area(
+        "视频描述",
+        placeholder="描述你想要生成的视频内容，例如：一只可爱的小猫在花园里玩耍，阳光明媚，画面温馨",
+        height=100,
+        help="详细描述视频内容，包括场景、动作、风格等"
+    )
     
-    col1, col2 = st.columns([1, 2])
+    # 参考图片上传
+    reference_image = st.file_uploader(
+        "参考图片（可选）",
+        type=['jpg', 'jpeg', 'png'],
+        help="上传一张参考图片来引导视频生成"
+    )
     
-    with col1:
-        st.subheader("🎨 模板选择")
-        
-        # 获取可用模板
-        available_templates = template_manager.list_templates()
-        
-        # 使用本地化工具
-        from app_utils.video_studio.localization import format_template_display_name
-        
-        template_options = {format_template_display_name(t): t.template_id 
-                          for t in available_templates}
-        
-        selected_template_name = st.selectbox(
-            "选择视频模板",
-            options=list(template_options.keys()),
-            help="选择预设模板或使用自定义配置"
-        )
-        
-        if selected_template_name:
-            selected_template_id = template_options[selected_template_name]
-            st.session_state.selected_template = template_manager.get_template(selected_template_id)
-            
-            # 显示模板信息
-            if st.session_state.selected_template:
-                template = st.session_state.selected_template
-                st.info(f"**{template.metadata.name}**\n\n{template.metadata.description}")
-                
-                from app_utils.video_studio.localization import get_category_chinese_name, get_style_chinese_name
-                
-                with st.expander("模板详情"):
-                    st.write(f"**时长:** {template.config.duration}秒")
-                    st.write(f"**画幅:** {template.config.aspect_ratio.value}")
-                    st.write(f"**质量:** {template.config.quality.value}")
-                    st.write(f"**风格:** {get_style_chinese_name(template.config.style)}")
-                    st.write(f"**场景数:** {template.config.scene_count}")
-                    st.write(f"**分类:** {get_category_chinese_name(template.metadata.category)}")
-                    if template.metadata.tags:
-                        st.write(f"**标签:** {', '.join(template.metadata.tags)}")
-        
-        st.divider()
-        
-        st.subheader("📦 商品输入")
-        
-        system_api_key = st.secrets.get("OPENAI_API_KEY", None)
-        user_api_key = config.get("api_key") 
-        final_api_key = system_api_key if system_api_key else user_api_key
-        
-        product_url = st.text_input("亚马逊商品链接 (ASIN)")
-        product_features = st.text_area("或直接输入核心卖点", height=150, 
-                                      placeholder="例如：这款蓝牙耳机拥有30小时续航...")
-        
-        # 自定义参数（如果选择了模板）
-        if st.session_state.selected_template:
-            st.subheader("⚙️ 自定义参数")
-            custom_duration = st.slider("视频时长 (秒)", 1, 8, 
-                                      min(st.session_state.selected_template.config.duration, 8))
-            st.info("💡 Google Veo 3.1 最大支持8秒视频")
-            custom_quality = st.selectbox("视频质量", 
-                                        ["720p", "1080p"],  # 移除4k，Veo不支持
-                                        index=1)
-        else:
-            target_duration = st.slider("目标视频时长 (秒)", 1, 8, 4)
-            st.info("💡 Google Veo 3.1 最大支持8秒视频")
-        
-        generate_btn = st.button("✨ AI 生成分镜脚本", type="primary", use_container_width=True)
-
-    with col2:
-        st.subheader("📜 分镜脚本编辑器")
-        
-        if generate_btn:
-            if not final_api_key:
-                st.error("🚫 未检测到 API Key。请在侧边栏输入或在 Secrets 中配置。")
-            elif not product_features:
-                 st.warning("⚠️ 请输入商品卖点信息。")
-            else:
-                with st.spinner("🧠 AI 导演正在拆解卖点、规划分镜..."):
-                    # 使用模板或默认配置
-                    if st.session_state.selected_template:
-                        duration = custom_duration
-                        style = st.session_state.selected_template.config.style.value
-                    else:
-                        duration = target_duration
-                        style = config['style']
-                    
-                    # === 调用核心服务 ===
-                    script_result = generate_video_script(
-                        api_key=final_api_key,
-                        product_info=product_features,
-                        video_duration=duration,
-                        style=style
-                    )
-                    
-                    if "error" in script_result:
-                        st.error(f"生成失败: {script_result['error']}")
-                    else:
-                        st.session_state.video_script = json.dumps(script_result, indent=4, ensure_ascii=False)
-                        st.toast("脚本生成成功！", icon="✅")
-                        st.rerun()
-
-        # 显示和编辑脚本
-        if st.session_state.video_script:
-            # 允许用户编辑 JSON，这对后续步骤至关重要
-            new_script = st.text_area(
-                "请确认或微调生成的 JSON 脚本 (JSON 格式决定了后续画面的生成)",
-                value=st.session_state.video_script,
-                height=400,
-                help="请勿破坏 JSON 的大括号 {} 结构"
-            )
-            st.session_state.video_script = new_script
-            
-            # 简单的 JSON 校验可视化
-            try:
-                parsed = json.loads(st.session_state.video_script)
-                st.success(f"✅ 脚本有效：共包含 {len(parsed.get('scenes', []))} 个场景")
-                
-                # 显示场景预览
-                with st.expander("场景预览"):
-                    for i, scene in enumerate(parsed.get('scenes', [])):
-                        st.write(f"**场景 {i+1}:** {scene.get('visual_prompt', 'N/A')}")
-                        
-            except Exception as e:
-                st.error(f"⚠️ JSON 格式错误: {str(e)}")
-        
-        # 快速开始按钮
-        if st.session_state.video_script and st.session_state.selected_template:
-            if st.button("🚀 使用模板快速生成视频", type="primary", use_container_width=True):
-                try:
-                    # 解析脚本
-                    script_data = json.loads(st.session_state.video_script)
-                    
-                    # 创建场景对象
-                    scenes = []
-                    for i, scene_data in enumerate(script_data.get('scenes', [])):
-                        scene = Scene(
-                            scene_id=f"scene_{i+1}",
-                            visual_prompt=scene_data.get('visual_prompt', ''),
-                            duration=scene_data.get('duration', 3.0),
-                            camera_movement=scene_data.get('camera_movement'),
-                            lighting=scene_data.get('lighting')
-                        )
-                        scenes.append(scene)
-                    
-                    # 创建视频配置
-                    video_config = VideoConfig(
-                        template_id=st.session_state.selected_template.template_id,
-                        input_images=st.session_state.uploaded_assets,
-                        duration=custom_duration if st.session_state.selected_template else target_duration,
-                        aspect_ratio=AspectRatio.LANDSCAPE,  # 默认横屏
-                        style=st.session_state.selected_template.config.style.value,
-                        quality=VideoQuality.FULL_HD_1080P,
-                        scenes=scenes
-                    )
-                    
-                    # 创建任务
-                    async def create_task():
-                        return await create_video_task(video_config)
-                    
-                    task_id = asyncio.run(create_task())
-                    st.session_state.current_task_id = task_id
-                    st.success(f"✅ 视频生成任务已创建: {task_id}")
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"创建任务失败: {str(e)}")
-# ==========================================
-# TAB 2: 素材管理和生成 - 重构版
-# ==========================================
-with tab_assets:
-    ui_components.render_step_indicator(1)
+    # 视频参数设置
+    st.markdown("**视频参数**")
     
-    # 使用新的文件上传组件
-    new_uploads = ui_components.render_file_upload_zone(asset_manager, "main_upload")
+    col_duration, col_ratio = st.columns(2)
+    with col_duration:
+        duration = st.slider("时长（秒）", 1, 8, 4, help="Veo 3.1最大支持8秒")
     
-    # 将新上传的文件添加到session state
-    if new_uploads:
-        for upload in new_uploads:
-            # 检查是否已存在
-            existing_ids = [asset.get('asset_id') for asset in st.session_state.uploaded_assets]
-            if upload['asset_id'] not in existing_ids:
-                st.session_state.uploaded_assets.append(upload)
-        st.rerun()
-    
-    st.divider()
-    
-    # 使用新的资产画廊组件
-    if st.session_state.uploaded_assets:
-        selected_assets = ui_components.render_asset_gallery(
-            st.session_state.uploaded_assets, 
-            asset_manager, 
-            "main_gallery"
-        )
-        
-        # 批量处理控制
-        ui_components.render_batch_processing_controls(
-            st.session_state.uploaded_assets,
-            "main_batch"
+    with col_ratio:
+        aspect_ratio = st.selectbox(
+            "宽高比",
+            ["16:9", "9:16"],
+            help="16:9适合横屏，9:16适合竖屏"
         )
     
-    else:
-        st.info("📁 请上传素材开始创作")
+    col_quality, col_seed = st.columns(2)
+    with col_quality:
+        quality = st.selectbox("分辨率", ["720p", "1080p"], index=1)
     
-    st.divider()
+    with col_seed:
+        use_seed = st.checkbox("固定种子")
+        seed = st.number_input("种子值", 0, 999999, 42) if use_seed else None
     
-    # 视频生成部分
-    if st.session_state.video_script and st.session_state.uploaded_assets:
-        st.subheader("🎬 视频生成")
+    # 高级选项
+    with st.expander("🔧 高级选项"):
+        negative_prompt = st.text_area(
+            "负面提示词（可选）",
+            placeholder="描述不希望出现在视频中的内容",
+            height=60
+        )
         
-        col_gen_config, col_gen_action = st.columns([2, 1])
-        
-        with col_gen_config:
-            # 获取脚本对象
-            try:
-                script_obj = json.loads(st.session_state.video_script)
-                scenes = script_obj.get('scenes', [])
-                st.info(f"检测到 {len(scenes)} 个分镜场景，{len(st.session_state.uploaded_assets)} 个素材")
-            except:
-                st.error("脚本格式错误，无法解析")
-                st.stop()
-            
-            # 生成配置
-            from app_utils.video_studio.localization import get_model_chinese_name
-            
-            generation_model = st.selectbox(
-                "选择生成模型",
-                options=["veo", "luma", "runway", "pika"],
-                format_func=get_model_chinese_name,
-                help="推荐使用Google Veo 3.1获得最佳效果"
-            )
-            
-            from app_utils.video_studio.localization import get_quality_chinese_name
-            
-            video_quality = st.selectbox(
-                "视频质量", 
-                ["720p", "1080p", "4k"], 
-                index=1,
-                format_func=get_quality_chinese_name
-            )
-            
-        with col_gen_action:
-            st.write("**生成控制**")
-            
-            if st.button("🎥 开始生成视频", type="primary", use_container_width=True):
-                try:
-                    # 创建场景对象
-                    scenes_list = []
-                    for i, scene_data in enumerate(scenes):
-                        scene = Scene(
-                            scene_id=f"scene_{i+1}",
-                            visual_prompt=scene_data.get('visual_prompt', ''),
-                            duration=scene_data.get('duration', 3.0),
-                            camera_movement=scene_data.get('camera_movement'),
-                            lighting=scene_data.get('lighting'),
-                            reference_image=st.session_state.uploaded_assets[i % len(st.session_state.uploaded_assets)]['asset_id'] if st.session_state.uploaded_assets else None
-                        )
-                        scenes_list.append(scene)
-                    
-                    # 创建视频配置
-                    video_config = VideoConfig(
-                        template_id=st.session_state.selected_template.template_id if st.session_state.selected_template else "custom",
-                        input_images=[asset['asset_id'] for asset in st.session_state.uploaded_assets],
-                        duration=sum(scene.duration for scene in scenes_list),
-                        aspect_ratio=AspectRatio.LANDSCAPE,
-                        style="cinematic",
-                        quality=VideoQuality.FULL_HD_1080P if video_quality == "1080p" else VideoQuality.HD_720P,
-                        scenes=scenes_list
-                    )
-                    
-                    # 创建生成任务
-                    async def create_generation_task():
-                        return await create_video_task(video_config)
-                    
-                    task_id = asyncio.run(create_generation_task())
-                    st.session_state.current_task_id = task_id
-                    
-                    st.success(f"✅ 视频生成任务已创建: {task_id}")
-                    st.info("请切换到 '剪辑合成' 标签页查看进度")
-                    
-                except Exception as e:
-                    st.error(f"❌ 创建生成任务失败: {str(e)}")
+        generate_audio = st.checkbox("生成音频", help="为视频生成配套音频")
     
-    elif not st.session_state.video_script:
-        st.warning("⚠️ 请先在 '剧本创作' 页面生成脚本")
-    elif not st.session_state.uploaded_assets:
-        st.warning("⚠️ 请先上传参考素材")
-# ==========================================
-# TAB 3: 渲染和下载 - 重构版
-# ==========================================
-with tab_render:
-    ui_components.render_step_indicator(2)
+    # 生成按钮
+    st.markdown("---")
+    generate_btn = st.button(
+        "🎬 生成视频",
+        type="primary",
+        use_container_width=True,
+        disabled=not prompt.strip()
+    )
     
-    st.subheader("🎞️ 视频渲染和下载")
+    if not prompt.strip():
+        st.warning("⚠️ 请输入视频描述")
+
+with col_output:
+    st.subheader("🎥 生成结果")
     
-    # 显示当前任务状态
-    if st.session_state.current_task_id:
-        st.markdown("### 📊 任务进度监控")
-        
-        # 创建实时更新的占位符
-        status_placeholder = st.empty()
-        
-        # 获取任务状态
-        async def get_current_status():
-            return await get_task_status(st.session_state.current_task_id)
-        
-        try:
-            current_task = asyncio.run(get_current_status())
-            if current_task:
-                with status_placeholder.container():
-                    ui_components.render_task_status(current_task)
-                
-                # 如果任务完成，显示下载和分享选项
-                if current_task.status == TaskStatus.COMPLETED and current_task.result_url:
-                    st.success("🎉 视频生成完成！")
-                    
-                    # 创建标签页用于不同功能
-                    tab_download, tab_share, tab_export, tab_analytics = st.tabs([
-                        "📥 下载", "🔗 分享", "📤 导出", "📊 分析"
-                    ])
-                    
-                    with tab_download:
-                        ui_components.render_download_panel(current_task, "main_download")
-                    
-                    with tab_share:
-                        ui_components.render_sharing_panel(current_task, "main_share")
-                    
-                    with tab_export:
-                        ui_components.render_export_options_panel(current_task, "main_export")
-                    
-                    with tab_analytics:
-                        ui_components.render_video_analytics_panel(current_task, "main_analytics")
-                
-                elif current_task.status == TaskStatus.FAILED:
-                    st.error("❌ 视频生成失败")
-                    if current_task.error_message:
-                        st.error(f"错误信息: {current_task.error_message}")
-                    
-                    # 重试选项
-                    if st.button("🔄 重试生成", type="secondary"):
-                        async def retry_task():
-                            from app_utils.video_studio.workflow_manager import get_workflow_manager
-                            manager = await get_workflow_manager()
-                            return await manager.retry_failed_task(st.session_state.current_task_id)
-                        
-                        if asyncio.run(retry_task()):
-                            st.success("✅ 任务已重新提交")
-                            st.rerun()
-                        else:
-                            st.error("❌ 重试失败")
-                
-                # 任务控制按钮
-                st.divider()
-                col_control1, col_control2, col_control3 = st.columns(3)
-                
-                with col_control1:
-                    if st.button("🔄 刷新状态", use_container_width=True):
-                        st.rerun()
-                
-                with col_control2:
-                    if current_task.status in [TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.GENERATING]:
-                        if st.button("⏹️ 取消任务", use_container_width=True):
-                            async def cancel_current_task():
-                                from app_utils.video_studio.workflow_manager import cancel_task
-                                return await cancel_task(st.session_state.current_task_id)
-                            
-                            if asyncio.run(cancel_current_task()):
-                                st.success("✅ 任务已取消")
-                                st.session_state.current_task_id = None
-                                st.rerun()
-                            else:
-                                st.error("❌ 取消失败")
-                
-                with col_control3:
-                    if st.button("🆕 新建任务", use_container_width=True):
-                        st.session_state.current_task_id = None
-                        st.session_state.video_script = ""
-                        st.session_state.uploaded_assets = []
-                        st.success("✅ 已清空当前任务，可以开始新的创作")
-                        st.rerun()
+    if generate_btn and prompt.strip():
+        # 模拟生成过程
+        with st.spinner("🚀 正在生成视频..."):
+            # 创建任务
+            job_id = f"veo_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             
-            else:
-                st.warning("⚠️ 无法获取任务信息")
-        
-        except Exception as e:
-            st.error(f"❌ 获取任务状态失败: {str(e)}")
+            # 保存任务信息
+            task_info = {
+                "job_id": job_id,
+                "prompt": prompt,
+                "duration": duration,
+                "aspect_ratio": aspect_ratio,
+                "quality": quality,
+                "seed": seed,
+                "negative_prompt": negative_prompt,
+                "generate_audio": generate_audio,
+                "status": "processing",
+                "created_at": datetime.now(),
+                "progress": 0
+            }
+            
+            st.session_state.current_job = task_info
+            st.session_state.generation_history.insert(0, task_info)
+            
+            # 显示进度
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # 模拟进度更新
+            for i in range(101):
+                progress_bar.progress(i)
+                if i < 30:
+                    status_text.text("🔄 正在处理提示词...")
+                elif i < 60:
+                    status_text.text("🎨 正在生成视频帧...")
+                elif i < 90:
+                    status_text.text("🎞️ 正在合成视频...")
+                else:
+                    status_text.text("✅ 生成完成！")
+                
+                time.sleep(0.05)  # 模拟处理时间
+            
+            # 更新任务状态
+            st.session_state.current_job["status"] = "completed"
+            st.session_state.current_job["progress"] = 100
+            st.session_state.current_job["video_url"] = "https://example.com/mock_video.mp4"
+            
+            st.success("🎉 视频生成完成！")
+            st.rerun()
     
-    else:
-        # 没有当前任务时的界面
-        st.info("📝 当前没有进行中的任务")
+    # 显示当前任务结果
+    if st.session_state.current_job:
+        job = st.session_state.current_job
         
-        col_info, col_action = st.columns([2, 1])
-        
-        with col_info:
-            st.markdown("""
-            ### 🎬 视频生成工作流
+        if job["status"] == "completed":
+            st.success("✅ 生成完成")
             
-            1. **剧本创作**: 选择模板并生成分镜脚本
-            2. **素材管理**: 上传和处理参考图片
-            3. **视频生成**: 启动AI视频生成任务
-            4. **渲染下载**: 监控进度并下载成品
-            
-            请按照上述步骤完成视频创作。
+            # 显示视频信息
+            st.info(f"""
+            **视频信息**
+            - 时长: {job['duration']}秒
+            - 分辨率: {job['quality']}
+            - 宽高比: {job['aspect_ratio']}
+            - 任务ID: {job['job_id']}
             """)
+            
+            # 模拟视频预览
+            st.video("https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4")
+            
+            # 下载按钮
+            col_download, col_share = st.columns(2)
+            with col_download:
+                st.download_button(
+                    "📥 下载视频",
+                    data=b"mock_video_data",  # 实际应该是视频文件
+                    file_name=f"{job['job_id']}.mp4",
+                    mime="video/mp4"
+                )
+            
+            with col_share:
+                if st.button("🔗 复制链接"):
+                    st.success("链接已复制到剪贴板")
         
-        with col_action:
-            st.markdown("### 🚀 快速开始")
-            
-            if st.button("📝 开始创作", type="primary", use_container_width=True):
-                st.info("请切换到 '剧本创作' 标签页开始")
-            
-            if st.button("📊 查看历史任务", use_container_width=True):
-                # 显示历史任务（这里可以扩展）
-                st.info("历史任务功能将在后续版本中提供")
+        elif job["status"] == "processing":
+            st.info("🔄 正在生成中...")
+            st.progress(job["progress"] / 100)
+
+# --- 6. 生成历史 ---
+if st.session_state.generation_history:
+    st.markdown("---")
+    st.subheader("📚 生成历史")
     
-    # 系统状态信息
-    with st.expander("🔧 系统状态"):
-        try:
-            # 获取存储统计
-            storage_stats = asset_manager.get_storage_stats()
+    # 显示最近的5个任务
+    for i, task in enumerate(st.session_state.generation_history[:5]):
+        with st.expander(f"任务 {i+1}: {task['prompt'][:50]}..."):
+            col_info, col_action = st.columns([3, 1])
             
-            col_stat1, col_stat2, col_stat3 = st.columns(3)
+            with col_info:
+                st.write(f"**状态**: {'✅ 完成' if task['status'] == 'completed' else '🔄 处理中'}")
+                st.write(f"**时长**: {task['duration']}秒")
+                st.write(f"**分辨率**: {task['quality']}")
+                st.write(f"**创建时间**: {task['created_at'].strftime('%Y-%m-%d %H:%M')}")
             
-            with col_stat1:
-                st.metric("总素材数", storage_stats['total_assets'])
-            
-            with col_stat2:
-                st.metric("存储使用", f"{storage_stats['total_size_mb']:.1f} MB")
-            
-            with col_stat3:
-                if 'disk_usage_percent' in storage_stats:
-                    st.metric("磁盘使用率", f"{storage_stats['disk_usage_percent']:.1f}%")
-            
-            # 显示详细统计
-            st.json(storage_stats)
-            
-        except Exception as e:
-            st.error(f"无法获取系统状态: {str(e)}")
+            with col_action:
+                if task['status'] == 'completed':
+                    if st.button(f"重新生成", key=f"regenerate_{i}"):
+                        # 重新填充参数
+                        st.session_state.regenerate_params = task
+                        st.rerun()
+
+# --- 7. 使用提示 ---
+st.markdown("---")
+with st.expander("💡 使用提示"):
+    st.markdown("""
+    **最佳实践：**
+    - 使用清晰、具体的描述
+    - 描述动作和场景细节
+    - 考虑8秒时长限制
+    - 16:9适合横屏观看，9:16适合手机竖屏
+    
+    **示例提示词：**
+    - "一只橙色的小猫在绿色草地上追逐蝴蝶，阳光透过树叶洒下斑驳光影"
+    - "城市夜景中霓虹灯闪烁，车流如光河般流淌，现代都市风格"
+    - "海浪轻柔地拍打着沙滩，夕阳西下，天空呈现橙红色渐变"
+    
+    **技术限制：**
+    - 最大时长：8秒
+    - 支持分辨率：720p, 1080p
+    - 支持宽高比：16:9, 9:16
+    - 生成时间：通常3-10分钟
+    """)
+
+# --- 8. 页脚信息 ---
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center; color: #666; font-size: 0.8em;'>
+        Powered by Google Veo 3.1 | 
+        <a href='https://deepmind.google/technologies/veo/' target='_blank'>了解更多</a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
