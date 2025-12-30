@@ -99,7 +99,7 @@ class VeoAPIService:
             if reference_image:
                 print(f"[DEBUG] 处理参考图片，大小: {len(reference_image)} bytes")
                 
-                # 使用图片处理器
+                # 尝试图片处理
                 image_result = process_image_for_video_generation(reference_image)
                 
                 if not image_result["success"]:
@@ -107,59 +107,89 @@ class VeoAPIService:
                 
                 print(f"[DEBUG] 图片处理成功")
                 
-                # 尝试多种格式
-                formats = image_result["formats"]
-                last_error = None
+                # 尝试最简单的方法 - 直接使用base64字符串
+                base64_data = image_result["base64_data"]
                 
-                # 按优先级尝试不同方法
-                attempts = [
-                    ("standard_dict", formats["standard"]),
-                    ("raw_bytes_sdk", formats["raw_bytes"])
-                ]
+                print(f"[DEBUG] 尝试直接base64方法")
                 
-                for attempt_name, format_data in attempts:
-                    print(f"[DEBUG] 尝试方法: {attempt_name}")
+                try:
+                    # 方法1: 创建包含base64和mime类型的字典
+                    image_dict = {
+                        "bytesBase64Encoded": base64_data,
+                        "mimeType": "image/jpeg"
+                    }
                     
+                    operation = self.client.models.generate_videos(
+                        model=self.model_id,
+                        prompt=prompt,
+                        image=image_dict,
+                        config=config
+                    )
+                    
+                    print(f"[DEBUG] 直接字典方法成功!")
+                    
+                except Exception as e1:
+                    print(f"[DEBUG] 直接字典方法失败: {str(e1)}")
+                    
+                    # 方法2: 尝试使用SDK创建Image对象
                     try:
-                        if attempt_name == "standard_dict":
-                            # 直接使用标准字典格式
-                            operation = self.client.models.generate_videos(
-                                model=self.model_id,
-                                prompt=prompt,
-                                image=format_data,
-                                config=config
-                            )
+                        print(f"[DEBUG] 尝试SDK Image对象方法")
                         
-                        elif attempt_name == "raw_bytes_sdk":
-                            # 使用SDK对象
-                            image_obj = None
-                            
-                            # 尝试不同的SDK方法
-                            if hasattr(types, 'Image') and hasattr(types.Image, 'from_bytes'):
-                                image_obj = types.Image.from_bytes(format_data)
-                            elif hasattr(types, 'Part') and hasattr(types.Part, 'from_bytes'):
-                                image_obj = types.Part.from_bytes(data=format_data, mime_type="image/jpeg")
+                        # 使用原始字节数据创建Image对象
+                        raw_bytes = image_result["optimized_bytes"]
+                        
+                        if hasattr(types, 'Image'):
+                            if hasattr(types.Image, 'from_bytes'):
+                                image_obj = types.Image.from_bytes(raw_bytes)
+                            elif hasattr(types.Image, '__init__'):
+                                # 尝试直接构造
+                                image_obj = types.Image(
+                                    bytesBase64Encoded=base64_data,
+                                    mimeType="image/jpeg"
+                                )
                             else:
-                                raise RuntimeError("SDK对象创建方法不可用")
+                                raise RuntimeError("无法创建Image对象")
+                        else:
+                            raise RuntimeError("types.Image不存在")
+                        
+                        operation = self.client.models.generate_videos(
+                            model=self.model_id,
+                            prompt=prompt,
+                            image=image_obj,
+                            config=config
+                        )
+                        
+                        print(f"[DEBUG] SDK Image对象方法成功!")
+                        
+                    except Exception as e2:
+                        print(f"[DEBUG] SDK Image对象方法失败: {str(e2)}")
+                        
+                        # 方法3: 尝试Part对象
+                        try:
+                            print(f"[DEBUG] 尝试SDK Part对象方法")
                             
-                            operation = self.client.models.generate_videos(
-                                model=self.model_id,
-                                prompt=prompt,
-                                image=image_obj,
-                                config=config
-                            )
-                        
-                        print(f"[DEBUG] 方法 {attempt_name} 成功!")
-                        break
-                        
-                    except Exception as e:
-                        error_msg = str(e)
-                        print(f"[DEBUG] 方法 {attempt_name} 失败: {error_msg}")
-                        last_error = error_msg
-                        continue
-                else:
-                    # 所有方法都失败了
-                    raise RuntimeError(f"所有图片处理方法都失败了。最后错误: {last_error}")
+                            if hasattr(types, 'Part') and hasattr(types.Part, 'from_bytes'):
+                                part_obj = types.Part.from_bytes(
+                                    data=raw_bytes, 
+                                    mime_type="image/jpeg"
+                                )
+                                
+                                operation = self.client.models.generate_videos(
+                                    model=self.model_id,
+                                    prompt=prompt,
+                                    image=part_obj,
+                                    config=config
+                                )
+                                
+                                print(f"[DEBUG] SDK Part对象方法成功!")
+                            else:
+                                raise RuntimeError("types.Part.from_bytes不存在")
+                                
+                        except Exception as e3:
+                            print(f"[DEBUG] SDK Part对象方法失败: {str(e3)}")
+                            
+                            # 所有方法都失败了
+                            raise RuntimeError(f"所有图片处理方法都失败了。错误: 字典方法={str(e1)}, Image对象={str(e2)}, Part对象={str(e3)}")
                         
             else:
                 print(f"[DEBUG] 文本到视频生成")
