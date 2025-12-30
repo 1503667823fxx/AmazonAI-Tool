@@ -290,6 +290,8 @@ with col_output:
                 job["video_bytes"] = status_result["video_bytes"]
             if "video_url" in status_result:
                 job["video_url"] = status_result["video_url"]
+            if "raw_response" in status_result:
+                job["raw_response"] = status_result["raw_response"]
             
             if "error" in status_result:
                 job["error"] = status_result["error"]
@@ -374,13 +376,14 @@ with col_output:
                 
                 # 显示调试信息
                 with st.expander("🔍 调试信息"):
-                    if hasattr(job, 'operation'):
-                        st.write("操作对象存在")
-                    else:
-                        st.write("操作对象不存在")
+                    st.write(f"任务ID: {job['job_id']}")
+                    st.write(f"操作名称: {job.get('operation_name', 'N/A')}")
                     
                     if "raw_response" in job:
+                        st.write("**API原始响应:**")
                         st.json(job["raw_response"])
+                    else:
+                        st.write("无原始响应数据")
             # 添加操作按钮
             st.markdown("---")
             col1, col2 = st.columns(2)
