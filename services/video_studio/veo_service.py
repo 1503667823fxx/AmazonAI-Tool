@@ -140,9 +140,18 @@ class VeoAPIService:
                 }
             
             # 构建参数 - 使用Gemini API格式
+            # 确保时长符合Veo 3.1限制
+            valid_durations = [4, 6, 8]
+            if duration not in valid_durations:
+                duration = min(valid_durations, key=lambda x: abs(x - duration))
+            
+            # 参考图片转视频只支持8秒
+            if reference_image and duration != 8:
+                duration = 8
+            
             parameters = {
                 "aspectRatio": aspect_ratio,
-                "durationSeconds": min(duration, 8),  # 限制最大8秒
+                "durationSeconds": duration,
                 "resolution": quality.lower(),  # 确保是小写格式，如 "720p", "1080p"
                 "sampleCount": 1
             }
@@ -240,9 +249,18 @@ class VeoAPIService:
                 }
             
             # 构建参数
+            # 确保时长符合Veo 3.1限制
+            valid_durations = [4, 6, 8]
+            if duration not in valid_durations:
+                duration = min(valid_durations, key=lambda x: abs(x - duration))
+            
+            # 参考图片转视频只支持8秒
+            if reference_image and duration != 8:
+                duration = 8
+            
             parameters = {
                 "aspectRatio": aspect_ratio,
-                "durationSeconds": min(duration, 8),  # 限制最大8秒
+                "durationSeconds": duration,
                 "resolution": quality,
                 "sampleCount": 1
             }
