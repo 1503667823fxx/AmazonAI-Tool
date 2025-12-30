@@ -31,11 +31,21 @@ except ImportError as e:
     PikaAdapter = None
     PIKA_AVAILABLE = False
 
+try:
+    from .veo_adapter import VeoAdapter
+    VEO_AVAILABLE = True
+except ImportError as e:
+    warnings.warn(f"VeoAdapter not available: {e}. Please install missing dependencies: pip install google-auth google-auth-oauthlib aiohttp")
+    VeoAdapter = None
+    VEO_AVAILABLE = False
+
 __all__ = [
     'LumaAdapter',
     'RunwayAdapter', 
     'PikaAdapter',
+    'VeoAdapter',
     'LUMA_AVAILABLE',
     'RUNWAY_AVAILABLE',
-    'PIKA_AVAILABLE'
+    'PIKA_AVAILABLE',
+    'VEO_AVAILABLE'
 ]
