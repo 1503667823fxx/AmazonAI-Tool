@@ -92,13 +92,6 @@ with col_input:
         help="上传一张参考图片来引导视频生成"
     )
     
-    # 参考图片限制提醒
-    if reference_image is not None:
-        st.info("💡 **参考图片转视频限制**：使用参考图片时，视频时长将自动设置为8秒")
-        if duration != 8:
-            st.warning("⚠️ 检测到参考图片，时长将自动调整为8秒")
-            duration = 8  # 自动调整时长
-    
     # 视频参数设置
     st.markdown("**视频参数**")
     
@@ -112,7 +105,12 @@ with col_input:
     
     col_duration, col_ratio = st.columns(2)
     with col_duration:
-        duration = st.slider("时长（秒）", 4, 8, 4, step=2, help="Veo 3.1支持4、6、8秒")
+        # 如果有参考图片，强制设置为8秒
+        if reference_image is not None:
+            duration = st.slider("时长（秒）", 8, 8, 8, step=2, help="参考图片转视频仅支持8秒", disabled=True)
+            st.info("💡 使用参考图片时，时长固定为8秒")
+        else:
+            duration = st.slider("时长（秒）", 4, 8, 4, step=2, help="Veo 3.1支持4、6、8秒")
         
         # 添加时长限制提醒
         if duration not in [4, 6, 8]:
@@ -150,9 +148,6 @@ with col_input:
     validation_errors = []
     if duration not in [4, 6, 8]:
         validation_errors.append(f"时长 {duration}秒 不支持，请选择4、6或8秒")
-    
-    if reference_image is not None and duration != 8:
-        validation_errors.append("使用参考图片时，时长必须为8秒")
     
     # 显示验证错误
     if validation_errors:
