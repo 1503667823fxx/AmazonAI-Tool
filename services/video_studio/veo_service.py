@@ -2,7 +2,7 @@
 Google Veo 3.1 API Service - 云端Streamlit兼容版
 
 基于官方文档: https://ai.google.dev/gemini-api/docs/video
-针对云端Streamlit环境优化
+针对云端Streamlit环境优化，支持图片到视频功能
 """
 
 import os
@@ -11,6 +11,9 @@ import base64
 from datetime import datetime
 from typing import Optional, Dict, Any
 import streamlit as st
+
+# 导入图片处理器
+from .image_processor import process_image_for_video_generation
 
 # 尝试导入Google GenAI SDK
 try:
@@ -96,45 +99,37 @@ class VeoAPIService:
             if reference_image:
                 print(f"[DEBUG] 处理参考图片，大小: {len(reference_image)} bytes")
                 
-                # 根据错误信息，API需要特定的数据结构
-                # 错误：Input instance with image should contain both bytesBase64Encoded and mimeType
-                # 这表明我们需要使用原始的数据结构而不是SDK包装的对象
+                # 使用图片处理器
+                image_result = process_image_for_video_generation(reference_image)
                 
-                try:
-                    import base64
-                    base64_image = base64.b64encode(reference_image).decode('utf-8')
+                if not image_result["success"]:
+                    raise RuntimeError(f"图片处理失败: {image_result['error']}")
+                
+                print(f"[DEBUG] 图片处理成功")
+                
+                # 尝试多种格式
+                formats = image_result["formats"]
+                last_error = None
+                
+                # 按优先级尝试不同格式
+                for format_name in ["standard", "simple", "raw_bytes"]:
+                    if format_name not in formats:
+                        continue
                     
-                    # 创建符合API要求的图片数据结构
-                    image_data = {
-                        "bytesBase64Encoded": base64_image,
-                        "mimeType": "image/jpeg"
-                    }
+                    print(f"[DEBUG] 尝试格式: {format_name}")
                     
-                    print(f"[DEBUG] 创建图片数据结构: mimeType=image/jpeg, base64长度={len(base64_image)}")
-                    
-                    # 尝试使用原始数据结构
-                    operation = self.client.models.generate_videos(
-                        model=self.model_id,
-                        prompt=prompt,
-                        image=image_data,  # 直接使用字典而不是SDK对象
-                        config=config
-                    )
-                    
-                    print(f"[DEBUG] 使用原始数据结构成功")
-                    
-                except Exception as e:
-                    print(f"[DEBUG] 原始数据结构失败: {str(e)}")
-                    
-                    # 如果原始数据结构也失败，尝试SDK方式
                     try:
-                        if hasattr(types.Image, 'from_bytes'):
-                            image = types.Image.from_bytes(reference_image)
-                            print(f"[DEBUG] 回退到SDK Image.from_bytes")
-                        elif hasattr(types, 'Part'):
-                            image = types.Part.from_bytes(data=reference_image, mime_type="image/jpeg")
-                            print(f"[DEBUG] 回退到SDK Part.from_bytes")
+                        if format_name == "raw_bytes":
+                            # 使用原始字节数据
+                            if hasattr(types.Image, 'from_bytes'):
+                                image = types.Image.from_bytes(formats[format_name])
+                            elif hasattr(types, 'Part'):
+                                image = types.Part.from_bytes(data=formats[format_name], mime_type="image/jpeg")
+                            else:
+                                raise RuntimeError("无法创建图片对象")
                         else:
-                            raise RuntimeError("无法找到合适的图片创建方法")
+                            # 使用字典格式
+                            image = formats[format_name]
                         
                         operation = self.client.models.generate_videos(
                             model=self.model_id,
@@ -143,11 +138,17 @@ class VeoAPIService:
                             config=config
                         )
                         
-                        print(f"[DEBUG] SDK方式成功")
+                        print(f"[DEBUG] 格式 {format_name} 成功!")
+                        break
                         
-                    except Exception as e2:
-                        print(f"[DEBUG] SDK方式也失败: {str(e2)}")
-                        raise RuntimeError(f"图片处理失败 - 原始方式: {str(e)}, SDK方式: {str(e2)}")
+                    except Exception as e:
+                        error_msg = str(e)
+                        print(f"[DEBUG] 格式 {format_name} 失败: {error_msg}")
+                        last_error = error_msg
+                        continue
+                else:
+                    # 所有格式都失败了
+                    raise RuntimeError(f"所有图片格式都失败了。最后错误: {last_error}")
                         
             else:
                 print(f"[DEBUG] 文本到视频生成")
