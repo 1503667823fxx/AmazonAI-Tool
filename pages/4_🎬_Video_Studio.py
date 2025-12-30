@@ -92,12 +92,31 @@ with col_input:
         help="上传一张参考图片来引导视频生成"
     )
     
+    # 参考图片限制提醒
+    if reference_image is not None:
+        st.info("💡 **参考图片转视频限制**：使用参考图片时，视频时长将自动设置为8秒")
+        if duration != 8:
+            st.warning("⚠️ 检测到参考图片，时长将自动调整为8秒")
+            duration = 8  # 自动调整时长
+    
     # 视频参数设置
     st.markdown("**视频参数**")
     
+    # 重要限制提醒
+    st.info("""
+    📋 **Veo 3.1 重要限制**
+    - 时长限制：仅支持 **4秒、6秒、8秒**
+    - 参考图片：使用参考图片时只能生成 **8秒** 视频
+    - 分辨率：支持720p、1080p
+    """)
+    
     col_duration, col_ratio = st.columns(2)
     with col_duration:
-        duration = st.slider("时长（秒）", 1, 8, 4, help="Veo 3.1最大支持8秒")
+        duration = st.slider("时长（秒）", 4, 8, 4, step=2, help="Veo 3.1支持4、6、8秒")
+        
+        # 添加时长限制提醒
+        if duration not in [4, 6, 8]:
+            st.warning("⚠️ Veo 3.1仅支持4秒、6秒或8秒时长")
     
     with col_ratio:
         aspect_ratio = st.selectbox(
@@ -126,15 +145,31 @@ with col_input:
     
     # 生成按钮
     st.markdown("---")
+    
+    # 验证参数组合
+    validation_errors = []
+    if duration not in [4, 6, 8]:
+        validation_errors.append(f"时长 {duration}秒 不支持，请选择4、6或8秒")
+    
+    if reference_image is not None and duration != 8:
+        validation_errors.append("使用参考图片时，时长必须为8秒")
+    
+    # 显示验证错误
+    if validation_errors:
+        for error in validation_errors:
+            st.error(f"❌ {error}")
+    
     generate_btn = st.button(
         "🎬 生成视频",
         type="primary",
         use_container_width=True,
-        disabled=not prompt.strip()
+        disabled=not prompt.strip() or len(validation_errors) > 0
     )
     
     if not prompt.strip():
         st.warning("⚠️ 请输入视频描述")
+    elif validation_errors:
+        st.warning("⚠️ 请修正上述参数问题")
 
 with col_output:
     st.subheader("🎥 生成结果")
@@ -324,7 +359,8 @@ with st.expander("💡 使用提示"):
     - "海浪轻柔地拍打着沙滩，夕阳西下，天空呈现橙红色渐变"
     
     **技术限制：**
-    - 最大时长：8秒
+    - 支持时长：仅支持4秒、6秒、8秒（不支持其他时长）
+    - 参考图片转视频：仅支持8秒时长
     - 支持分辨率：720p, 1080p
     - 支持宽高比：16:9, 9:16
     - 生成时间：通常3-10分钟
