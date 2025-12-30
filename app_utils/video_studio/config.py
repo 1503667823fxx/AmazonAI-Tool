@@ -287,21 +287,27 @@ class ConfigurationManager:
         runway_api_key = os.getenv("RUNWAY_API_KEY", "")
         pika_api_key = os.getenv("PIKA_API_KEY", "")
         
-        # For Google Veo, we use Google Cloud authentication
+        # For Google Veo, we use Google API key (simplified approach)
         google_api_key = os.getenv("GOOGLE_API_KEY", "")
-        google_project_id = os.getenv("GOOGLE_CLOUD_PROJECT_ID", "")
         
         # Check Streamlit secrets if available
         if not google_api_key:
             try:
                 import streamlit as st
                 google_api_key = st.secrets.get("GOOGLE_API_KEY", "")
-                if not google_project_id:
-                    google_project_id = st.secrets.get("GOOGLE_CLOUD_PROJECT_ID", "")
             except:
                 pass
         
         default_models = {
+            "veo": ModelConfig(
+                name="veo",
+                api_key=google_api_key,
+                base_url="",  # Veo uses Google's API
+                timeout=600,  # Veo takes longer to generate
+                max_retries=3,
+                enabled=bool(google_api_key),  # Enable if Google API key is available
+                parameters={}  # Simplified - no project ID required
+            ),
             "luma": ModelConfig(
                 name="luma",
                 api_key=luma_api_key,
@@ -325,19 +331,6 @@ class ConfigurationManager:
                 timeout=300,
                 max_retries=3,
                 enabled=bool(pika_api_key)  # Only enable if API key is available
-            ),
-            "veo": ModelConfig(
-                name="veo",
-                api_key=google_api_key,  # For Veo, this is used for Google Cloud auth
-                base_url="",  # Veo uses Google Cloud AI Platform
-                timeout=600,  # Veo takes longer to generate
-                max_retries=3,
-                enabled=bool(google_api_key),  # Enable if Google API key is available
-                parameters={
-                    "project_id": google_project_id,
-                    "location": "us-central1",
-                    "model_id": "veo-3.1-generate-preview"
-                }
             )
         }
         
@@ -382,20 +375,6 @@ class ConfigurationManager:
             if api_key:
                 model_config.api_key = api_key
                 model_config.enabled = True  # Enable model if API key is found
-            
-            # Special handling for Veo project ID
-            if model_name == "veo":
-                project_id_keys = ["GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_PROJECT"]
-                for proj_key in project_id_keys:
-                    project_id = os.getenv(proj_key)
-                    if not project_id and has_streamlit:
-                        try:
-                            project_id = st.secrets.get(proj_key)
-                        except:
-                            pass
-                    if project_id:
-                        model_config.parameters["project_id"] = project_id
-                        break
         
         # Override other settings
         if os.getenv(f"{self._env_prefix}DEBUG_MODE"):
