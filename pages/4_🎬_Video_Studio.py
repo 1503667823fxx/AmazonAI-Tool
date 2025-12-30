@@ -25,38 +25,16 @@ st.caption("从文字描述到高质量短视频，最长8秒，支持720p/1080p
 
 # --- 3. 检查API配置 ---
 api_key_configured = False
-api_type = "未配置"
 
 try:
-    # 检查Gemini API密钥
     google_api_key = st.secrets.get("GOOGLE_API_KEY")
     if google_api_key:
         api_key_configured = True
-        api_type = "Gemini API"
     else:
-        # 检查Vertex AI配置
-        vertex_config = all(key in st.secrets for key in ["GOOGLE_CLOUD_PROJECT_ID", "GOOGLE_CLOUD_LOCATION", "GOOGLE_CLOUD_CREDENTIALS"])
-        if vertex_config:
-            api_key_configured = True
-            api_type = "Vertex AI"
-        else:
-            st.error("❌ 未配置Google API")
-            st.info("💡 请配置以下任一方式：")
-            st.markdown("""
-            **方式1: Gemini API (推荐)**
-            ```
-            GOOGLE_API_KEY = "your_gemini_api_key"
-            ```
-            
-            **方式2: Vertex AI**
-            ```
-            GOOGLE_CLOUD_PROJECT_ID = "your_project_id"
-            GOOGLE_CLOUD_LOCATION = "us-central1"
-            GOOGLE_CLOUD_CREDENTIALS = "your_service_account_json"
-            ```
-            """)
-            st.stop()
-            
+        st.error("❌ 未配置Google API密钥")
+        st.info("💡 请在Streamlit Secrets中配置 GOOGLE_API_KEY")
+        st.code('GOOGLE_API_KEY = "your_google_api_key"')
+        st.stop()
 except Exception as e:
     st.error("❌ 无法读取API配置")
     st.error(f"错误详情: {str(e)}")
@@ -101,10 +79,6 @@ with col_input:
     - 时长限制：仅支持 **4秒、6秒、8秒**
     - 参考图片：使用参考图片时只能生成 **8秒** 视频
     - 分辨率：支持720p、1080p
-    
-    ⚠️ **API权限提醒**：如果遇到403错误，请确保已启用以下API：
-    - Generative Language API
-    - Vertex AI API (如使用Vertex AI)
     """)
     
     col_duration, col_ratio = st.columns(2)
@@ -384,23 +358,13 @@ with st.expander("💡 使用提示"):
 
 # --- 8. API状态信息 ---
 with st.expander("🔧 API状态信息"):
-    st.success(f"✅ **使用 {api_type}**")
+    st.success("✅ **使用 Gemini API**")
     
-    if api_type == "Gemini API":
-        st.write("**当前配置:**")
-        st.write(f"- API类型: Gemini API")
-        st.write(f"- 模型: veo-3.1-generate-preview")
-        st.write(f"- 端点: generativelanguage.googleapis.com")
-        st.write(f"- 服务状态: {'🟢 已配置' if api_key_configured else '🔴 未配置'}")
-    elif api_type == "Vertex AI":
-        project_id = st.secrets.get("GOOGLE_CLOUD_PROJECT_ID", "cohesive-point-481508-d4")
-        location = st.secrets.get("GOOGLE_CLOUD_LOCATION", "us-central1")
-        st.write("**当前配置:**")
-        st.write(f"- API类型: Vertex AI")
-        st.write(f"- 项目ID: {project_id}")
-        st.write(f"- 地区: {location}")
-        st.write(f"- 模型: veo-3.1-generate-001")
-        st.write(f"- 服务状态: {'🟢 已配置' if api_key_configured else '🔴 未配置'}")
+    st.write("**当前配置:**")
+    st.write(f"- API类型: Gemini API")
+    st.write(f"- 模型: veo-3.1-generate-preview")
+    st.write(f"- 端点: generativelanguage.googleapis.com")
+    st.write(f"- 服务状态: {'🟢 已配置' if api_key_configured else '🔴 未配置'}")
     
     # 测试API连接按钮
     if st.button("🧪 测试API连接"):
@@ -409,57 +373,12 @@ with st.expander("🔧 API状态信息"):
                 from services.video_studio.veo_service import get_veo_service
                 service = get_veo_service()
                 if service:
-                    if service.use_gemini_api:
-                        st.success("✅ Gemini API连接测试成功！")
-                        st.info("使用API密钥认证")
-                        
-                        # 额外的权限检查提醒
-                        st.warning("""
-                        ⚠️ **重要提醒**：如果视频生成成功但无法播放，可能需要启用以下API：
-                        - Generative Language API
-                        - 确保API密钥有足够权限
-                        """)
-                        
-                    else:
-                        # 尝试获取访问令牌
-                        token = service._get_access_token()
-                        if token:
-                            st.success("✅ Vertex AI连接测试成功！")
-                            st.info(f"访问令牌已获取（长度: {len(token)} 字符）")
-                        else:
-                            st.error("❌ 无法获取访问令牌")
+                    st.success("✅ Gemini API连接测试成功！")
+                    st.info("使用API密钥认证")
                 else:
                     st.error("❌ 无法初始化Veo服务")
             except Exception as e:
                 st.error(f"❌ API连接测试失败: {str(e)}")
-                
-                # 如果是权限错误，提供具体指导
-                if "403" in str(e) or "PERMISSION_DENIED" in str(e):
-                    st.error("🚨 **权限错误检测**")
-                    
-                    # 尝试从错误信息中提取项目ID
-                    error_str = str(e)
-                    if "project" in error_str:
-                        import re
-                        project_match = re.search(r'project (\d+)', error_str)
-                        if project_match:
-                            error_project_id = project_match.group(1)
-                            st.warning(f"⚠️ 错误中的项目ID: {error_project_id}")
-                            st.info("这个项目ID可能不是你的实际项目，请检查你的API密钥配置")
-                    
-                    st.markdown("""
-                    **解决步骤：**
-                    1. 访问 [Google AI Studio](https://aistudio.google.com/) 确认你的项目
-                    2. 访问 [Google Cloud Console](https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com)
-                    3. 选择**你的实际项目**（不是错误信息中的项目ID）
-                    4. 启用 "Generative Language API"
-                    5. 等待几分钟让权限生效
-                    6. 重新测试
-                    
-                    **如果仍有问题**：
-                    - 在Google AI Studio中重新生成API密钥
-                    - 确保API密钥对应正确的项目
-                    """)
     
     if st.session_state.current_job:
         st.write("**当前任务:**")
@@ -475,11 +394,10 @@ with st.expander("🔧 API状态信息"):
 # --- 9. 页脚信息 ---
 st.markdown("---")
 st.markdown(
-    f"""
+    """
     <div style='text-align: center; color: #666; font-size: 0.8em;'>
-        Powered by Google Veo 3.1 ({api_type}) | 
-        <a href='https://deepmind.google/technologies/veo/' target='_blank'>了解更多</a> |
-        ✅ 使用真实Google API
+        Powered by Google Veo 3.1 (Gemini API) | 
+        <a href='https://deepmind.google/technologies/veo/' target='_blank'>了解更多</a>
     </div>
     """,
     unsafe_allow_html=True
