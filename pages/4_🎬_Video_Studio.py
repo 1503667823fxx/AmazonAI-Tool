@@ -282,11 +282,35 @@ with col_output:
             else:
                 st.warning("⚠️ 视频URL不可用")
                 
+                # 显示可能的原因和解决方案
+                st.info("""
+                **可能的原因：**
+                - 视频可能需要额外的处理时间
+                - API响应格式可能有变化
+                - 需要特殊权限才能访问生成的视频
+                
+                **建议解决方案：**
+                1. 等待几分钟后点击"🔄 刷新状态"
+                2. 使用任务ID在Google AI Studio中查看视频
+                3. 检查下方的API响应调试信息
+                """)
+                
+                # 显示任务ID和有用链接
+                st.code(f"任务ID: {job['job_id']}")
+                
+                col_studio, col_refresh = st.columns(2)
+                with col_studio:
+                    st.markdown("[🔗 打开Google AI Studio](https://aistudio.google.com/)")
+                
+                with col_refresh:
+                    if st.button("🔄 刷新状态", key="refresh_for_url"):
+                        st.rerun()
+                
                 # 显示调试信息
                 if "raw_response" in job:
                     with st.expander("🔍 API响应调试信息"):
                         st.json(job["raw_response"])
-                        st.info("💡 如果看到这个信息，说明视频生成成功但URL提取有问题。请检查上面的API响应数据。")
+                        st.info("💡 如果看到这个信息，说明视频生成成功但URL提取有问题。请检查上面的API响应数据中是否包含视频链接。")
         
         elif job["status"] == "failed":
             st.error("❌ 生成失败")
