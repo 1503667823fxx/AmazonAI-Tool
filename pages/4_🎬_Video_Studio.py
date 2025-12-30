@@ -140,6 +140,7 @@ with col_output:
                 # 创建任务信息
                 task_info = {
                     "job_id": result["job_id"],
+                    "operation_name": result["operation_name"],  # 保存完整的操作名称
                     "prompt": prompt,
                     "duration": duration,
                     "aspect_ratio": aspect_ratio,
@@ -170,7 +171,7 @@ with col_output:
         # 自动刷新状态（如果任务还在进行中）
         if job["status"] == "processing":
             # 获取最新状态
-            status_result = get_video_status_sync(job["job_id"])
+            status_result = get_video_status_sync(job["operation_name"])  # 使用完整的操作名称
             
             # 更新任务状态
             job["status"] = status_result["status"]
@@ -296,20 +297,13 @@ with st.expander("💡 使用提示"):
 
 # --- 8. API状态信息 ---
 with st.expander("🔧 API状态信息"):
-    st.warning("⚠️ **重要说明**: 当前使用模拟API端点，因为Google Veo 3.1 API尚未公开发布")
+    st.success("✅ **使用真实Google Veo 3.1 API**")
     
     st.write("**当前配置:**")
-    st.write(f"- API密钥: {'✅ 已配置' if api_key_configured else '❌ 未配置'}")
-    st.write(f"- 服务状态: {'🟡 模拟模式' if api_key_configured else '🔴 不可用'}")
-    st.write("- API端点: 模拟端点（等待官方发布）")
-    
-    st.info("""
-    **关于真实API:**
-    - Google Veo 3.1目前仍处于预览阶段
-    - 官方API端点和文档尚未公开
-    - 当前实现提供完整的UI和框架
-    - 一旦官方API发布，只需更新端点即可启用真实功能
-    """)
+    st.write(f"- 项目ID: cohesive-point-481508-d4")
+    st.write(f"- 地区: us-central1")
+    st.write(f"- 模型: veo-3.1-generate-preview")
+    st.write(f"- 服务状态: {'🟢 已配置' if api_key_configured else '🔴 未配置'}")
     
     if st.session_state.current_job:
         st.write("**当前任务:**")
@@ -318,7 +312,7 @@ with st.expander("🔧 API状态信息"):
             "status": st.session_state.current_job["status"],
             "progress": st.session_state.current_job["progress"],
             "created_at": st.session_state.current_job["created_at"].isoformat(),
-            "note": "模拟任务 - 非真实API调用"
+            "operation_name": st.session_state.current_job.get("operation_name", "N/A")
         })
 
 # --- 9. 页脚信息 ---
@@ -328,7 +322,7 @@ st.markdown(
     <div style='text-align: center; color: #666; font-size: 0.8em;'>
         Powered by Google Veo 3.1 | 
         <a href='https://deepmind.google/technologies/veo/' target='_blank'>了解更多</a> |
-        ⚠️ 注意：当前使用模拟API端点，实际部署需要配置正确的Google Veo API
+        ✅ 使用真实Google Cloud Vertex AI API
     </div>
     """,
     unsafe_allow_html=True
