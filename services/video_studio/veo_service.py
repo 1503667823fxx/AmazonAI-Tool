@@ -20,11 +20,8 @@ try:
     from google import genai
     from google.genai import types
     SDK_AVAILABLE = True
-    print("[DEBUG] Google GenAI SDK 可用")
 except ImportError as e:
     SDK_AVAILABLE = False
-    print(f"[DEBUG] Google GenAI SDK 不可用: {str(e)}")
-    print("[DEBUG] 这在云端Streamlit环境中是常见的")
 
 
 class VeoAPIService:
@@ -42,8 +39,6 @@ class VeoAPIService:
         try:
             self.client = genai.Client(api_key=self.api_key)
             self.model_id = "veo-3.1-generate-preview"
-            print(f"[DEBUG] 使用官方Google GenAI SDK")
-            print(f"  模型ID: {self.model_id}")
         except Exception as e:
             st.error(f"⚠️ 初始化Google GenAI客户端失败: {str(e)}")
             raise
@@ -66,7 +61,6 @@ class VeoAPIService:
             
             # 自动调整分辨率和时长的组合
             if quality.lower() == "1080p" and duration != 8:
-                print(f"[DEBUG] 1080p分辨率需要8秒时长，当前时长{duration}秒，自动调整为720p")
                 adjusted_quality = "720p"
             else:
                 adjusted_quality = quality.lower()
@@ -85,31 +79,20 @@ class VeoAPIService:
             # if generate_audio:
             #     config_params["generate_audio"] = generate_audio
             
-            print(f"[DEBUG] 配置参数: {config_params}")
-            print(f"[DEBUG] 原始质量: {quality}, 调整后质量: {adjusted_quality}")
-            
             try:
                 config = types.GenerateVideosConfig(**config_params)
-                print(f"[DEBUG] 配置对象创建成功")
             except Exception as e:
-                print(f"[DEBUG] 配置对象创建失败: {str(e)}")
                 raise
             
             # 生成视频
             if reference_image:
-                print(f"[DEBUG] 处理参考图片，大小: {len(reference_image)} bytes")
-                
                 # 处理图片
                 image_result = process_image_for_video_generation(reference_image)
                 
                 if not image_result["success"]:
                     raise RuntimeError(f"图片处理失败: {image_result['error']}")
                 
-                print(f"[DEBUG] 图片处理成功")
-                
                 # 使用SDK的文件上传方式
-                print(f"[DEBUG] 使用SDK文件上传方式")
-                
                 try:
                     import tempfile
                     import os
@@ -120,23 +103,17 @@ class VeoAPIService:
                         tmp_file.write(image_result["optimized_bytes"])
                         tmp_file_path = tmp_file.name
                     
-                    print(f"[DEBUG] 临时文件创建: {tmp_file_path}")
-                    
                     # 使用官方示例的正确方法
                     try:
                         if hasattr(types, 'Image') and hasattr(types.Image, 'from_file'):
                             uploaded_file = types.Image.from_file(location=tmp_file_path)
-                            print(f"[DEBUG] types.Image.from_file 成功")
                         else:
                             raise AttributeError("types.Image.from_file 不存在")
                     except Exception as e:
-                        print(f"[DEBUG] types.Image.from_file 失败: {str(e)}")
                         raise RuntimeError(f"图片文件加载失败: {str(e)}")
                     
                     if not uploaded_file:
                         raise RuntimeError("无法创建图片对象")
-                    
-                    print(f"[DEBUG] 图片对象创建成功")
                     
                     # 使用图片对象生成视频
                     operation = self.client.models.generate_videos(
@@ -146,8 +123,6 @@ class VeoAPIService:
                         config=config
                     )
                     
-                    print(f"[DEBUG] SDK图片到视频调用成功: {operation.name}")
-                    
                     # 清理临时文件
                     try:
                         os.unlink(tmp_file_path)
@@ -155,8 +130,6 @@ class VeoAPIService:
                         pass
                     
                 except Exception as e:
-                    print(f"[DEBUG] SDK文件处理方式失败: {str(e)}")
-                    
                     # 清理临时文件
                     try:
                         if 'tmp_file_path' in locals():
@@ -167,7 +140,6 @@ class VeoAPIService:
                     raise RuntimeError(f"图片到视频生成失败: {str(e)}")
                         
             else:
-                print(f"[DEBUG] 文本到视频生成")
                 try:
                     operation = self.client.models.generate_videos(
                         model=self.model_id,
@@ -175,10 +147,7 @@ class VeoAPIService:
                         config=config
                     )
                 except Exception as e:
-                    print(f"[DEBUG] 文本到视频生成失败: {str(e)}")
                     raise RuntimeError(f"视频生成失败: {str(e)}")
-            
-            print(f"[DEBUG] SDK操作已创建: {operation.name}")
             
             return {
                 "success": True,
@@ -190,7 +159,6 @@ class VeoAPIService:
             
         except Exception as e:
             error_msg = f"生成失败: {str(e)}"
-            print(f"[DEBUG] {error_msg}")
             return {
                 "success": False,
                 "error": error_msg
@@ -199,8 +167,6 @@ class VeoAPIService:
     def get_video_status(self, operation_name: str) -> Dict[str, Any]:
         """获取视频生成状态"""
         try:
-            print(f"[DEBUG] 获取操作状态: {operation_name}")
-            
             # 使用HTTP请求直接查询状态，避免SDK序列化问题
             try:
                 import requests
@@ -213,22 +179,16 @@ class VeoAPIService:
                 
                 # 构建URL - 直接使用operation_name作为路径
                 url = f"https://generativelanguage.googleapis.com/v1beta/{operation_name}"
-                print(f"[DEBUG] 请求URL: {url}")
                 
                 response = requests.get(url, headers=headers, timeout=30)
-                print(f"[DEBUG] HTTP响应状态: {response.status_code}")
                 
                 if response.status_code == 200:
                     result = response.json()
-                    print(f"[DEBUG] 成功获取操作状态")
                     
                     # 检查操作是否完成
                     if result.get("done", False):
-                        print(f"[DEBUG] 操作已完成")
-                        
                         if "error" in result:
                             error_msg = result["error"].get("message", "生成失败")
-                            print(f"[DEBUG] 操作错误: {error_msg}")
                             return {
                                 "status": "failed",
                                 "progress": 0,
@@ -240,25 +200,11 @@ class VeoAPIService:
                             
                             if "response" in result:
                                 response_data = result["response"]
-                                print(f"[DEBUG] 响应数据结构: {list(response_data.keys())}")
-                                
                                 # 搜索视频字节数据
                                 video_bytes = self._extract_video_bytes_from_response(response_data)
                             else:
-                                print(f"[DEBUG] 响应中没有'response'字段，尝试直接搜索")
                                 # 有些API可能直接在根级别返回数据
                                 video_bytes = self._extract_video_bytes_from_response(result)
-                            
-                            print(f"[DEBUG] 视频字节数据: {'有' if video_bytes else '无'}")
-                            
-                            # 如果没找到视频数据，输出完整响应用于调试
-                            if not video_bytes:
-                                print(f"[DEBUG] 未找到视频数据，完整响应:")
-                                import json
-                                try:
-                                    print(json.dumps(result, indent=2, ensure_ascii=False))
-                                except:
-                                    print(str(result))
                             
                             return {
                                 "status": "completed",
@@ -268,14 +214,12 @@ class VeoAPIService:
                                 "raw_response": result  # 保存原始响应用于调试
                             }
                     else:
-                        print(f"[DEBUG] 操作仍在进行中")
                         return {
                             "status": "processing",
                             "progress": 50,
                             "message": "正在生成视频..."
                         }
                 elif response.status_code == 404:
-                    print(f"[DEBUG] 操作不存在或已过期")
                     return {
                         "status": "error",
                         "progress": 0,
@@ -289,7 +233,6 @@ class VeoAPIService:
                     except:
                         error_msg = f"HTTP请求失败: {response.status_code}"
                     
-                    print(f"[DEBUG] {error_msg}")
                     return {
                         "status": "error",
                         "progress": 0,
@@ -297,14 +240,12 @@ class VeoAPIService:
                     }
                     
             except requests.exceptions.RequestException as e:
-                print(f"[DEBUG] HTTP请求异常: {str(e)}")
                 return {
                     "status": "error",
                     "progress": 0,
                     "error": f"网络请求失败: {str(e)}"
                 }
             except Exception as e:
-                print(f"[DEBUG] 其他异常: {str(e)}")
                 return {
                     "status": "error",
                     "progress": 0,
@@ -313,7 +254,6 @@ class VeoAPIService:
                 
         except Exception as e:
             error_msg = f"无法获取操作状态: {str(e)}"
-            print(f"[DEBUG] {error_msg}")
             return {
                 "status": "error",
                 "progress": 0,
@@ -322,22 +262,17 @@ class VeoAPIService:
     
     def _extract_video_bytes_from_response(self, response_data: dict) -> str:
         """从响应数据中提取视频字节数据"""
-        print(f"[DEBUG] 开始提取视频数据，响应结构: {response_data}")
-        
-        # 首先尝试提取视频URI（Google Veo API的实际格式）
+        # 提取视频URI（Google Veo API的标准格式）
         video_uri = self._extract_video_uri_from_response(response_data)
         if video_uri:
-            print(f"[DEBUG] 找到视频URI: {video_uri}")
-            # 下载视频并转换为base64
             return self._download_video_from_uri(video_uri)
         
-        # 如果没有URI，尝试直接搜索base64数据（备用方案）
-        return self._search_direct_video_bytes(response_data)
+        return None
     
     def _extract_video_uri_from_response(self, response_data: dict) -> str:
         """从响应中提取视频URI"""
         try:
-            # Google Veo API的实际响应结构
+            # Google Veo API的标准响应结构
             if "generateVideoResponse" in response_data:
                 generate_response = response_data["generateVideoResponse"]
                 if "generatedSamples" in generate_response:
@@ -347,45 +282,14 @@ class VeoAPIService:
                         if "video" in first_sample and "uri" in first_sample["video"]:
                             return first_sample["video"]["uri"]
             
-            # 递归搜索URI字段（备用方案）
-            def find_uri(data, depth=0):
-                if depth > 10:
-                    return None
-                
-                if isinstance(data, dict):
-                    # 搜索URI相关字段
-                    uri_fields = ['uri', 'url', 'download_url', 'video_url', 'file_url']
-                    for field in uri_fields:
-                        if field in data and isinstance(data[field], str):
-                            uri = data[field]
-                            if uri.startswith('http') and 'generativelanguage.googleapis.com' in uri:
-                                return uri
-                    
-                    # 递归搜索
-                    for value in data.values():
-                        result = find_uri(value, depth + 1)
-                        if result:
-                            return result
-                
-                elif isinstance(data, list):
-                    for item in data:
-                        result = find_uri(item, depth + 1)
-                        if result:
-                            return result
-                
-                return None
-            
-            return find_uri(response_data)
+            return None
             
         except Exception as e:
-            print(f"[DEBUG] 提取URI时出错: {str(e)}")
             return None
     
     def _download_video_from_uri(self, video_uri: str) -> str:
         """从URI下载视频并转换为base64"""
         try:
-            print(f"[DEBUG] 开始下载视频: {video_uri}")
-            
             import requests
             import base64
             
@@ -395,95 +299,20 @@ class VeoAPIService:
             }
             
             response = requests.get(video_uri, headers=headers, timeout=60)
-            print(f"[DEBUG] 下载响应状态: {response.status_code}")
             
             if response.status_code == 200:
                 video_bytes = response.content
-                print(f"[DEBUG] 视频下载成功，大小: {len(video_bytes)} bytes")
                 
                 # 转换为base64
                 video_base64 = base64.b64encode(video_bytes).decode('utf-8')
-                print(f"[DEBUG] Base64转换成功，长度: {len(video_base64)}")
                 
                 return video_base64
             else:
-                print(f"[DEBUG] 视频下载失败: HTTP {response.status_code}")
-                try:
-                    error_data = response.json()
-                    print(f"[DEBUG] 错误详情: {error_data}")
-                except:
-                    print(f"[DEBUG] 响应文本: {response.text}")
                 return None
                 
         except Exception as e:
-            print(f"[DEBUG] 下载视频时出错: {str(e)}")
             return None
-    
-    def _search_direct_video_bytes(self, response_data: dict) -> str:
-        """搜索直接的视频字节数据（备用方案）"""
-        print(f"[DEBUG] 搜索直接的视频字节数据")
-        
-        # 递归搜索视频字节数据
-        def find_video_bytes(data, depth=0, path=""):
-            if depth > 10:
-                return None
-            
-            if isinstance(data, dict):
-                print(f"[DEBUG] 搜索字典 (深度{depth}, 路径:{path}): {list(data.keys())}")
-                
-                # 扩展字节数据字段搜索
-                bytes_fields = [
-                    'video_bytes', 'videoBytes', 'bytesBase64Encoded', 'base64Data', 'videoData',
-                    'data', 'content', 'bytes', 'video', 'media', 'file', 'blob',
-                    'generatedVideo', 'generated_video', 'output', 'result'
-                ]
-                
-                for field in bytes_fields:
-                    if field in data and data[field]:
-                        value = data[field]
-                        # 检查是否是base64字符串
-                        if isinstance(value, str) and len(value) > 100:
-                            print(f"[DEBUG] 找到可能的视频数据字段: {field}, 长度: {len(value)}")
-                            return value
-                
-                # 递归搜索所有值
-                for key, value in data.items():
-                    result = find_video_bytes(value, depth + 1, f"{path}.{key}" if path else key)
-                    if result:
-                        return result
-            
-            elif isinstance(data, list):
-                print(f"[DEBUG] 搜索列表 (深度{depth}, 路径:{path}): 长度{len(data)}")
-                for i, item in enumerate(data):
-                    result = find_video_bytes(item, depth + 1, f"{path}[{i}]" if path else f"[{i}]")
-                    if result:
-                        return result
-            
-            elif isinstance(data, str) and len(data) > 100:
-                # 检查是否是base64编码的视频数据
-                print(f"[DEBUG] 检查字符串 (深度{depth}, 路径:{path}): 长度{len(data)}")
-                try:
-                    import base64
-                    # 尝试解码前几个字符看是否是有效的base64
-                    test_decode = base64.b64decode(data[:100])
-                    print(f"[DEBUG] 可能的base64视频数据，路径: {path}")
-                    return data
-                except:
-                    pass
-            
-            return None
-        
-        result = find_video_bytes(response_data)
-        
-        if result:
-            print(f"[DEBUG] 成功提取视频数据，长度: {len(result)}")
-        else:
-            print(f"[DEBUG] 未找到视频数据")
-            # 输出完整的响应结构用于调试
-            import json
-            print(f"[DEBUG] 完整响应结构: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
-        
-        return result
+
 
 
 # 全局服务实例
@@ -496,7 +325,6 @@ def get_veo_service() -> Optional[VeoAPIService]:
     
     try:
         if "GOOGLE_API_KEY" not in st.secrets:
-            print("[DEBUG] 没有找到GOOGLE_API_KEY")
             st.error("⚠️ 未配置GOOGLE_API_KEY")
             return None
         
@@ -510,7 +338,6 @@ def get_veo_service() -> Optional[VeoAPIService]:
         
         return _veo_service
     except Exception as e:
-        print(f"[DEBUG] 创建Veo服务失败: {str(e)}")
         st.error(f"⚠️ 创建Veo服务失败: {str(e)}")
         return None
 
@@ -548,9 +375,6 @@ def generate_video_sync(
 def get_video_status_sync(operation_name: str) -> Dict[str, Any]:
     """同步获取视频状态（用于Streamlit）"""
     try:
-        print(f"[DEBUG] get_video_status_sync 调用，operation_name: {operation_name}")
-        print(f"[DEBUG] operation_name 类型: {type(operation_name)}")
-        
         service = get_veo_service()
         if not service:
             return {
@@ -559,12 +383,10 @@ def get_video_status_sync(operation_name: str) -> Dict[str, Any]:
             }
         
         result = service.get_video_status(operation_name)
-        print(f"[DEBUG] get_video_status_sync 返回: {result}")
         return result
         
     except Exception as e:
         error_msg = f"get_video_status_sync 异常: {str(e)}"
-        print(f"[DEBUG] {error_msg}")
         return {
             "status": "error",
             "progress": 0,

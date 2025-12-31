@@ -96,7 +96,7 @@ class VideoStudioImageProcessor:
     
     def prepare_for_veo_api(self, image_bytes: bytes) -> Dict[str, Any]:
         """
-        为Veo API准备图片数据，尝试多种格式解决兼容性问题
+        为Veo API准备图片数据
         """
         try:
             # 验证图片
@@ -120,20 +120,8 @@ class VideoStudioImageProcessor:
             # 转换为base64
             base64_data = base64.b64encode(optimized_bytes).decode('utf-8')
             
-            # 创建多种API格式，提高兼容性
-            formats = {
-                # 格式1: 标准格式 (API要求的确切字段名)
-                "standard": {
-                    "bytesBase64Encoded": base64_data,
-                    "mimeType": "image/jpeg"
-                },
-                # 格式2: 原始字节
-                "raw_bytes": optimized_bytes
-            }
-            
             return {
                 "success": True,
-                "formats": formats,
                 "optimized_bytes": optimized_bytes,
                 "base64_data": base64_data
             }
