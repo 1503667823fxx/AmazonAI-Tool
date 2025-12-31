@@ -143,9 +143,7 @@ class VeoAPIService:
                         try:
                             if hasattr(self.client, 'files') and hasattr(self.client.files, 'upload'):
                                 uploaded_file = self.client.files.upload(
-                                    path=tmp_file_path,
-                                    mime_type="image/jpeg",
-                                    display_name="reference_image"
+                                    file=tmp_file_path
                                 )
                                 print(f"[DEBUG] client.files.upload 成功")
                             else:
@@ -153,16 +151,31 @@ class VeoAPIService:
                         except Exception as e2:
                             print(f"[DEBUG] client.files.upload 失败: {str(e2)}")
                             
-                            # 方法3: 直接使用字节数据创建Image对象
+                            # 方法3: 使用Part.from_bytes创建图片部分
                             try:
-                                if hasattr(types, 'Image') and hasattr(types.Image, 'from_bytes'):
-                                    uploaded_file = types.Image.from_bytes(image_result["optimized_bytes"])
-                                    print(f"[DEBUG] types.Image.from_bytes 成功")
+                                if hasattr(types, 'Part') and hasattr(types.Part, 'from_bytes'):
+                                    uploaded_file = types.Part.from_bytes(
+                                        data=image_result["optimized_bytes"],
+                                        mime_type="image/jpeg"
+                                    )
+                                    print(f"[DEBUG] types.Part.from_bytes 成功")
                                 else:
-                                    raise AttributeError("types.Image.from_bytes 不存在")
+                                    raise AttributeError("types.Part.from_bytes 不存在")
                             except Exception as e3:
-                                print(f"[DEBUG] types.Image.from_bytes 失败: {str(e3)}")
-                                raise RuntimeError(f"所有文件上传方法都失败了: {str(e)}, {str(e2)}, {str(e3)}")
+                                print(f"[DEBUG] types.Part.from_bytes 失败: {str(e3)}")
+                                
+                                # 方法4: 使用内联数据格式
+                                try:
+                                    uploaded_file = {
+                                        "inline_data": {
+                                            "mime_type": "image/jpeg",
+                                            "data": image_result["base64_data"]
+                                        }
+                                    }
+                                    print(f"[DEBUG] 内联数据格式成功")
+                                except Exception as e4:
+                                    print(f"[DEBUG] 内联数据格式失败: {str(e4)}")
+                                    raise RuntimeError(f"所有文件上传方法都失败了: {str(e)}, {str(e2)}, {str(e3)}, {str(e4)}")
                     
                     if not uploaded_file:
                         raise RuntimeError("无法创建上传文件对象")
