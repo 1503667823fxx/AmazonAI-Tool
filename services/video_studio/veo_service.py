@@ -108,6 +108,8 @@ class VeoAPIService:
                 print(f"[DEBUG] 图片处理成功")
                 
                 # 绕过SDK限制，直接调用HTTP API
+                # 原因: Google GenAI SDK的Pydantic验证器不允许图片参数
+                # 详细失败记录: docs/troubleshooting/veo_image_api_failures.md
                 print(f"[DEBUG] 绕过SDK，直接调用HTTP API")
                 
                 try:
@@ -117,23 +119,77 @@ class VeoAPIService:
                     # 准备图片数据
                     base64_data = image_result["base64_data"]
                     
-                    # 构建请求数据
-                    request_data = {
-                        "prompt": prompt,
-                        "image": {
-                            "bytesBase64Encoded": base64_data,
-                            "mimeType": "image/jpeg"
+                    # 尝试不同的API端点和格式
+                    api_attempts = [
+                        # 尝试1: 标准generateVideos端点
+                        {
+                            "url": f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_id}:generateVideos",
+                            "data": {
+                                "prompt": prompt,
+                                "image": {
+                                    "bytesBase64Encoded": base64_data,
+                                    "mimeType": "image/jpeg"
+                                },
+                                "config": {
+                                    "aspectRatio": aspect_ratio,
+                                    "durationSeconds": duration,
+                                    "resolution": adjusted_quality
+                                }
+                            }
                         },
-                        "config": {
-                            "aspectRatio": aspect_ratio,
-                            "durationSeconds": duration,
-                            "resolution": adjusted_quality
+                        # 尝试2: 使用contents格式
+                        {
+                            "url": f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_id}:generateContent",
+                            "data": {
+                                "contents": [{
+                                    "parts": [
+                                        {"text": prompt},
+                                        {
+                                            "inline_data": {
+                                                "mime_type": "image/jpeg",
+                                                "data": base64_data
+                                            }
+                                        }
+                                    ]
+                                }],
+                                "generationConfig": {
+                                    "aspectRatio": aspect_ratio,
+                                    "durationSeconds": duration,
+                                    "resolution": adjusted_quality
+                                }
+                            }
+                        },
+                        # 尝试3: 简化的generateVideos格式
+                        {
+                            "url": f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_id}:generateVideos",
+                            "data": {
+                                "contents": [{
+                                    "parts": [
+                                        {"text": prompt},
+                                        {
+                                            "inline_data": {
+                                                "mime_type": "image/jpeg",
+                                                "data": base64_data
+                                            }
+                                        }
+                                    ]
+                                }],
+                                "config": {
+                                    "aspectRatio": aspect_ratio,
+                                    "durationSeconds": duration,
+                                    "resolution": adjusted_quality
+                                }
+                            }
                         }
-                    }
+                    ]
                     
                     # 添加可选参数
-                    if seed is not None:
-                        request_data["config"]["seed"] = seed
+                    for attempt in api_attempts:
+                        if seed is not None:
+                            if "config" in attempt["data"]:
+                                attempt["data"]["config"]["seed"] = seed
+                            elif "generationConfig" in attempt["data"]:
+                                attempt["data"]["generationConfig"]["seed"] = seed
                     
                     # 构建请求头
                     headers = {
@@ -141,37 +197,56 @@ class VeoAPIService:
                         "Content-Type": "application/json"
                     }
                     
-                    # 直接调用API
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_id}:generateVideos"
+                    last_error = None
                     
-                    print(f"[DEBUG] 直接HTTP请求: {url}")
-                    
-                    response = requests.post(url, headers=headers, json=request_data, timeout=60)
-                    
-                    print(f"[DEBUG] HTTP响应状态: {response.status_code}")
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        operation_name = result.get("name", "")
-                        print(f"[DEBUG] HTTP API调用成功: {operation_name}")
+                    # 尝试不同的API格式
+                    for i, attempt in enumerate(api_attempts, 1):
+                        print(f"[DEBUG] 尝试API格式 {i}: {attempt['url']}")
                         
-                        # 创建一个模拟的operation对象
-                        class MockOperation:
-                            def __init__(self, name):
-                                self.name = name
-                        
-                        operation = MockOperation(operation_name)
-                        
-                    else:
-                        # HTTP请求失败，尝试解析错误
                         try:
-                            error_data = response.json()
-                            error_msg = error_data.get("error", {}).get("message", f"HTTP {response.status_code}")
-                        except:
-                            error_msg = f"HTTP请求失败: {response.status_code} - {response.text}"
-                        
-                        print(f"[DEBUG] HTTP API失败: {error_msg}")
-                        raise RuntimeError(f"HTTP API调用失败: {error_msg}")
+                            response = requests.post(
+                                attempt["url"], 
+                                headers=headers, 
+                                json=attempt["data"], 
+                                timeout=60
+                            )
+                            
+                            print(f"[DEBUG] HTTP响应状态: {response.status_code}")
+                            
+                            if response.status_code == 200:
+                                result = response.json()
+                                operation_name = result.get("name", "")
+                                print(f"[DEBUG] API格式 {i} 成功: {operation_name}")
+                                
+                                # 创建一个模拟的operation对象
+                                class MockOperation:
+                                    def __init__(self, name):
+                                        self.name = name
+                                
+                                operation = MockOperation(operation_name)
+                                break
+                                
+                            else:
+                                # 记录错误但继续尝试下一个格式
+                                try:
+                                    error_data = response.json()
+                                    error_msg = error_data.get("error", {}).get("message", f"HTTP {response.status_code}")
+                                except:
+                                    error_msg = f"HTTP {response.status_code}: {response.text}"
+                                
+                                print(f"[DEBUG] API格式 {i} 失败: {error_msg}")
+                                last_error = error_msg
+                                continue
+                                
+                        except Exception as e:
+                            error_msg = f"请求异常: {str(e)}"
+                            print(f"[DEBUG] API格式 {i} 异常: {error_msg}")
+                            last_error = error_msg
+                            continue
+                    
+                    else:
+                        # 所有格式都失败了
+                        raise RuntimeError(f"所有API格式都失败了。最后错误: {last_error}")
                     
                 except Exception as e:
                     print(f"[DEBUG] HTTP API方法失败: {str(e)}")
