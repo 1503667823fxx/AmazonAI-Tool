@@ -122,67 +122,23 @@ class VeoAPIService:
                     
                     print(f"[DEBUG] 临时文件创建: {tmp_file_path}")
                     
-                    # 尝试不同的文件上传方式
-                    uploaded_file = None
-                    
-                    # 方法1: 使用genai.upload_file
+                    # 使用官方示例的正确方法
                     try:
-                        if hasattr(genai, 'upload_file'):
-                            uploaded_file = genai.upload_file(
-                                path=Path(tmp_file_path),
-                                mime_type="image/jpeg",
-                                display_name="reference_image"
-                            )
-                            print(f"[DEBUG] genai.upload_file 成功")
+                        if hasattr(types, 'Image') and hasattr(types.Image, 'from_file'):
+                            uploaded_file = types.Image.from_file(location=tmp_file_path)
+                            print(f"[DEBUG] types.Image.from_file 成功")
                         else:
-                            raise AttributeError("genai.upload_file 不存在")
+                            raise AttributeError("types.Image.from_file 不存在")
                     except Exception as e:
-                        print(f"[DEBUG] genai.upload_file 失败: {str(e)}")
-                        
-                        # 方法2: 使用client.files.upload
-                        try:
-                            if hasattr(self.client, 'files') and hasattr(self.client.files, 'upload'):
-                                uploaded_file = self.client.files.upload(
-                                    file=tmp_file_path
-                                )
-                                print(f"[DEBUG] client.files.upload 成功")
-                            else:
-                                raise AttributeError("client.files.upload 不存在")
-                        except Exception as e2:
-                            print(f"[DEBUG] client.files.upload 失败: {str(e2)}")
-                            
-                            # 方法3: 使用Part.from_bytes创建图片部分
-                            try:
-                                if hasattr(types, 'Part') and hasattr(types.Part, 'from_bytes'):
-                                    uploaded_file = types.Part.from_bytes(
-                                        data=image_result["optimized_bytes"],
-                                        mime_type="image/jpeg"
-                                    )
-                                    print(f"[DEBUG] types.Part.from_bytes 成功")
-                                else:
-                                    raise AttributeError("types.Part.from_bytes 不存在")
-                            except Exception as e3:
-                                print(f"[DEBUG] types.Part.from_bytes 失败: {str(e3)}")
-                                
-                                # 方法4: 使用内联数据格式
-                                try:
-                                    uploaded_file = {
-                                        "inline_data": {
-                                            "mime_type": "image/jpeg",
-                                            "data": image_result["base64_data"]
-                                        }
-                                    }
-                                    print(f"[DEBUG] 内联数据格式成功")
-                                except Exception as e4:
-                                    print(f"[DEBUG] 内联数据格式失败: {str(e4)}")
-                                    raise RuntimeError(f"所有文件上传方法都失败了: {str(e)}, {str(e2)}, {str(e3)}, {str(e4)}")
+                        print(f"[DEBUG] types.Image.from_file 失败: {str(e)}")
+                        raise RuntimeError(f"图片文件加载失败: {str(e)}")
                     
                     if not uploaded_file:
-                        raise RuntimeError("无法创建上传文件对象")
+                        raise RuntimeError("无法创建图片对象")
                     
-                    print(f"[DEBUG] 文件上传成功: {getattr(uploaded_file, 'name', 'unknown')}")
+                    print(f"[DEBUG] 图片对象创建成功")
                     
-                    # 使用上传的文件生成视频
+                    # 使用图片对象生成视频
                     operation = self.client.models.generate_videos(
                         model=self.model_id,
                         prompt=prompt,
@@ -199,7 +155,7 @@ class VeoAPIService:
                         pass
                     
                 except Exception as e:
-                    print(f"[DEBUG] SDK文件上传方式失败: {str(e)}")
+                    print(f"[DEBUG] SDK文件处理方式失败: {str(e)}")
                     
                     # 清理临时文件
                     try:
