@@ -114,7 +114,7 @@ with col_input:
                 
                 st.info("""
                 📋 **图片到视频说明**
-                - 绕过SDK限制，直接调用HTTP API
+                - 使用官方Google示例方法
                 - 时长: 固定8秒
                 - 质量: 推荐720p
                 - 处理时间: 5-15分钟
@@ -303,9 +303,7 @@ with col_output:
             with st.spinner("检查生成状态..."):
                 try:
                     status_result = get_video_status_sync(job["operation_name"])
-                    print(f"[DEBUG] 状态查询结果: {status_result}")
                 except Exception as e:
-                    print(f"[DEBUG] 状态查询异常: {str(e)}")
                     st.error(f"状态查询失败: {str(e)}")
                     status_result = {
                         "status": "error",
@@ -592,7 +590,7 @@ with st.expander("💡 使用提示"):
     
     **当前功能状态：**
     - ✅ 文本到视频：完全可用
-    - ⚠️ 图片到视频：暂时禁用（API兼容性问题）
+    - ✅ 图片到视频：完全可用
     - ❌ 音频生成：暂不支持（Gemini API限制）
     
     **分辨率和时长限制：**
@@ -618,18 +616,18 @@ with st.expander("🔧 API状态信息"):
     st.info("💡 **当前版本特性：**")
     st.markdown("""
     - ✅ 文本到视频生成（完全可用）
-    - ⚠️ 图片到视频生成（暂时禁用，修复中）
+    - ✅ 图片到视频生成（完全可用）
     - ✅ 高质量视频输出
     - ✅ 多种分辨率支持
     - ❌ 音频生成（仅Vertex AI支持）
     
     **图片功能状态：**
-    - 正在修复API数据格式兼容性问题
-    - 预计下个版本恢复
-    - 建议先使用文本到视频功能
+    - ✅ 图片到视频功能已修复
+    - ✅ 支持JPG、PNG、WEBP格式
+    - ✅ 智能图片优化和尺寸调整
+    - ✅ 固定8秒时长，推荐720p质量
     
     **如需完整功能，请考虑：**
-    - 等待图片功能修复
     - 升级到Vertex AI版本（支持音频）
     - 使用第三方工具后期处理
     """)
