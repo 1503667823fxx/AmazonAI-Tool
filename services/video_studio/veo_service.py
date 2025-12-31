@@ -19,7 +19,6 @@ from .image_processor import process_image_for_video_generation
 try:
     from google import genai
     from google.genai import types
-    import google.generativeai as genai  # 用于文件上传
     SDK_AVAILABLE = True
     print("[DEBUG] Google GenAI SDK 可用")
 except ImportError as e:
@@ -123,14 +122,52 @@ class VeoAPIService:
                     
                     print(f"[DEBUG] 临时文件创建: {tmp_file_path}")
                     
-                    # 上传文件到Google
-                    uploaded_file = genai.upload_file(
-                        path=Path(tmp_file_path),
-                        mime_type="image/jpeg",
-                        display_name="reference_image"
-                    )
+                    # 尝试不同的文件上传方式
+                    uploaded_file = None
                     
-                    print(f"[DEBUG] 文件上传成功: {uploaded_file.name}")
+                    # 方法1: 使用genai.upload_file
+                    try:
+                        if hasattr(genai, 'upload_file'):
+                            uploaded_file = genai.upload_file(
+                                path=Path(tmp_file_path),
+                                mime_type="image/jpeg",
+                                display_name="reference_image"
+                            )
+                            print(f"[DEBUG] genai.upload_file 成功")
+                        else:
+                            raise AttributeError("genai.upload_file 不存在")
+                    except Exception as e:
+                        print(f"[DEBUG] genai.upload_file 失败: {str(e)}")
+                        
+                        # 方法2: 使用client.files.upload
+                        try:
+                            if hasattr(self.client, 'files') and hasattr(self.client.files, 'upload'):
+                                uploaded_file = self.client.files.upload(
+                                    path=tmp_file_path,
+                                    mime_type="image/jpeg",
+                                    display_name="reference_image"
+                                )
+                                print(f"[DEBUG] client.files.upload 成功")
+                            else:
+                                raise AttributeError("client.files.upload 不存在")
+                        except Exception as e2:
+                            print(f"[DEBUG] client.files.upload 失败: {str(e2)}")
+                            
+                            # 方法3: 直接使用字节数据创建Image对象
+                            try:
+                                if hasattr(types, 'Image') and hasattr(types.Image, 'from_bytes'):
+                                    uploaded_file = types.Image.from_bytes(image_result["optimized_bytes"])
+                                    print(f"[DEBUG] types.Image.from_bytes 成功")
+                                else:
+                                    raise AttributeError("types.Image.from_bytes 不存在")
+                            except Exception as e3:
+                                print(f"[DEBUG] types.Image.from_bytes 失败: {str(e3)}")
+                                raise RuntimeError(f"所有文件上传方法都失败了: {str(e)}, {str(e2)}, {str(e3)}")
+                    
+                    if not uploaded_file:
+                        raise RuntimeError("无法创建上传文件对象")
+                    
+                    print(f"[DEBUG] 文件上传成功: {getattr(uploaded_file, 'name', 'unknown')}")
                     
                     # 使用上传的文件生成视频
                     operation = self.client.models.generate_videos(
