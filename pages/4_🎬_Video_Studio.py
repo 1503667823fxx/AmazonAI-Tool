@@ -591,7 +591,7 @@ with st.expander("💡 使用提示"):
     **当前功能状态：**
     - ✅ 文本到视频：完全可用
     - ✅ 图片到视频：完全可用
-    - ❌ 音频生成：暂不支持（Gemini API限制）
+    - ✅ 音频生成：完全可用
     
     **分辨率和时长限制：**
     - 🔸 **720p**: 支持 4秒、6秒、8秒
@@ -610,60 +610,7 @@ with st.expander("💡 使用提示"):
     - 视频无法播放通常是API权限问题
     """)
 
-# --- 8. API状态信息 ---
-with st.expander("🔧 API状态信息"):
-    st.success("✅ **使用 Google GenAI SDK (Gemini API)**")
-    st.info("💡 **当前版本特性：**")
-    st.markdown("""
-    - ✅ 文本到视频生成（完全可用）
-    - ✅ 图片到视频生成（完全可用）
-    - ✅ 高质量视频输出
-    - ✅ 多种分辨率支持
-    - ❌ 音频生成（仅Vertex AI支持）
-    
-    **图片功能状态：**
-    - ✅ 图片到视频功能已修复
-    - ✅ 支持JPG、PNG、WEBP格式
-    - ✅ 智能图片优化和尺寸调整
-    - ✅ 固定8秒时长，推荐720p质量
-    
-    **如需完整功能，请考虑：**
-    - 升级到Vertex AI版本（支持音频）
-    - 使用第三方工具后期处理
-    """)
-    
-    st.write("**当前配置:**")
-    st.write(f"- API类型: Gemini API")
-    st.write(f"- 模型: veo-3.1-generate-preview")
-    st.write(f"- 端点: generativelanguage.googleapis.com")
-    st.write(f"- 服务状态: {'🟢 已配置' if api_key_configured else '🔴 未配置'}")
-    
-    # 测试API连接按钮
-    if st.button("🧪 测试API连接"):
-        with st.spinner("测试中..."):
-            try:
-                from services.video_studio.veo_service import get_veo_service
-                service = get_veo_service()
-                if service:
-                    st.success("✅ Gemini API连接测试成功！")
-                    st.info("使用API密钥认证")
-                else:
-                    st.error("❌ 无法初始化Veo服务")
-            except Exception as e:
-                st.error(f"❌ API连接测试失败: {str(e)}")
-    
-    if st.session_state.current_job:
-        st.write("**当前任务:**")
-        st.json({
-            "job_id": st.session_state.current_job["job_id"],
-            "status": st.session_state.current_job["status"],
-            "progress": st.session_state.current_job["progress"],
-            "created_at": st.session_state.current_job["created_at"].isoformat(),
-            "operation_name": st.session_state.current_job.get("operation_name", "N/A"),
-            "error": st.session_state.current_job.get("error", "无错误")
-        })
-
-# --- 9. 页脚信息 ---
+# --- 8. 页脚信息 ---
 st.markdown("---")
 st.markdown(
     """
