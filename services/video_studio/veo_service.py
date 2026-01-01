@@ -52,10 +52,19 @@ class VeoAPIService:
         reference_image: Optional[bytes] = None,
         negative_prompt: Optional[str] = None,
         seed: Optional[int] = None,
-        generate_audio: bool = False
+        generate_audio: bool = False,
+        model_type: str = "standard",
+        enhance_prompt: bool = True,
+        person_generation: str = "allow_adult"
     ) -> Dict[str, Any]:
         """生成视频"""
         try:
+            # 选择模型
+            if model_type == "fast":
+                model_id = "veo-3.1-fast-generate-preview"
+            else:
+                model_id = self.model_id  # veo-3.1-generate-preview
+            
             # 构建配置 - 处理分辨率和时长的限制
             # 根据API错误：1080p只支持8秒，720p支持4、6、8秒
             
@@ -68,7 +77,9 @@ class VeoAPIService:
             config_params = {
                 "aspect_ratio": aspect_ratio,
                 "duration_seconds": duration,
-                "resolution": adjusted_quality
+                "resolution": adjusted_quality,
+                "person_generation": person_generation,
+                "enhance_prompt": enhance_prompt
             }
             
             # 添加可选参数（排除不支持的参数）
@@ -117,7 +128,7 @@ class VeoAPIService:
                     
                     # 使用图片对象生成视频
                     operation = self.client.models.generate_videos(
-                        model=self.model_id,
+                        model=model_id,
                         prompt=prompt,
                         image=uploaded_file,
                         config=config
@@ -142,7 +153,7 @@ class VeoAPIService:
             else:
                 try:
                     operation = self.client.models.generate_videos(
-                        model=self.model_id,
+                        model=model_id,
                         prompt=prompt,
                         config=config
                     )
@@ -369,7 +380,10 @@ def generate_video_sync(
     reference_image: Optional[bytes] = None,
     negative_prompt: Optional[str] = None,
     seed: Optional[int] = None,
-    generate_audio: bool = False
+    generate_audio: bool = False,
+    model_type: str = "standard",
+    enhance_prompt: bool = True,
+    person_generation: str = "allow_adult"
 ) -> Dict[str, Any]:
     """同步生成视频（用于Streamlit）"""
     service = get_veo_service()
@@ -387,7 +401,10 @@ def generate_video_sync(
         reference_image=reference_image,
         negative_prompt=negative_prompt,
         seed=seed,
-        generate_audio=generate_audio
+        generate_audio=generate_audio,
+        model_type=model_type,
+        enhance_prompt=enhance_prompt,
+        person_generation=person_generation
     )
 
 
