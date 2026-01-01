@@ -241,8 +241,7 @@ with col_output:
                 quality=quality,
                 reference_image=reference_image_bytes,
                 negative_prompt=negative_prompt if negative_prompt.strip() else None,
-                seed=seed,
-                generate_audio=generate_audio
+                seed=seed
             )
             
             if result["success"]:
@@ -582,7 +581,7 @@ with st.expander("💡 使用提示"):
     **当前功能状态：**
     - ✅ 文本到视频：完全可用
     - ✅ 图片到视频：完全可用
-    - ✅ 音频生成：完全可用
+    - ✅ 音频：自动包含，无需设置
     
     **分辨率和时长限制：**
     - 🔸 **720p**: 支持 4秒、6秒、8秒
