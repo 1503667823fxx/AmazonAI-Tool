@@ -75,12 +75,77 @@ with col_input:
     st.subheader("📝 视频生成设置")
     
     # 提示词输入
-    prompt = st.text_area(
-        "视频描述",
-        placeholder="描述你想要生成的视频内容，例如：一只可爱的小猫在花园里玩耍，阳光明媚，画面温馨",
-        height=100,
-        help="详细描述视频内容，包括场景、动作、风格等"
+    prompt_mode = st.radio(
+        "提示词模式",
+        ["简单模式", "专业模式"],
+        help="简单模式：直接输入描述；专业模式：结构化构建提示词"
     )
+    
+    if prompt_mode == "简单模式":
+        prompt = st.text_area(
+            "视频描述",
+            placeholder="描述你想要生成的视频内容，例如：一只可爱的小猫在花园里玩耍，阳光明媚，画面温馨",
+            height=100,
+            help="详细描述视频内容，包括场景、动作、风格等"
+        )
+    else:
+        st.markdown("**🎬 专业提示词构建器**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            subject = st.text_input("主体", placeholder="例如：一只橙色小猫")
+            action = st.text_input("动作", placeholder="例如：在草地上追逐蝴蝶")
+            scene = st.text_input("场景", placeholder="例如：阳光明媚的花园")
+            
+        with col2:
+            camera_angle = st.selectbox("镜头角度", [
+                "None", "Eye-Level Shot", "Low-Angle Shot", "High-Angle Shot", 
+                "Close-Up", "Medium Shot", "Wide Shot", "Over-the-Shoulder Shot"
+            ])
+            
+            camera_movement = st.selectbox("镜头运动", [
+                "None", "Static Shot", "Pan (left)", "Pan (right)", 
+                "Zoom (In)", "Zoom (Out)", "Dolly (In)", "Dolly (Out)"
+            ])
+            
+            style = st.selectbox("视觉风格", [
+                "None", "Photorealistic", "Cinematic", "Vintage", 
+                "Japanese anime style", "Film noir style", "Golden hour glow"
+            ])
+        
+        # 音频设置
+        sound_effects = st.selectbox("音效", [
+            "None", "Soft house sounds", "City traffic", "Waves crashing", 
+            "Ticking clock", "Water splashing"
+        ])
+        
+        dialogue = st.text_input("对话", placeholder="可选：角色说的话")
+        
+        # 自动构建提示词
+        if st.button("🤖 自动构建提示词"):
+            keywords = []
+            if subject: keywords.append(subject)
+            if action: keywords.append(action)
+            if scene: keywords.append(scene)
+            if camera_angle != "None": keywords.append(camera_angle)
+            if camera_movement != "None": keywords.append(camera_movement)
+            if style != "None": keywords.append(style)
+            if sound_effects != "None": keywords.append(sound_effects)
+            if dialogue: keywords.append(f'"{dialogue}"')
+            
+            if keywords:
+                prompt = ", ".join(keywords)
+                st.success("✅ 提示词已自动构建")
+            else:
+                prompt = ""
+                st.warning("⚠️ 请至少填写主体、动作或场景")
+        else:
+            prompt = ""
+        
+        # 显示构建的提示词
+        if prompt:
+            st.text_area("构建的提示词", value=prompt, height=80, disabled=True)
     
     # 参考图片上传
     st.markdown("**参考图片**")
@@ -123,6 +188,19 @@ with col_input:
         else:
             st.error(f"❌ 图片验证失败: {validation['error']}")
             reference_image = None
+    
+    # 模型选择
+    st.markdown("**模型选择**")
+    model_type = st.selectbox(
+        "生成模型",
+        ["标准版 (高质量)", "快速版 (低延迟)"],
+        help="标准版质量更高但生成时间较长，快速版生成更快但质量略低"
+    )
+    
+    if model_type == "快速版 (低延迟)":
+        st.info("🚀 快速版模型：生成时间约1-3分钟，适合快速预览")
+    else:
+        st.info("🎨 标准版模型：生成时间约3-10分钟，质量最佳")
     
     # 视频参数设置
     st.markdown("**视频参数**")
@@ -178,10 +256,25 @@ with col_input:
     
     # 高级选项
     with st.expander("🔧 高级选项"):
+        # Prompt Enhancement
+        enhance_prompt = st.checkbox(
+            "AI提示词增强", 
+            value=True,
+            help="让AI自动优化你的提示词，提升视频质量"
+        )
+        
         negative_prompt = st.text_area(
             "负面提示词（可选）",
             placeholder="描述不希望出现在视频中的内容",
             height=60
+        )
+        
+        # Person Generation 设置
+        person_generation = st.selectbox(
+            "人物生成设置",
+            ["allow_adult", "dont_allow"],
+            index=0,
+            help="allow_adult: 允许生成成人；dont_allow: 不生成人物"
         )
     
     # 生成按钮
@@ -242,7 +335,10 @@ with col_output:
                 quality=quality,
                 reference_image=reference_image_bytes,
                 negative_prompt=negative_prompt if negative_prompt.strip() else None,
-                seed=seed
+                seed=seed,
+                model_type="fast" if model_type == "快速版 (低延迟)" else "standard",
+                enhance_prompt=enhance_prompt,
+                person_generation=person_generation
             )
             
             if result["success"]:
@@ -649,18 +745,41 @@ with st.expander("💡 使用提示"):
     - ✅ 流式下载：大文件分块下载，减少内存占用
     - ✅ 智能刷新：根据任务时间调整检查频率
     - ✅ 临时文件复用：避免重复创建临时文件
+    - ✅ 快速模式：支持Veo 3 Fast模型，生成更快
+    - ✅ AI增强：自动优化提示词，提升视频质量
+    
+    **最佳实践提示词示例：**
+    
+    **🎬 电影风格：**
+    - "一位侦探在昏暗的审讯室中审问嫌疑人，低角度拍摄，电影风格，紧张的背景音乐"
+    - "城市夜景中霓虹灯闪烁，镜头缓慢推进，赛博朋克风格，雨声和车流声"
+    
+    **🌟 生活场景：**
+    - "一只橙色小猫在阳光花园中追逐蝴蝶，特写镜头，温馨画面，鸟鸣声"
+    - "咖啡师在咖啡店制作拿铁艺术，俯视角度，温暖灯光，轻柔爵士乐"
+    
+    **🎨 艺术风格：**
+    - "梵高风格的向日葵田在微风中摇摆，画面色彩饱和，印象派风格"
+    - "日式动漫风格的樱花飘落，少女在树下阅读，柔和粉色调"
+    
+    **🚀 快速模式提示：**
+    - 适合快速预览和测试想法
+    - 生成时间约1-3分钟
+    - 质量略低但足够预览使用
     
     **当前功能状态：**
     - ✅ 文本到视频：完全可用
     - ✅ 图片到视频：完全可用
     - ✅ 音频：自动包含，无需设置
+    - ✅ 双模型：标准版和快速版
+    - ✅ AI增强：自动优化提示词
     
     **分辨率和时长限制：**
     - 🔸 **720p**: 支持 4秒、6秒、8秒
     - 🔸 **1080p**: 仅支持 8秒时长
     - 🔸 **自动调整**: 不兼容组合会自动调整为720p
     - 🔸 **宽高比**: 16:9（横屏）、9:16（竖屏）
-    - 🔸 **生成时间**: 通常3-10分钟
+    - 🔸 **生成时间**: 标准版3-10分钟，快速版1-3分钟
     
     **API状态说明：**
     - 🔄 processing: 正在生成中
@@ -672,6 +791,7 @@ with st.expander("💡 使用提示"):
     - 💾 历史视频会保存在临时缓存中，重启应用后清除
     - 🔄 状态检查频率会根据任务时间智能调整
     - 📱 建议在稳定网络环境下使用
+    - ⚡ 使用快速模式可显著减少等待时间
     
     **遇到问题？**
     - 查看 [故障排除指南](docs/troubleshooting/veo_video_studio_issues.md)
