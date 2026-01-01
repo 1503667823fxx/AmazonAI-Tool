@@ -116,7 +116,7 @@ with col_input:
                 selected_style = style_names[selected_style_idx]
             else:
                 selected_style = "cinematic"
-                st.info("💡 AI润色服务未配置，将使用默认风格")
+                st.info("💡 AI润色服务未配置，需要Google API密钥")
         
         with col_enhance2:
             # 润色按钮
@@ -124,7 +124,7 @@ with col_input:
                 "✨ AI润色提示词",
                 type="secondary",
                 help="使用AI优化你的提示词，让视频效果更好",
-                disabled=not prompt.strip()
+                disabled=not prompt.strip() or not enhancer
             )
         
         # 执行AI润色
