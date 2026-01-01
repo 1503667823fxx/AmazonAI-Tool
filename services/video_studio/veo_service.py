@@ -209,7 +209,8 @@ class VeoAPIService:
                             return {
                                 "status": "completed",
                                 "progress": 100,
-                                "video_bytes": video_bytes,
+                                "video_uri": video_uri,  # 返回URI用于下载
+                                "video_bytes": None,     # 暂不下载
                                 "message": "视频生成完成",
                                 "raw_response": result  # 保存原始响应用于调试
                             }
@@ -312,11 +313,67 @@ class VeoAPIService:
                 
         except Exception as e:
             return None
+    
+    def _download_video_streaming(self, video_uri: str, progress_callback=None):
+        """流式下载视频，支持进度回调"""
+        try:
+            import requests
+            import base64
+            import tempfile
+            import os
+            
+            # 使用API密钥下载视频
+            headers = {
+                "x-goog-api-key": self.api_key
+            }
+            
+            response = requests.get(video_uri, headers=headers, stream=True, timeout=60)
+            
+            if response.status_code == 200:
+                # 获取文件总大小
+                total_size = int(response.headers.get('content-length', 0))
+                downloaded = 0
+                
+                # 创建临时文件
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                    tmp_file_path = tmp_file.name
+                    
+                    # 流式下载
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            tmp_file.write(chunk)
+                            downloaded += len(chunk)
+                            
+                            # 调用进度回调
+                            if progress_callback and total_size > 0:
+                                progress = downloaded / total_size
+                                progress_callback(progress, downloaded, total_size, tmp_file_path)
+                
+                # 读取完整文件并转换为base64
+                with open(tmp_file_path, 'rb') as f:
+                    video_bytes = f.read()
+                
+                # 清理临时文件
+                try:
+                    os.unlink(tmp_file_path)
+                except:
+                    pass
+                
+                # 转换为base64
+                video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+                
+                return video_base64
+            else:
+                return None
+                
+        except Exception as e:
+            return None
 
 
 
-# 全局服务实例
+# 全局服务实例和缓存
 _veo_service: Optional[VeoAPIService] = None
+_video_cache: Dict[str, str] = {}  # 简单的内存缓存
 
 
 def get_veo_service() -> Optional[VeoAPIService]:
@@ -392,3 +449,37 @@ def get_video_status_sync(operation_name: str) -> Dict[str, Any]:
             "progress": 0,
             "error": error_msg
         }
+
+
+def download_video_with_progress(video_uri: str, progress_callback=None) -> Optional[str]:
+    """带进度的视频下载"""
+    global _video_cache
+    
+    # 检查缓存
+    if video_uri in _video_cache:
+        return _video_cache[video_uri]
+    
+    service = get_veo_service()
+    if not service:
+        return None
+    
+    # 流式下载
+    video_base64 = service._download_video_streaming(video_uri, progress_callback)
+    
+    # 缓存结果
+    if video_base64:
+        _video_cache[video_uri] = video_base64
+    
+    return video_base64
+
+
+def get_cached_video(video_uri: str) -> Optional[str]:
+    """获取缓存的视频"""
+    global _video_cache
+    return _video_cache.get(video_uri)
+
+
+def clear_video_cache():
+    """清理视频缓存"""
+    global _video_cache
+    _video_cache.clear()
