@@ -356,15 +356,25 @@ with col_output:
             - 任务ID: {job['job_id']}
             """)
             
-            # 显示视频（只使用字节数据）
-            if job.get("video_bytes"):
+            # 检查是否有缓存的视频
+            video_uri = job.get("video_uri")
+            cached_video = None
+            
+            if video_uri:
+                from services.video_studio import get_cached_video
+                cached_video = get_cached_video(video_uri)
+            
+            # 显示视频播放区域
+            if cached_video:
+                # 已缓存，直接播放
+                st.success("🎬 视频已加载，可以播放")
                 try:
                     import base64
                     import tempfile
                     import os
                     
                     # 解码base64视频数据
-                    video_bytes = base64.b64decode(job["video_bytes"])
+                    video_bytes = base64.b64decode(cached_video)
                     
                     # 创建临时文件
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
@@ -391,11 +401,101 @@ with col_output:
                 except Exception as e:
                     st.error(f"视频处理失败: {str(e)}")
                     
-                    # 显示调试信息
-                    with st.expander("🔍 调试信息"):
-                        st.write(f"任务ID: {job['job_id']}")
-                        if "raw_response" in job:
-                            st.json(job["raw_response"])
+            elif video_uri:
+                # 未缓存，提供加载按钮
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    if st.button("🎬 播放视频", type="primary"):
+                        # 开始流式下载
+                        st.session_state.loading_video = True
+                        st.rerun()
+                
+                with col2:
+                    if st.button("🗑️ 清理缓存"):
+                        from services.video_studio import clear_video_cache
+                        clear_video_cache()
+                        st.success("缓存已清理")
+                        st.rerun()
+                
+                # 如果正在加载视频
+                if st.session_state.get("loading_video", False):
+                    st.info("🔄 正在加载视频，请稍候...")
+                    
+                    # 创建进度显示区域
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    video_placeholder = st.empty()
+                    
+                    # 定义进度回调函数
+                    def progress_callback(progress, downloaded, total, temp_file_path):
+                        progress_bar.progress(progress)
+                        downloaded_mb = downloaded / (1024 * 1024)
+                        total_mb = total / (1024 * 1024) if total > 0 else 0
+                        status_text.text(f"已下载: {downloaded_mb:.1f}MB / {total_mb:.1f}MB ({progress*100:.1f}%)")
+                        
+                        # 下载到1MB后就可以尝试播放
+                        if downloaded > 1024 * 1024 and temp_file_path:
+                            try:
+                                video_placeholder.video(temp_file_path)
+                                status_text.text("视频加载中，可以开始观看...")
+                            except:
+                                pass  # 如果文件还不完整，忽略错误
+                    
+                    # 开始下载
+                    try:
+                        from services.video_studio import download_video_with_progress
+                        
+                        video_base64 = download_video_with_progress(video_uri, progress_callback)
+                        
+                        if video_base64:
+                            # 下载完成
+                            progress_bar.progress(1.0)
+                            status_text.text("✅ 视频加载完成！")
+                            
+                            # 显示最终视频
+                            import base64
+                            import tempfile
+                            import os
+                            
+                            video_bytes = base64.b64decode(video_base64)
+                            
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                                tmp_file.write(video_bytes)
+                                tmp_file_path = tmp_file.name
+                            
+                            video_placeholder.video(tmp_file_path)
+                            
+                            # 提供下载选项
+                            st.download_button(
+                                label="📥 下载视频",
+                                data=video_bytes,
+                                file_name=f"veo_video_{job['job_id']}.mp4",
+                                mime="video/mp4"
+                            )
+                            
+                            # 清理临时文件
+                            try:
+                                os.unlink(tmp_file_path)
+                            except:
+                                pass
+                            
+                            # 重置加载状态
+                            st.session_state.loading_video = False
+                            
+                        else:
+                            st.error("❌ 视频下载失败")
+                            st.session_state.loading_video = False
+                            
+                    except Exception as e:
+                        st.error(f"❌ 视频加载失败: {str(e)}")
+                        st.session_state.loading_video = False
+                        
+                        # 显示调试信息
+                        with st.expander("🔍 调试信息"):
+                            st.write(f"任务ID: {job['job_id']}")
+                            st.write(f"视频URI: {video_uri}")
+                            st.write(f"错误: {str(e)}")
             else:
                 st.error("⚠️ 视频数据不可用")
                 st.info("💡 视频生成成功但无法获取视频数据，请检查SDK配置")
@@ -539,8 +639,50 @@ if st.session_state.generation_history:
                     st.rerun()
             
             with col_video:
-                # 显示历史视频（只使用字节数据）
-                if task.get("video_bytes"):
+                # 显示历史视频
+                video_uri = task.get("video_uri")
+                if video_uri:
+                    from services.video_studio import get_cached_video
+                    cached_video = get_cached_video(video_uri)
+                    
+                    if cached_video:
+                        # 已缓存，直接显示
+                        try:
+                            import base64
+                            import tempfile
+                            import os
+                            
+                            video_bytes = base64.b64decode(cached_video)
+                            
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                                tmp_file.write(video_bytes)
+                                tmp_file_path = tmp_file.name
+                            
+                            st.video(tmp_file_path)
+                            
+                            # 下载按钮
+                            st.download_button(
+                                label="📥 下载视频",
+                                data=video_bytes,
+                                file_name=f"veo_history_{task.get('job_id', i)}.mp4",
+                                mime="video/mp4",
+                                key=f"download_{i}"
+                            )
+                            
+                            try:
+                                os.unlink(tmp_file_path)
+                            except:
+                                pass
+                                
+                        except Exception as e:
+                            st.error(f"历史视频加载失败: {str(e)}")
+                    else:
+                        # 未缓存，显示加载按钮
+                        if st.button(f"🎬 加载视频", key=f"load_history_{i}"):
+                            st.info("正在加载历史视频...")
+                            st.rerun()
+                elif task.get("video_bytes"):
+                    # 兼容旧格式
                     try:
                         import base64
                         import tempfile
@@ -558,7 +700,7 @@ if st.session_state.generation_history:
                         st.download_button(
                             label="📥 下载视频",
                             data=video_bytes,
-                            file_name=f"veo_history_{task['job_id']}.mp4",
+                            file_name=f"veo_history_{task.get('job_id', i)}.mp4",
                             mime="video/mp4",
                             key=f"download_{i}"
                         )
