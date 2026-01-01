@@ -8,6 +8,7 @@ from datetime import datetime
 
 from auth import check_password  # 引入门禁系统
 from services.video_studio.veo_service import generate_video_sync, get_video_status_sync
+from services.video_studio.prompt_enhancer import enhance_video_prompt, get_prompt_enhancer
 
 # --- 1. 门禁检查 ---
 if not check_password():
@@ -81,13 +82,128 @@ with col_input:
         help="简单模式：直接输入描述；专业模式：结构化构建提示词"
     )
     
+    # 初始化prompt变量
+    prompt = ""
+    
     if prompt_mode == "简单模式":
         prompt = st.text_area(
             "视频描述",
             placeholder="描述你想要生成的视频内容，例如：一只可爱的小猫在花园里玩耍，阳光明媚，画面温馨",
             height=100,
-            help="详细描述视频内容，包括场景、动作、风格等"
+            help="详细描述视频内容，包括场景、动作、风格等",
+            key="simple_prompt_input"
         )
+        
+        # AI润色功能
+        st.markdown("**🤖 AI智能润色**")
+        
+        col_enhance1, col_enhance2 = st.columns([2, 1])
+        
+        with col_enhance1:
+            # 风格选择
+            enhancer = get_prompt_enhancer()
+            if enhancer:
+                style_suggestions = enhancer.get_style_suggestions()
+                style_options = [s["display"] for s in style_suggestions]
+                style_names = [s["name"] for s in style_suggestions]
+                
+                selected_style_idx = st.selectbox(
+                    "润色风格",
+                    range(len(style_options)),
+                    format_func=lambda x: style_options[x],
+                    help="选择AI润色的风格方向"
+                )
+                selected_style = style_names[selected_style_idx]
+            else:
+                selected_style = "cinematic"
+                st.info("💡 AI润色服务未配置，将使用默认风格")
+        
+        with col_enhance2:
+            # 润色按钮
+            enhance_button = st.button(
+                "✨ AI润色提示词",
+                type="secondary",
+                help="使用AI优化你的提示词，让视频效果更好",
+                disabled=not prompt.strip()
+            )
+        
+        # 执行AI润色
+        if enhance_button and prompt.strip():
+            if enhancer:
+                with st.spinner("🤖 AI正在分析和优化你的提示词..."):
+                    # 获取参考图片（如果有的话）
+                    reference_image_for_enhance = None
+                    if reference_image is not None:
+                        reference_image.seek(0)  # 重置文件指针
+                        reference_image_for_enhance = reference_image.read()
+                    
+                    # 调用AI润色
+                    enhancement_result = enhance_video_prompt(
+                        user_prompt=prompt,
+                        reference_image=reference_image_for_enhance,
+                        duration=duration,
+                        aspect_ratio=aspect_ratio,
+                        style_preference=selected_style
+                    )
+                    
+                    if enhancement_result["success"]:
+                        st.success("✅ AI润色完成！")
+                        
+                        # 显示对比
+                        col_before, col_after = st.columns(2)
+                        
+                        with col_before:
+                            st.markdown("**📝 原始提示词**")
+                            st.text_area(
+                                "原始",
+                                value=enhancement_result["original_prompt"],
+                                height=80,
+                                disabled=True,
+                                key="original_prompt_display"
+                            )
+                        
+                        with col_after:
+                            st.markdown("**✨ AI优化后**")
+                            enhanced_prompt = st.text_area(
+                                "优化后",
+                                value=enhancement_result["enhanced_prompt"],
+                                height=80,
+                                key="enhanced_prompt_display"
+                            )
+                        
+                        # 应用润色结果
+                        col_apply, col_analysis = st.columns([1, 1])
+                        
+                        with col_apply:
+                            if st.button("✅ 使用优化后的提示词", type="primary"):
+                                # 将优化后的提示词保存到session state
+                                st.session_state.enhanced_prompt_applied = enhanced_prompt
+                                st.success("已应用AI优化的提示词！")
+                                st.rerun()
+                        
+                        with col_analysis:
+                            if st.button("📊 查看AI分析"):
+                                with st.expander("🤖 AI分析详情", expanded=True):
+                                    st.markdown(enhancement_result["analysis"])
+                    else:
+                        st.error(f"❌ AI润色失败: {enhancement_result['error']}")
+                        st.info("💡 将继续使用原始提示词")
+            else:
+                st.error("❌ AI润色服务未配置")
+        
+        # 检查是否有应用的增强提示词
+        if 'enhanced_prompt_applied' in st.session_state:
+            prompt = st.session_state.enhanced_prompt_applied
+            st.success("✅ 当前使用AI优化的提示词")
+            # 清除session state中的增强提示词，避免影响下次使用
+            if st.button("🔄 重置为原始输入"):
+                del st.session_state.enhanced_prompt_applied
+                st.rerun()
+        
+        # 显示当前提示词状态
+        if prompt and prompt.strip():
+            st.markdown("**📋 当前提示词**")
+            st.info(f"💬 {prompt}")
     else:
         st.markdown("**🎬 专业提示词构建器**")
         st.info("💡 通过结构化输入构建专业级视频提示词，每个选项都有中文说明帮助理解")
