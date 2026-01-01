@@ -255,7 +255,7 @@ with col_output:
                     "quality": quality,
                     "seed": seed,
                     "negative_prompt": negative_prompt,
-                    "generate_audio": generate_audio,
+                    "generate_audio": False,  # 固定为False，因为音频是自动包含的
                     "status": "processing",
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # 添加timestamp
                     "created_at": datetime.now(),
