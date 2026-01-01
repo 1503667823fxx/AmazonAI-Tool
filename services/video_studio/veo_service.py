@@ -288,28 +288,47 @@ class VeoAPIService:
             return None
     
     def _download_video_from_uri(self, video_uri: str) -> str:
-        """从URI下载视频并转换为base64"""
+        """从URI下载视频并转换为base64 - 优化版本"""
         try:
             import requests
             import base64
+            import hashlib
             
-            # 使用API密钥下载视频
+            # 生成缓存键
+            cache_key = hashlib.md5(video_uri.encode()).hexdigest()
+            
+            # 检查session state缓存
+            if 'video_cache' not in st.session_state:
+                st.session_state.video_cache = {}
+            
+            # 如果已缓存，直接返回
+            if cache_key in st.session_state.video_cache:
+                return st.session_state.video_cache[cache_key]
+            
+            # 使用流式下载优化大文件处理
             headers = {
                 "x-goog-api-key": self.api_key
             }
             
-            response = requests.get(video_uri, headers=headers, timeout=60)
-            
-            if response.status_code == 200:
-                video_bytes = response.content
-                
-                # 转换为base64
-                video_base64 = base64.b64encode(video_bytes).decode('utf-8')
-                
-                return video_base64
-            else:
-                return None
-                
+            with requests.get(video_uri, headers=headers, timeout=120, stream=True) as response:
+                if response.status_code == 200:
+                    # 流式读取，避免内存峰值
+                    video_bytes = b''
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            video_bytes += chunk
+                    
+                    # 转换为base64
+                    video_base64 = base64.b64encode(video_bytes).decode('utf-8')
+                    
+                    # 缓存结果（限制缓存大小）
+                    if len(st.session_state.video_cache) < 5:  # 最多缓存5个视频
+                        st.session_state.video_cache[cache_key] = video_base64
+                    
+                    return video_base64
+                else:
+                    return None
+                    
         except Exception as e:
             return None
 
