@@ -138,7 +138,7 @@ with col_input:
         
         # AI润色功能
         st.markdown("**🤖 AI智能润色**")
-        st.info("💡 AI会根据你的描述和参考图片生成专业的8秒视频提示词，使用最佳的默认参数设置")
+        st.info("💡 AI会分析你的描述和参考图片，生成专业的中文提示词供你参考")
         
         col_enhance1, col_enhance2 = st.columns([2, 1])
         
@@ -166,7 +166,7 @@ with col_input:
             enhance_button = st.button(
                 "✨ AI润色提示词",
                 type="secondary",
-                help="使用AI优化你的提示词，让视频效果更好",
+                help="使用AI优化你的提示词，生成专业的中文描述",
                 disabled=not prompt.strip() or not enhancer
             )
         
@@ -195,56 +195,43 @@ with col_input:
                     if enhancement_result["success"]:
                         st.success("✅ AI润色完成！")
                         
-                        # 显示对比
-                        col_before, col_after = st.columns(2)
+                        # 显示AI润色结果
+                        st.markdown("**🎨 AI优化的提示词**")
+                        enhanced_prompt_display = st.text_area(
+                            "AI生成的专业提示词（中文版）",
+                            value=enhancement_result["enhanced_prompt"],
+                            height=120,
+                            help="这是AI生成的专业提示词，你可以复制到上面的输入框中使用"
+                        )
                         
-                        with col_before:
-                            st.markdown("**📝 原始提示词**")
-                            st.text_area(
-                                "原始",
-                                value=enhancement_result["original_prompt"],
-                                height=80,
-                                disabled=True,
-                                key="original_prompt_display"
-                            )
+                        # 复制按钮和说明
+                        col_copy, col_info = st.columns([1, 2])
                         
-                        with col_after:
-                            st.markdown("**✨ AI优化后**")
-                            enhanced_prompt = st.text_area(
-                                "优化后",
-                                value=enhancement_result["enhanced_prompt"],
-                                height=80,
-                                key="enhanced_prompt_display"
-                            )
-                        
-                        # 应用润色结果
-                        col_apply, col_analysis = st.columns([1, 1])
-                        
-                        with col_apply:
-                            if st.button("✅ 使用优化后的提示词", type="primary"):
-                                # 将优化后的提示词保存到session state
-                                st.session_state.enhanced_prompt_applied = enhanced_prompt
-                                st.success("已应用AI优化的提示词！")
+                        with col_copy:
+                            if st.button("📋 复制到输入框", type="primary"):
+                                # 将AI润色结果保存到session state，用于更新输入框
+                                st.session_state.enhanced_prompt_to_copy = enhanced_prompt_display
+                                st.success("✅ 已复制！请刷新页面查看")
                                 st.rerun()
                         
-                        with col_analysis:
-                            if st.button("📊 查看AI分析"):
-                                with st.expander("🤖 AI分析详情", expanded=True):
-                                    st.markdown(enhancement_result["analysis"])
+                        with col_info:
+                            st.info("💡 点击复制按钮将AI优化的提示词复制到上面的输入框中")
+                        
+                        # 显示AI分析（可选展开）
+                        with st.expander("🤖 查看AI分析详情"):
+                            st.markdown(enhancement_result["analysis"])
                     else:
                         st.error(f"❌ AI润色失败: {enhancement_result['error']}")
                         st.info("💡 将继续使用原始提示词")
             else:
                 st.error("❌ AI润色服务未配置")
         
-        # 检查是否有应用的增强提示词
-        if 'enhanced_prompt_applied' in st.session_state:
-            prompt = st.session_state.enhanced_prompt_applied
-            st.success("✅ 当前使用AI优化的提示词")
-            # 清除session state中的增强提示词，避免影响下次使用
-            if st.button("🔄 重置为原始输入"):
-                del st.session_state.enhanced_prompt_applied
-                st.rerun()
+        # 检查是否有需要复制的增强提示词
+        if 'enhanced_prompt_to_copy' in st.session_state:
+            prompt = st.session_state.enhanced_prompt_to_copy
+            st.success("✅ 已应用AI优化的提示词")
+            # 清除session state
+            del st.session_state.enhanced_prompt_to_copy
         
         # 显示当前提示词状态
         if prompt and prompt.strip():
@@ -460,13 +447,6 @@ with col_input:
     
     # 高级选项
     with st.expander("🔧 高级选项"):
-        # Prompt Enhancement
-        enhance_prompt = st.checkbox(
-            "AI提示词增强", 
-            value=True,
-            help="让AI自动优化你的提示词，提升视频质量"
-        )
-        
         negative_prompt = st.text_area(
             "负面提示词（可选）",
             placeholder="描述不希望出现在视频中的内容",
@@ -543,7 +523,6 @@ with col_output:
                 negative_prompt=negative_prompt if negative_prompt.strip() else None,
                 seed=seed,
                 model_type="fast" if model_type == "快速版 (低延迟)" else "standard",
-                enhance_prompt=enhance_prompt,
                 person_generation=person_generation.split(" - ")[0]  # 提取英文部分
             )
             
@@ -946,6 +925,25 @@ if st.session_state.generation_history:
 st.markdown("---")
 with st.expander("💡 使用提示"):
     st.markdown("""
+    **🤖 AI智能润色功能：**
+    
+    **✨ 简化的润色流程：**
+    - **智能分析**: AI分析你的提示词和参考图片
+    - **中文优化**: 生成专业的中文提示词，便于理解
+    - **风格适配**: 支持5种专业风格（电影、纪录片、艺术、商业、生活）
+    - **独立展示**: AI结果显示在专门的文本框中
+    - **手动复制**: 你可以选择是否复制AI优化的结果到输入框
+    - **完全可选**: 不影响原有的视频生成流程
+    
+    **🎯 使用流程：**
+    1. 在"视频描述"中输入你的基本想法
+    2. 如果有参考图片，先上传图片
+    3. 选择合适的润色风格
+    4. 点击"AI润色提示词"
+    5. 查看AI生成的中文优化版本
+    6. 如果满意，点击"复制到输入框"
+    7. 继续设置其他参数并生成视频
+    
     **🎬 专业提示词构建器使用说明：**
     
     **📝 基础内容：**
