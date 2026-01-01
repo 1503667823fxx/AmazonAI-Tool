@@ -82,6 +82,48 @@ with col_input:
         help="简单模式：直接输入描述；专业模式：结构化构建提示词"
     )
     
+    # 参考图片上传（放在提示词输入之前，确保变量可用）
+    st.markdown("**参考图片**")
+    
+    reference_image = st.file_uploader(
+        "参考图片（可选）",
+        type=['jpg', 'jpeg', 'png', 'webp'],
+        help="上传一张参考图片来引导视频生成，支持JPG、PNG、WEBP格式"
+    )
+    
+    # 验证图片
+    if reference_image is not None:
+        from services.video_studio import validate_uploaded_image
+        
+        image_bytes = reference_image.read()
+        validation = validate_uploaded_image(image_bytes)
+        
+        if validation["valid"]:
+            st.success("✅ 图片验证通过")
+            col_img, col_info = st.columns([1, 1])
+            
+            with col_img:
+                st.image(reference_image, caption="参考图片", use_container_width=True)
+            
+            with col_info:
+                st.info(f"""
+                **图片信息**
+                - 格式: {validation['format']}
+                - 尺寸: {validation['size'][0]} x {validation['size'][1]}
+                - 文件大小: {validation['file_size']/1024:.1f} KB
+                """)
+                
+                st.info("""
+                📋 **图片到视频说明**
+                - 使用官方Google示例方法
+                - 时长: 固定8秒
+                - 质量: 推荐720p
+                - 处理时间: 5-15分钟
+                """)
+        else:
+            st.error(f"❌ 图片验证失败: {validation['error']}")
+            reference_image = None
+    
     # 初始化prompt变量
     prompt = ""
     
@@ -134,8 +176,11 @@ with col_input:
                     # 获取参考图片（如果有的话）
                     reference_image_for_enhance = None
                     if reference_image is not None:
-                        reference_image.seek(0)  # 重置文件指针
+                        # 重置文件指针到开始位置
+                        reference_image.seek(0)
                         reference_image_for_enhance = reference_image.read()
+                        # 再次重置文件指针，以便后续使用
+                        reference_image.seek(0)
                     
                     # 调用AI润色
                     enhancement_result = enhance_video_prompt(
@@ -347,50 +392,6 @@ with col_input:
             - **黄金时刻**: 温暖的金色光线效果
             """)
     
-    # 简单模式和专业模式的共同部分
-    
-    # 参考图片上传
-    st.markdown("**参考图片**")
-    
-    reference_image = st.file_uploader(
-        "参考图片（可选）",
-        type=['jpg', 'jpeg', 'png', 'webp'],
-        help="上传一张参考图片来引导视频生成，支持JPG、PNG、WEBP格式"
-    )
-    
-    # 验证图片
-    if reference_image is not None:
-        from services.video_studio import validate_uploaded_image
-        
-        image_bytes = reference_image.read()
-        validation = validate_uploaded_image(image_bytes)
-        
-        if validation["valid"]:
-            st.success("✅ 图片验证通过")
-            col_img, col_info = st.columns([1, 1])
-            
-            with col_img:
-                st.image(reference_image, caption="参考图片", use_container_width=True)
-            
-            with col_info:
-                st.info(f"""
-                **图片信息**
-                - 格式: {validation['format']}
-                - 尺寸: {validation['size'][0]} x {validation['size'][1]}
-                - 文件大小: {validation['file_size']/1024:.1f} KB
-                """)
-                
-                st.info("""
-                📋 **图片到视频说明**
-                - 使用官方Google示例方法
-                - 时长: 固定8秒
-                - 质量: 推荐720p
-                - 处理时间: 5-15分钟
-                """)
-        else:
-            st.error(f"❌ 图片验证失败: {validation['error']}")
-            reference_image = None
-    
     # 模型选择
     st.markdown("**模型选择**")
     model_type = st.selectbox(
@@ -525,9 +526,11 @@ with col_output:
             # 处理参考图片
             reference_image_bytes = None
             if reference_image is not None:
-                # 重新读取图片数据（因为之前验证时已经读取过）
-                reference_image.seek(0)  # 重置文件指针
+                # 重置文件指针到开始位置
+                reference_image.seek(0)
                 reference_image_bytes = reference_image.read()
+                # 再次重置文件指针，以便后续使用
+                reference_image.seek(0)
             
             # 调用真正的API
             result = generate_video_sync(
