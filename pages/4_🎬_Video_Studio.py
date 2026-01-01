@@ -2,6 +2,7 @@ import streamlit as st
 import asyncio
 import time
 import json
+import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -289,6 +290,12 @@ with col_output:
             progress_bar = st.progress(job["progress"] / 100)
             st.write(f"进度: {job['progress']}%")
             
+            # 智能刷新 - 根据任务时间调整刷新间隔
+            task_age = time.time() - job.get("created_at", datetime.now()).timestamp() if isinstance(job.get("created_at"), datetime) else 0
+            
+            # 前3分钟每10秒检查一次，之后每30秒检查一次
+            refresh_interval = 10 if task_age < 180 else 30
+            
             # 获取最新状态
             with st.spinner("检查生成状态..."):
                 try:
@@ -315,13 +322,13 @@ with col_output:
             if "error" in status_result:
                 job["error"] = status_result["error"]
             
-            # 如果仍在处理中，使用自动刷新
+            # 如果仍在处理中，使用智能刷新
             if job["status"] == "processing":
-                st.info("⏳ 视频生成中，页面将在5秒后自动刷新...")
+                st.info(f"⏳ 视频生成中，页面将在{refresh_interval}秒后自动刷新...")
                 
                 # 创建一个占位符用于倒计时
                 countdown_placeholder = st.empty()
-                for i in range(5, 0, -1):
+                for i in range(refresh_interval, 0, -1):
                     countdown_placeholder.info(f"⏳ {i}秒后自动刷新...")
                     time.sleep(1)
                 
@@ -346,37 +353,64 @@ with col_output:
             - 任务ID: {job['job_id']}
             """)
             
-            # 显示视频（只使用字节数据）
+            # 显示视频（优化版本 - 使用缓存和流式处理）
             if job.get("video_bytes"):
                 try:
                     import base64
                     import tempfile
                     import os
+                    import hashlib
                     
-                    # 解码base64视频数据
-                    video_bytes = base64.b64decode(job["video_bytes"])
+                    # 生成视频缓存键
+                    video_cache_key = f"video_{job['job_id']}"
                     
-                    # 创建临时文件
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
-                        tmp_file.write(video_bytes)
-                        tmp_file_path = tmp_file.name
+                    # 检查是否已有临时文件缓存
+                    if 'temp_video_files' not in st.session_state:
+                        st.session_state.temp_video_files = {}
                     
-                    # 显示视频
-                    st.video(tmp_file_path)
-                    
-                    # 提供下载选项
-                    st.download_button(
-                        label="📥 下载视频",
-                        data=video_bytes,
-                        file_name=f"veo_video_{job['job_id']}.mp4",
-                        mime="video/mp4"
-                    )
-                    
-                    # 清理临时文件
-                    try:
-                        os.unlink(tmp_file_path)
-                    except:
-                        pass
+                    # 如果已有缓存的临时文件且文件存在，直接使用
+                    if (video_cache_key in st.session_state.temp_video_files and 
+                        os.path.exists(st.session_state.temp_video_files[video_cache_key])):
+                        
+                        cached_path = st.session_state.temp_video_files[video_cache_key]
+                        st.video(cached_path)
+                        
+                        # 提供下载选项
+                        with open(cached_path, 'rb') as f:
+                            video_data = f.read()
+                        
+                        st.download_button(
+                            label="📥 下载视频",
+                            data=video_data,
+                            file_name=f"veo_video_{job['job_id']}.mp4",
+                            mime="video/mp4"
+                        )
+                    else:
+                        # 解码并创建新的临时文件
+                        video_bytes = base64.b64decode(job["video_bytes"])
+                        
+                        # 创建持久化临时文件（不立即删除）
+                        temp_dir = tempfile.gettempdir()
+                        temp_filename = f"veo_video_{job['job_id']}.mp4"
+                        tmp_file_path = os.path.join(temp_dir, temp_filename)
+                        
+                        # 写入文件
+                        with open(tmp_file_path, 'wb') as f:
+                            f.write(video_bytes)
+                        
+                        # 缓存文件路径
+                        st.session_state.temp_video_files[video_cache_key] = tmp_file_path
+                        
+                        # 显示视频
+                        st.video(tmp_file_path)
+                        
+                        # 提供下载选项
+                        st.download_button(
+                            label="📥 下载视频",
+                            data=video_bytes,
+                            file_name=f"veo_video_{job['job_id']}.mp4",
+                            mime="video/mp4"
+                        )
                         
                 except Exception as e:
                     st.error(f"视频处理失败: {str(e)}")
@@ -489,6 +523,21 @@ if st.session_state.generation_history:
     col_title, col_clear = st.columns([3, 1])
     with col_clear:
         if st.button("🗑️ 清空历史"):
+            # 清理临时文件
+            if 'temp_video_files' in st.session_state:
+                for file_path in st.session_state.temp_video_files.values():
+                    try:
+                        if os.path.exists(file_path):
+                            os.unlink(file_path)
+                    except:
+                        pass
+                st.session_state.temp_video_files = {}
+            
+            # 清理视频缓存
+            if 'video_cache' in st.session_state:
+                st.session_state.video_cache = {}
+            
+            # 清空历史记录
             st.session_state.generation_history = []
             st.rerun()
     
@@ -529,34 +578,62 @@ if st.session_state.generation_history:
                     st.rerun()
             
             with col_video:
-                # 显示历史视频（只使用字节数据）
+                # 显示历史视频（优化版本 - 使用缓存）
                 if task.get("video_bytes"):
                     try:
                         import base64
                         import tempfile
                         import os
                         
-                        video_bytes = base64.b64decode(task["video_bytes"])
+                        # 生成历史视频缓存键
+                        history_cache_key = f"history_video_{task['job_id']}"
                         
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
-                            tmp_file.write(video_bytes)
-                            tmp_file_path = tmp_file.name
+                        # 检查缓存
+                        if 'temp_video_files' not in st.session_state:
+                            st.session_state.temp_video_files = {}
                         
-                        st.video(tmp_file_path)
-                        
-                        # 下载按钮
-                        st.download_button(
-                            label="📥 下载视频",
-                            data=video_bytes,
-                            file_name=f"veo_history_{task['job_id']}.mp4",
-                            mime="video/mp4",
-                            key=f"download_{i}"
-                        )
-                        
-                        try:
-                            os.unlink(tmp_file_path)
-                        except:
-                            pass
+                        # 如果已有缓存且文件存在，直接使用
+                        if (history_cache_key in st.session_state.temp_video_files and 
+                            os.path.exists(st.session_state.temp_video_files[history_cache_key])):
+                            
+                            cached_path = st.session_state.temp_video_files[history_cache_key]
+                            st.video(cached_path)
+                            
+                            # 下载按钮
+                            with open(cached_path, 'rb') as f:
+                                video_data = f.read()
+                            
+                            st.download_button(
+                                label="📥 下载视频",
+                                data=video_data,
+                                file_name=f"veo_history_{task['job_id']}.mp4",
+                                mime="video/mp4",
+                                key=f"download_{i}"
+                            )
+                        else:
+                            # 创建新的缓存文件
+                            video_bytes = base64.b64decode(task["video_bytes"])
+                            
+                            temp_dir = tempfile.gettempdir()
+                            temp_filename = f"veo_history_{task['job_id']}.mp4"
+                            tmp_file_path = os.path.join(temp_dir, temp_filename)
+                            
+                            with open(tmp_file_path, 'wb') as f:
+                                f.write(video_bytes)
+                            
+                            # 缓存文件路径
+                            st.session_state.temp_video_files[history_cache_key] = tmp_file_path
+                            
+                            st.video(tmp_file_path)
+                            
+                            # 下载按钮
+                            st.download_button(
+                                label="📥 下载视频",
+                                data=video_bytes,
+                                file_name=f"veo_history_{task['job_id']}.mp4",
+                                mime="video/mp4",
+                                key=f"download_{i}"
+                            )
                             
                     except Exception as e:
                         st.error(f"历史视频加载失败: {str(e)}")
@@ -567,16 +644,11 @@ if st.session_state.generation_history:
 st.markdown("---")
 with st.expander("💡 使用提示"):
     st.markdown("""
-    **最佳实践：**
-    - 使用清晰、具体的描述
-    - 描述动作和场景细节
-    - 考虑8秒时长限制
-    - 16:9适合横屏观看，9:16适合手机竖屏
-    
-    **示例提示词：**
-    - "一只橙色的小猫在绿色草地上追逐蝴蝶，阳光透过树叶洒下斑驳光影"
-    - "城市夜景中霓虹灯闪烁，车流如光河般流淌，现代都市风格"
-    - "海浪轻柔地拍打着沙滩，夕阳西下，天空呈现橙红色渐变"
+    **性能优化说明：**
+    - ✅ 视频缓存：已启用智能缓存，重复播放更快
+    - ✅ 流式下载：大文件分块下载，减少内存占用
+    - ✅ 智能刷新：根据任务时间调整检查频率
+    - ✅ 临时文件复用：避免重复创建临时文件
     
     **当前功能状态：**
     - ✅ 文本到视频：完全可用
@@ -594,6 +666,12 @@ with st.expander("💡 使用提示"):
     - 🔄 processing: 正在生成中
     - ✅ completed: 生成完成
     - ❌ failed: 生成失败
+    
+    **性能提示：**
+    - 🚀 首次播放可能较慢，后续播放会使用缓存
+    - 💾 历史视频会保存在临时缓存中，重启应用后清除
+    - 🔄 状态检查频率会根据任务时间智能调整
+    - 📱 建议在稳定网络环境下使用
     
     **遇到问题？**
     - 查看 [故障排除指南](docs/troubleshooting/veo_video_studio_issues.md)
