@@ -182,15 +182,6 @@ with col_input:
             placeholder="描述不希望出现在视频中的内容",
             height=60
         )
-        
-        # 注意：Gemini API暂不支持音频生成
-        generate_audio = st.checkbox(
-            "生成音频", 
-            help="⚠️ 当前Gemini API版本暂不支持音频生成功能",
-            disabled=True,
-            value=False
-        )
-        st.info("💡 音频生成功能仅在Vertex AI版本中可用，Gemini API版本暂不支持")
     
     # 生成按钮
     st.markdown("---")
