@@ -3,12 +3,24 @@ Video Studio 提示词增强服务
 基于 Gemini 3 Flash Preview 模型，专门为 8秒视频生成优化提示词
 """
 
-import google.generativeai as genai
 import streamlit as st
 from typing import Optional, Dict, Any, List
 from PIL import Image
 import io
 import base64
+
+# 尝试导入Google GenAI
+try:
+    import google.generativeai as genai
+    GENAI_AVAILABLE = True
+except ImportError:
+    try:
+        # 尝试备用导入
+        from google import genai
+        GENAI_AVAILABLE = True
+    except ImportError:
+        GENAI_AVAILABLE = False
+        genai = None
 
 class VideoPromptEnhancer:
     """
@@ -17,6 +29,10 @@ class VideoPromptEnhancer:
     """
     
     def __init__(self, api_key: Optional[str] = None):
+        if not GENAI_AVAILABLE:
+            self.valid = False
+            return
+            
         self.api_key = api_key or st.secrets.get("GOOGLE_API_KEY")
         if self.api_key:
             genai.configure(api_key=self.api_key)
@@ -26,6 +42,8 @@ class VideoPromptEnhancer:
     
     def _get_model(self):
         """获取 Gemini 3 Flash Preview 模型"""
+        if not GENAI_AVAILABLE or not genai:
+            return None
         return genai.GenerativeModel("models/gemini-3-flash-preview")
     
     def enhance_prompt(
@@ -49,10 +67,10 @@ class VideoPromptEnhancer:
         Returns:
             包含增强后提示词和分析的字典
         """
-        if not self.valid:
+        if not self.valid or not GENAI_AVAILABLE:
             return {
                 "success": False,
-                "error": "Gemini API 未配置",
+                "error": "Gemini API 未配置或不可用",
                 "enhanced_prompt": user_prompt,
                 "analysis": "API未配置，返回原始提示词"
             }
@@ -79,7 +97,8 @@ class VideoPromptEnhancer:
                     3. 保持图片的视觉风格和氛围
                     4. 确保生成的视频提示词能够很好地延续图片的故事
                     """)
-                else:
+                except Exception:
+                    # 如果图片处理失败，使用文本优化
                     inputs.append(f"""
                     【用户提示词优化任务】
                     用户输入："{user_prompt}"
@@ -96,6 +115,14 @@ class VideoPromptEnhancer:
             
             # 调用 Gemini API
             model = self._get_model()
+            if not model:
+                return {
+                    "success": False,
+                    "error": "无法获取Gemini模型",
+                    "enhanced_prompt": user_prompt,
+                    "analysis": "模型不可用，返回原始提示词"
+                }
+                
             config = genai.types.GenerationConfig(
                 temperature=0.7,
                 candidate_count=1,
@@ -242,6 +269,9 @@ def get_prompt_enhancer() -> Optional[VideoPromptEnhancer]:
     global _prompt_enhancer
     
     try:
+        if not GENAI_AVAILABLE:
+            return None
+            
         if "GOOGLE_API_KEY" not in st.secrets:
             return None
         
