@@ -195,16 +195,16 @@ class VeoAPIService:
                                 "error": error_msg
                             }
                         else:
-                            # 尝试提取视频数据
-                            video_bytes = None
+                            # 尝试提取视频URI和数据
+                            video_uri = None
                             
                             if "response" in result:
                                 response_data = result["response"]
-                                # 搜索视频字节数据
-                                video_bytes = self._extract_video_bytes_from_response(response_data)
+                                # 提取视频URI
+                                video_uri = self._extract_video_uri_from_response(response_data)
                             else:
                                 # 有些API可能直接在根级别返回数据
-                                video_bytes = self._extract_video_bytes_from_response(result)
+                                video_uri = self._extract_video_uri_from_response(result)
                             
                             return {
                                 "status": "completed",
