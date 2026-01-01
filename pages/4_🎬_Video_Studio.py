@@ -138,6 +138,7 @@ with col_input:
         
         # AI润色功能
         st.markdown("**🤖 AI智能润色**")
+        st.info("💡 AI会根据你的描述和参考图片生成专业的8秒视频提示词，使用最佳的默认参数设置")
         
         col_enhance1, col_enhance2 = st.columns([2, 1])
         
@@ -182,12 +183,12 @@ with col_input:
                         # 再次重置文件指针，以便后续使用
                         reference_image.seek(0)
                     
-                    # 调用AI润色
+                    # 调用AI润色（使用默认参数，因为润色主要关注内容而非技术参数）
                     enhancement_result = enhance_video_prompt(
                         user_prompt=prompt,
                         reference_image=reference_image_for_enhance,
-                        duration=duration,
-                        aspect_ratio=aspect_ratio,
+                        duration=8,  # 默认8秒，适合大多数场景
+                        aspect_ratio="16:9",  # 默认16:9宽高比，最常用
                         style_preference=selected_style
                     )
                     
