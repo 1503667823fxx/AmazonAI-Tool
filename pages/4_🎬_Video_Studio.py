@@ -90,37 +90,87 @@ with col_input:
         )
     else:
         st.markdown("**🎬 专业提示词构建器**")
+        st.info("💡 通过结构化输入构建专业级视频提示词，每个选项都有中文说明帮助理解")
         
         col1, col2 = st.columns(2)
         
         with col1:
+            st.markdown("**📝 基础内容**")
             subject = st.text_input("主体", placeholder="例如：一只橙色小猫")
             action = st.text_input("动作", placeholder="例如：在草地上追逐蝴蝶")
             scene = st.text_input("场景", placeholder="例如：阳光明媚的花园")
             
         with col2:
+            st.markdown("**🎥 镜头设置**")
             camera_angle = st.selectbox("镜头角度", [
-                "None", "Eye-Level Shot", "Low-Angle Shot", "High-Angle Shot", 
-                "Close-Up", "Medium Shot", "Wide Shot", "Over-the-Shoulder Shot"
-            ])
+                "None - 无特定角度",
+                "Eye-Level Shot - 平视角度", 
+                "Low-Angle Shot - 低角度仰拍", 
+                "High-Angle Shot - 高角度俯拍", 
+                "Close-Up - 特写镜头",
+                "Medium Shot - 中景镜头", 
+                "Wide Shot - 远景镜头", 
+                "Over-the-Shoulder Shot - 过肩镜头"
+            ], help="选择拍摄角度，影响视觉效果和情感表达")
             
             camera_movement = st.selectbox("镜头运动", [
-                "None", "Static Shot", "Pan (left)", "Pan (right)", 
-                "Zoom (In)", "Zoom (Out)", "Dolly (In)", "Dolly (Out)"
-            ])
+                "None - 静止镜头",
+                "Static Shot - 固定镜头", 
+                "Pan (left) - 向左平移", 
+                "Pan (right) - 向右平移", 
+                "Zoom (In) - 推进放大",
+                "Zoom (Out) - 拉远缩小", 
+                "Dolly (In) - 推轨进入", 
+                "Dolly (Out) - 推轨退出"
+            ], help="镜头运动方式，增加动态效果")
             
             style = st.selectbox("视觉风格", [
-                "None", "Photorealistic", "Cinematic", "Vintage", 
-                "Japanese anime style", "Film noir style", "Golden hour glow"
-            ])
+                "None - 无特定风格",
+                "Photorealistic - 照片写实风格", 
+                "Cinematic - 电影风格", 
+                "Vintage - 复古风格", 
+                "Japanese anime style - 日式动漫风格",
+                "Film noir style - 黑色电影风格", 
+                "Golden hour glow - 黄金时刻光效"
+            ], help="选择视觉风格，决定画面的整体感觉")
         
         # 音频设置
+        st.markdown("**🔊 音频效果**")
         sound_effects = st.selectbox("音效", [
-            "None", "Soft house sounds", "City traffic", "Waves crashing", 
-            "Ticking clock", "Water splashing"
-        ])
+            "None - 无音效",
+            "Soft house sounds - 轻柔室内声", 
+            "City traffic - 城市交通声", 
+            "Waves crashing - 海浪拍打声", 
+            "Ticking clock - 时钟滴答声",
+            "Water splashing - 水花飞溅声"
+        ], help="选择背景音效，增强视频氛围")
         
-        dialogue = st.text_input("对话", placeholder="可选：角色说的话")
+        dialogue = st.text_input("对话", placeholder="可选：角色说的话，用引号包围")
+        
+        # 添加快速示例按钮
+        st.markdown("**🚀 快速示例**")
+        col_ex1, col_ex2, col_ex3 = st.columns(3)
+        
+        with col_ex1:
+            if st.button("🐱 可爱动物"):
+                subject = "一只橙色小猫"
+                action = "在花园中追逐蝴蝶"
+                scene = "阳光明媚的后院"
+                st.success("✅ 已应用可爱动物示例")
+        
+        with col_ex2:
+            if st.button("🎬 电影风格"):
+                subject = "一位侦探"
+                action = "在昏暗房间中查看证据"
+                scene = "深夜的办公室"
+                st.success("✅ 已应用电影风格示例")
+        
+        with col_ex3:
+            if st.button("🌆 城市风光"):
+                subject = "繁华都市"
+                action = "霓虹灯闪烁，车流穿梭"
+                scene = "夜晚的市中心"
+                st.success("✅ 已应用城市风光示例")
         
         # 自动构建提示词
         if st.button("🤖 自动构建提示词"):
@@ -128,10 +178,16 @@ with col_input:
             if subject: keywords.append(subject)
             if action: keywords.append(action)
             if scene: keywords.append(scene)
-            if camera_angle != "None": keywords.append(camera_angle)
-            if camera_movement != "None": keywords.append(camera_movement)
-            if style != "None": keywords.append(style)
-            if sound_effects != "None": keywords.append(sound_effects)
+            
+            # 提取英文部分用于API
+            if camera_angle != "None - 无特定角度": 
+                keywords.append(camera_angle.split(" - ")[0])
+            if camera_movement != "None - 静止镜头": 
+                keywords.append(camera_movement.split(" - ")[0])
+            if style != "None - 无特定风格": 
+                keywords.append(style.split(" - ")[0])
+            if sound_effects != "None - 无音效": 
+                keywords.append(sound_effects.split(" - ")[0])
             if dialogue: keywords.append(f'"{dialogue}"')
             
             if keywords:
@@ -146,6 +202,36 @@ with col_input:
         # 显示构建的提示词
         if prompt:
             st.text_area("构建的提示词", value=prompt, height=80, disabled=True)
+        
+        # 添加选项说明
+        with st.expander("📖 选项说明指南"):
+            st.markdown("""
+            **🎥 镜头角度说明：**
+            - **平视角度**: 与主体同高度，自然视角
+            - **低角度仰拍**: 从下往上拍，显得主体高大威严
+            - **高角度俯拍**: 从上往下拍，显得主体渺小或可爱
+            - **特写镜头**: 聚焦细节，情感表达强烈
+            - **中景镜头**: 显示主体和部分环境
+            - **远景镜头**: 展现完整场景和环境
+            - **过肩镜头**: 从一个角色肩膀后看向另一个角色
+            
+            **🎬 镜头运动说明：**
+            - **固定镜头**: 静止不动，稳定画面
+            - **平移**: 水平移动，跟随主体或展现环境
+            - **推进放大**: 向主体靠近，增强紧张感
+            - **拉远缩小**: 远离主体，展现更大场景
+            - **推轨**: 摄像机整体移动，更平滑的运动效果
+            
+            **🎨 视觉风格说明：**
+            - **照片写实**: 接近真实照片的效果
+            - **电影风格**: 具有电影质感的画面
+            - **复古风格**: 怀旧、老式的视觉效果
+            - **日式动漫**: 动漫风格的画面
+            - **黑色电影**: 高对比度，戏剧性光影
+            - **黄金时刻**: 温暖的金色光线效果
+            """)
+    
+    # 简单模式和专业模式的共同部分
     
     # 参考图片上传
     st.markdown("**参考图片**")
@@ -272,7 +358,7 @@ with col_input:
         # Person Generation 设置
         person_generation = st.selectbox(
             "人物生成设置",
-            ["allow_adult", "dont_allow"],
+            ["allow_adult - 允许生成成人", "dont_allow - 不生成人物"],
             index=0,
             help="allow_adult: 允许生成成人；dont_allow: 不生成人物"
         )
@@ -338,7 +424,7 @@ with col_output:
                 seed=seed,
                 model_type="fast" if model_type == "快速版 (低延迟)" else "standard",
                 enhance_prompt=enhance_prompt,
-                person_generation=person_generation
+                person_generation=person_generation.split(" - ")[0]  # 提取英文部分
             )
             
             if result["success"]:
@@ -740,6 +826,29 @@ if st.session_state.generation_history:
 st.markdown("---")
 with st.expander("💡 使用提示"):
     st.markdown("""
+    **🎬 专业提示词构建器使用说明：**
+    
+    **📝 基础内容：**
+    - **主体**: 视频的核心对象（人物、动物、物品等）
+    - **动作**: 描述主体的具体行为和动作
+    - **场景**: 环境背景和时间设定
+    
+    **🎥 镜头技巧：**
+    - **角度**: 影响视觉冲击力和情感表达
+    - **运动**: 增加动态效果和观看体验
+    - **风格**: 决定整体视觉感受和氛围
+    
+    **🔊 音频增强：**
+    - 选择合适的背景音效增强沉浸感
+    - 可添加角色对话增加故事性
+    
+    **🚀 快速开始：**
+    1. 选择"专业模式"
+    2. 点击快速示例按钮获得灵感
+    3. 根据需要调整各项参数
+    4. 点击"自动构建提示词"
+    5. 开始生成视频
+    
     **性能优化说明：**
     - ✅ 视频缓存：已启用智能缓存，重复播放更快
     - ✅ 流式下载：大文件分块下载，减少内存占用
@@ -747,6 +856,7 @@ with st.expander("💡 使用提示"):
     - ✅ 临时文件复用：避免重复创建临时文件
     - ✅ 快速模式：支持Veo 3 Fast模型，生成更快
     - ✅ AI增强：自动优化提示词，提升视频质量
+    - ✅ 专业构建器：结构化提示词，提升成功率
     
     **最佳实践提示词示例：**
     
@@ -773,6 +883,7 @@ with st.expander("💡 使用提示"):
     - ✅ 音频：自动包含，无需设置
     - ✅ 双模型：标准版和快速版
     - ✅ AI增强：自动优化提示词
+    - ✅ 专业模式：结构化提示词构建
     
     **分辨率和时长限制：**
     - 🔸 **720p**: 支持 4秒、6秒、8秒
@@ -792,6 +903,7 @@ with st.expander("💡 使用提示"):
     - 🔄 状态检查频率会根据任务时间智能调整
     - 📱 建议在稳定网络环境下使用
     - ⚡ 使用快速模式可显著减少等待时间
+    - 🎯 专业模式可提升生成成功率和质量
     
     **遇到问题？**
     - 查看 [故障排除指南](docs/troubleshooting/veo_video_studio_issues.md)
