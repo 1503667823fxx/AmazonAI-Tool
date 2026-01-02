@@ -103,6 +103,15 @@ class UIController:
         
         state = state_manager.get_state()
         
+        # 系统状态监控
+        if state.is_streaming or state.generation_interrupted:
+            st.warning("⚠️ 系统状态异常")
+            if st.button("🔧 紧急恢复", help="重置所有状态，解锁界面", type="primary"):
+                state_manager.force_unlock_interface()
+                st.success("✅ 系统已恢复正常")
+                st.rerun()
+            st.divider()
+        
         # Primary controls
         col1, col2 = st.columns(2)
         
@@ -184,6 +193,26 @@ class UIController:
         # Input is disabled during streaming, but always visible
         input_disabled = state.is_streaming
         
+        # 添加紧急解锁功能
+        if input_disabled:
+            st.warning("🔒 对话框已锁定 - AI正在生成回复...")
+            
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col2:
+                if st.button("🔓 紧急解锁", help="如果AI生成卡住，点击此按钮解锁对话框", type="secondary"):
+                    state_manager.set_streaming_state(False)
+                    state_manager.clear_interrupt_state()
+                    st.success("✅ 对话框已解锁！")
+                    st.rerun()
+            
+            with col3:
+                if st.button("⏹️ 停止生成", help="停止当前AI生成", type="primary"):
+                    state_manager.set_generation_interrupted(True, "用户手动停止生成")
+                    state_manager.set_streaming_state(False)
+                    st.success("✅ 生成已停止！")
+                    st.rerun()
+        
         # Render input interface
         user_input, uploaded_images = input_panel.render_input_interface(disabled=input_disabled)
         
@@ -242,9 +271,19 @@ class UIController:
                 
         except Exception as e:
             st.error(f"Inference Error: {e}")
+            # 添加错误恢复消息
+            state_manager.add_ai_message(
+                content=f"❌ 生成过程中发生错误：{str(e)}\n\n请重试或检查网络连接。",
+                model_used=current_model,
+                message_type="error"
+            )
         finally:
             # Always clear streaming state, even if an error occurs
             state_manager.set_streaming_state(False)
+            # 确保清除中断状态
+            state_manager.clear_interrupt_state()
+            # 强制刷新界面
+            st.rerun()
     
     def _handle_image_generation(self, user_message, model_name: str) -> None:
         """Enhanced image generation with better progress indicators and error handling"""
