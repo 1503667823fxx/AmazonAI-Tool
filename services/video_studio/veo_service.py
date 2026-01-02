@@ -53,8 +53,7 @@ class VeoAPIService:
         negative_prompt: Optional[str] = None,
         seed: Optional[int] = None,
         generate_audio: bool = False,
-        model_type: str = "standard",
-        person_generation: str = "allow_adult"
+        model_type: str = "standard"
     ) -> Dict[str, Any]:
         """生成视频"""
         try:
@@ -76,8 +75,7 @@ class VeoAPIService:
             config_params = {
                 "aspect_ratio": aspect_ratio,
                 "duration_seconds": duration,
-                "resolution": adjusted_quality,
-                "person_generation": person_generation
+                "resolution": adjusted_quality
             }
             
             # 添加可选参数（排除不支持的参数）
@@ -379,8 +377,7 @@ def generate_video_sync(
     negative_prompt: Optional[str] = None,
     seed: Optional[int] = None,
     generate_audio: bool = False,
-    model_type: str = "standard",
-    person_generation: str = "allow_adult"
+    model_type: str = "standard"
 ) -> Dict[str, Any]:
     """同步生成视频（用于Streamlit）"""
     service = get_veo_service()
@@ -399,8 +396,7 @@ def generate_video_sync(
         negative_prompt=negative_prompt,
         seed=seed,
         generate_audio=generate_audio,
-        model_type=model_type,
-        person_generation=person_generation
+        model_type=model_type
     )
 
 
