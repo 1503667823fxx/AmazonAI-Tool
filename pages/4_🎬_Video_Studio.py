@@ -178,7 +178,7 @@ with col_input:
                     if enhancement_result["success"]:
                         st.success("✅ AI润色完成！")
                         
-                        # 显示AI润色结果 - 突出显示可直接使用的提示词
+                        # 显示AI润色结果 - 只保留最终提示词显示
                         enhanced_prompt_display = enhancement_result["enhanced_prompt"]
                         
                         st.markdown("**🎨 优化后的视频提示词（可直接复制使用）**")
@@ -187,7 +187,7 @@ with col_input:
                         st.markdown(f"""
                         <div style="
                             background-color: #f0f8ff; 
-                            border: 2px solid #4CAF50; 
+                            border: 2px solid #ff4444; 
                             border-radius: 8px; 
                             padding: 15px; 
                             margin: 10px 0;
@@ -198,23 +198,6 @@ with col_input:
                             {enhanced_prompt_display}
                         </div>
                         """, unsafe_allow_html=True)
-                        
-                        # 便捷复制区域
-                        st.markdown("**📋 复制区域**")
-                        st.text_area(
-                            "选中下方文本，按Ctrl+C复制：",
-                            value=enhanced_prompt_display,
-                            height=80,
-                            key="enhanced_prompt_copy",
-                            help="选中全部文本后使用Ctrl+C复制到剪贴板"
-                        )
-                        
-                        # 使用说明
-                        st.info("💡 **使用方法：** 点击上方文本框，按Ctrl+A全选，然后Ctrl+C复制，即可粘贴到任何需要的地方使用")
-                        
-                        # 显示AI分析（可选展开）
-                        with st.expander("🤖 查看AI分析详情"):
-                            st.markdown(enhancement_result["analysis"])
                     else:
                         st.error(f"❌ AI润色失败: {enhancement_result['error']}")
                         st.info("💡 将继续使用原始提示词")
