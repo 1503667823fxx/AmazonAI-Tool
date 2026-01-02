@@ -107,32 +107,81 @@ with c_config:
         "上传参考图", 
         type=["jpg","png","webp"], 
         accept_multiple_files=True,
-        help="支持上传单张或多张图片。"
+        help="支持上传单张或多张图片进行智能融合处理。"
     )
     
     active_img_input = None     
-    active_ref_for_gen = None   
+    active_ref_images = []   # 改为列表存储多张图片
     
     if uploaded_files:
         with st.expander(f"📸 原图预览 ({len(uploaded_files)} 张) - 点击收起", expanded=True):
             file_count = len(uploaded_files)
-            cols = st.columns(min(file_count, 4))
-            img_list = []
+            
+            # 验证和处理每张图片
+            valid_images = []
+            invalid_count = 0
             
             for idx, f in enumerate(uploaded_files):
-                img = Image.open(f)
-                img_list.append(img)
-                if idx < 4:
-                    with cols[idx]:
-                        st.image(img, use_container_width=True)
+                try:
+                    # 验证文件大小 (最大10MB)
+                    if hasattr(f, 'size') and f.size > 10 * 1024 * 1024:
+                        st.warning(f"⚠️ {f.name} 文件过大 (>{f.size/(1024*1024):.1f}MB)，已跳过")
+                        invalid_count += 1
+                        continue
+                    
+                    # 尝试打开图片
+                    img = Image.open(f)
+                    
+                    # 验证图片格式
+                    if img.format not in ['JPEG', 'PNG', 'WEBP']:
+                        st.warning(f"⚠️ {f.name} 格式不支持 ({img.format})，已跳过")
+                        invalid_count += 1
+                        continue
+                    
+                    # 重置文件指针
+                    f.seek(0)
+                    valid_images.append((img, f.name))
+                    
+                except Exception as e:
+                    st.warning(f"⚠️ {f.name} 处理失败：{str(e)}")
+                    invalid_count += 1
+                    continue
             
-            if file_count == 1:
-                active_img_input = img_list[0]
-                active_ref_for_gen = img_list[0]
+            # 显示验证结果
+            if invalid_count > 0:
+                st.error(f"❌ {invalid_count} 张图片验证失败，已跳过")
+            
+            if valid_images:
+                # 显示有效图片预览
+                if len(valid_images) <= 4:
+                    cols = st.columns(len(valid_images))
+                    for i, (img, name) in enumerate(valid_images):
+                        with cols[i]:
+                            st.image(img, use_container_width=True, caption=name)
+                else:
+                    # 网格布局显示多张图片
+                    cols_per_row = 4
+                    rows = (len(valid_images) + cols_per_row - 1) // cols_per_row
+                    for row in range(rows):
+                        cols = st.columns(cols_per_row)
+                        for col_idx in range(cols_per_row):
+                            img_idx = row * cols_per_row + col_idx
+                            if img_idx < len(valid_images):
+                                with cols[col_idx]:
+                                    img, name = valid_images[img_idx]
+                                    st.image(img, use_container_width=True, caption=name)
+                
+                # 设置处理模式
+                if len(valid_images) == 1:
+                    active_img_input = valid_images[0][0]
+                    active_ref_images = [valid_images[0][0]]
+                    st.success(f"📸 使用单张参考图：{valid_images[0][1]}")
+                else:
+                    active_img_input = [img for img, _ in valid_images]
+                    active_ref_images = [img for img, _ in valid_images]
+                    st.success(f"🧩 多图融合模式：{len(valid_images)} 张有效图片")
             else:
-                st.info(f"🧩 已启用多图融合模式。")
-                active_img_input = img_list      
-                active_ref_for_gen = None 
+                st.error("❌ 没有有效的图片可以使用") 
 
     # === B. 创意输入 ===
     st.markdown("#### 💡 创意指令")
@@ -148,20 +197,31 @@ with c_config:
     if st.button("🧠 AI 思考并生成 Prompt", type="primary"):
         if not uploaded_files: 
             st.toast("⚠️ 请先上传图片", icon="🚨")
+        elif not active_ref_images:
+            st.toast("⚠️ 没有有效的参考图片", icon="🚨")
         else:
             with st.status("🤖 AI 正在拆解需求...", expanded=True) as status:
                 try:
-                    if isinstance(active_img_input, list):
-                        for img in active_img_input: 
-                            if hasattr(img, 'seek'): img.seek(0)
-                    elif hasattr(active_img_input, 'seek'):
-                        active_img_input.seek(0)
+                    # 重置所有图片的文件指针
+                    for img in active_ref_images:
+                        if hasattr(img, 'seek'): 
+                            img.seek(0)
 
                     time.sleep(0.5)
                     
-                    prompts = llm.optimize_art_director_prompt(
-                        user_idea, task_type, 0.7, selected_style, active_img_input, False
-                    )
+                    # 根据图片数量选择处理方式
+                    if len(active_ref_images) == 1:
+                        # 单图处理
+                        prompts = llm.optimize_art_director_prompt(
+                            user_idea, task_type, 0.7, selected_style, active_ref_images[0], False
+                        )
+                        status.update(label="✅ 单图 Prompt 优化完毕！", state="complete", expanded=False)
+                    else:
+                        # 多图处理 - 传入图片列表
+                        prompts = llm.optimize_art_director_prompt(
+                            user_idea, task_type, 0.7, selected_style, active_ref_images, False
+                        )
+                        status.update(label=f"✅ 多图融合 Prompt 优化完毕！({len(active_ref_images)} 张图片)", state="complete", expanded=False)
                     
                     st.session_state.se_std_prompts = []
                     for p_en in prompts:
@@ -169,10 +229,10 @@ with c_config:
                         st.session_state.se_std_prompts.append({"en": p_en, "zh": p_zh})
                     
                     st.session_state.se_prompt_ver += 1
-                    status.update(label="✅ Prompt 优化完毕！", state="complete", expanded=False)
                     st.rerun() 
                 except Exception as e:
                     st.error(f"LLM 调用失败: {e}")
+                    status.update(label="❌ Prompt 优化失败", state="error", expanded=False)
 
     # === D. Prompt 编辑器 ===
     if st.session_state.se_std_prompts:
@@ -215,46 +275,70 @@ with c_config:
 
         # 执行按钮
         if st.button("🚀 开始生成图片（请优先使用flash模型哦，省钱）", type="primary", use_container_width=True):
-            st.session_state.se_std_results = [] 
-            
-            ref_img_to_pass = None
-            if active_ref_for_gen:
-                if hasattr(active_ref_for_gen, 'seek'): active_ref_for_gen.seek(0)
-                ref_img_to_pass = active_ref_for_gen
-
-            total_ops = len(st.session_state.se_std_prompts) * num_images
-            bar = st.progress(0)
-            current_op = 0
-            
-            with st.status("🎨 正在绘制中...", expanded=True) as status:
-                for idx, task in enumerate(st.session_state.se_std_prompts):
-                    for n in range(num_images):
-                        st.write(f"任务 {idx+1}: 正在生成第 {n+1}/{num_images} 张...")
-                        try:
-                            res_bytes = img_gen.generate(
-                                task["en"], 
-                                model_name, 
-                                ref_img_to_pass, 
-                                RATIO_MAP[ratio_key], 
-                                seed=real_seed, 
-                                creativity=0.5, 
-                                safety_level=safety_level.split()[0]
-                            )
-                            
-                            if res_bytes:
-                                st.session_state.se_std_results.append(res_bytes)
-                                history.add(res_bytes, f"Task {idx+1}-{n+1}", task["zh"])
-                            else:
-                                st.error(f"任务 {idx+1} 生成失败")
-                        
-                        except Exception as e:
-                            st.error(f"API 异常: {e}")
-                        
-                        current_op += 1
-                        bar.progress(current_op / total_ops)
+            if not active_ref_images:
+                st.toast("⚠️ 请先上传有效的参考图片", icon="🚨")
+            elif not st.session_state.se_std_prompts:
+                st.toast("⚠️ 请先生成 Prompt", icon="🚨")
+            else:
+                st.session_state.se_std_results = [] 
                 
-                status.update(label="🎉 全部完成！", state="complete", expanded=False)
-                st.toast("图片生成完成！", icon="🖼️")
+                # 准备参考图片 - 支持多图
+                ref_images_to_pass = None
+                if active_ref_images:
+                    # 重置所有图片的文件指针
+                    for img in active_ref_images:
+                        if hasattr(img, 'seek'): 
+                            img.seek(0)
+                    
+                    if len(active_ref_images) == 1:
+                        ref_images_to_pass = active_ref_images[0]  # 单图模式
+                    else:
+                        ref_images_to_pass = active_ref_images  # 多图模式
+
+                total_ops = len(st.session_state.se_std_prompts) * num_images
+                bar = st.progress(0)
+                current_op = 0
+                
+                with st.status("🎨 正在绘制中...", expanded=True) as status:
+                    success_count = 0
+                    error_count = 0
+                    
+                    for idx, task in enumerate(st.session_state.se_std_prompts):
+                        for n in range(num_images):
+                            st.write(f"任务 {idx+1}: 正在生成第 {n+1}/{num_images} 张...")
+                            try:
+                                res_bytes = img_gen.generate(
+                                    task["en"], 
+                                    model_name, 
+                                    ref_images_to_pass,  # 支持单图或多图
+                                    RATIO_MAP[ratio_key], 
+                                    seed=real_seed, 
+                                    creativity=0.5, 
+                                    safety_level=safety_level.split()[0]
+                                )
+                                
+                                if res_bytes:
+                                    st.session_state.se_std_results.append(res_bytes)
+                                    history.add(res_bytes, f"Task {idx+1}-{n+1}", task["zh"])
+                                    success_count += 1
+                                else:
+                                    st.error(f"任务 {idx+1}-{n+1} 生成失败")
+                                    error_count += 1
+                            
+                            except Exception as e:
+                                st.error(f"API 异常: {e}")
+                                error_count += 1
+                            
+                            current_op += 1
+                            bar.progress(current_op / total_ops)
+                    
+                    # 显示最终结果统计
+                    if success_count > 0:
+                        status.update(label=f"🎉 完成！成功: {success_count}, 失败: {error_count}", state="complete", expanded=False)
+                        st.toast(f"图片生成完成！成功 {success_count} 张", icon="🖼️")
+                    else:
+                        status.update(label="❌ 全部生成失败", state="error", expanded=False)
+                        st.toast("所有图片生成都失败了", icon="❌")
 
 # ================= 右侧：结果预览区 (Sticky) =================
 with c_view:
