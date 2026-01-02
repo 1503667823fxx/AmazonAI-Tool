@@ -45,6 +45,15 @@ class EnhancedStateManager:
             state.current_model = "models/gemini-3-flash-preview"
             st.session_state[self.state_key] = state
         
+        # 自动恢复机制：检查并清除可能卡住的流状态
+        if state.is_streaming:
+            # 如果页面重新加载时发现还在流状态，自动清除
+            state.is_streaming = False
+            state.generation_interrupted = False
+            state.interrupt_reason = ""
+            st.session_state[self.state_key] = state
+            st.info("🔄 检测到之前的生成可能未完成，已自动解锁对话框")
+        
         # Initialize vision service if not present
         if "studio_vision_svc" not in st.session_state:
             if VISION_SERVICE_AVAILABLE and StudioVisionService:
@@ -273,6 +282,14 @@ class EnhancedStateManager:
     def clear_interrupt_state(self) -> None:
         """清除中断状态"""
         state = self.get_state()
+        state.generation_interrupted = False
+        state.interrupt_reason = ""
+        self.update_state(state)
+    
+    def force_unlock_interface(self) -> None:
+        """强制解锁界面（紧急恢复功能）"""
+        state = self.get_state()
+        state.is_streaming = False
         state.generation_interrupted = False
         state.interrupt_reason = ""
         self.update_state(state)
