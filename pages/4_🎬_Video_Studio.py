@@ -424,14 +424,6 @@ with col_input:
             placeholder="描述不希望出现在视频中的内容",
             height=60
         )
-        
-        # Person Generation 设置
-        person_generation = st.selectbox(
-            "人物生成设置",
-            ["allow_adult - 允许生成成人", "dont_allow - 不生成人物"],
-            index=0,
-            help="allow_adult: 允许生成成人；dont_allow: 不生成人物"
-        )
     
     # 生成按钮
     st.markdown("---")
@@ -494,8 +486,7 @@ with col_output:
                 reference_image=reference_image_bytes,
                 negative_prompt=negative_prompt if negative_prompt.strip() else None,
                 seed=seed,
-                model_type="fast" if model_type == "快速版 (低延迟)" else "standard",
-                person_generation=person_generation.split(" - ")[0]  # 提取英文部分
+                model_type="fast" if model_type == "快速版 (低延迟)" else "standard"
             )
             
             if result["success"]:
@@ -973,6 +964,7 @@ with st.expander("💡 使用提示"):
     - ✅ 双模型：标准版和快速版
     - ✅ AI增强：自动优化提示词
     - ✅ 专业模式：结构化提示词构建
+    - ✅ 人物生成：由API自动判断，无需手动设置
     
     **分辨率和时长限制：**
     - 🔸 **720p**: 支持 4秒、6秒、8秒
