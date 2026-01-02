@@ -178,28 +178,39 @@ with col_input:
                     if enhancement_result["success"]:
                         st.success("✅ AI润色完成！")
                         
-                        # 显示AI润色结果
-                        st.markdown("**🎨 AI优化的提示词**")
+                        # 显示AI润色结果 - 突出显示可直接使用的提示词
                         enhanced_prompt_display = enhancement_result["enhanced_prompt"]
                         
-                        # 使用代码块显示，方便复制
-                        st.code(enhanced_prompt_display, language=None)
+                        st.markdown("**🎨 优化后的视频提示词（可直接复制使用）**")
                         
-                        # 便捷复制按钮
-                        col_copy1, col_copy2 = st.columns(2)
+                        # 使用醒目的样式显示最终提示词
+                        st.markdown(f"""
+                        <div style="
+                            background-color: #f0f8ff; 
+                            border: 2px solid #4CAF50; 
+                            border-radius: 8px; 
+                            padding: 15px; 
+                            margin: 10px 0;
+                            font-size: 16px;
+                            line-height: 1.5;
+                        ">
+                            <strong>📝 最终提示词：</strong><br>
+                            {enhanced_prompt_display}
+                        </div>
+                        """, unsafe_allow_html=True)
                         
-                        with col_copy1:
-                            # 使用streamlit的复制功能
-                            st.text_input(
-                                "点击选中全部文本，然后Ctrl+C复制：",
-                                value=enhanced_prompt_display,
-                                key="enhanced_prompt_copy",
-                                help="选中文本后使用Ctrl+C复制到剪贴板"
-                            )
+                        # 便捷复制区域
+                        st.markdown("**📋 复制区域**")
+                        st.text_area(
+                            "选中下方文本，按Ctrl+C复制：",
+                            value=enhanced_prompt_display,
+                            height=80,
+                            key="enhanced_prompt_copy",
+                            help="选中全部文本后使用Ctrl+C复制到剪贴板"
+                        )
                         
-                        with col_copy2:
-                            st.markdown("**💡 使用提示**")
-                            st.info("选中上方文本框中的内容，使用 Ctrl+C 复制，然后粘贴到需要的地方")
+                        # 使用说明
+                        st.info("💡 **使用方法：** 点击上方文本框，按Ctrl+A全选，然后Ctrl+C复制，即可粘贴到任何需要的地方使用")
                         
                         # 显示AI分析（可选展开）
                         with st.expander("🤖 查看AI分析详情"):
