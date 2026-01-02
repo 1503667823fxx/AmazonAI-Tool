@@ -92,10 +92,11 @@ class VideoPromptEnhancer:
                     【参考图片分析任务】
                     请分析上传的参考图片，并结合用户提示词："{user_prompt}"
                     
-                    1. 描述图片中的主要元素（人物、物体、场景、色彩、光线等）
-                    2. 基于图片内容，为8秒视频设计合适的动作和镜头运动
+                    要求：
+                    1. 在【优化提示词】部分只输出纯净的视频描述，不要任何解释
+                    2. 基于图片内容设计8秒视频的动作和镜头
                     3. 保持图片的视觉风格和氛围
-                    4. 确保生成的视频提示词能够很好地延续图片的故事
+                    4. 描述要完整专业，可直接用于视频生成
                     """)
                 except Exception:
                     # 如果图片处理失败，使用文本优化
@@ -103,7 +104,13 @@ class VideoPromptEnhancer:
                     【用户提示词优化任务】
                     用户输入："{user_prompt}"
                     
-                    请优化这个提示词，使其更适合8秒视频生成。
+                    请将这个描述优化为专业的视频生成提示词。
+                    
+                    要求：
+                    1. 在【优化提示词】部分只输出纯净的视频描述，不要任何解释
+                    2. 描述要完整、专业，可直接用于视频生成
+                    3. 包含主体、动作、场景、镜头、光线等元素
+                    4. 适合8秒视频的节奏和内容
                     """)
             else:
                 inputs.append(f"""
@@ -164,42 +171,28 @@ class VideoPromptEnhancer:
     def _build_system_prompt(self, duration: int, aspect_ratio: str, style_preference: str) -> str:
         """构建系统提示词"""
         return f"""
-你是一位专业的视频制作AI助手，专门为Google Veo 3.1视频生成模型优化提示词。
+你是专业的视频提示词优化专家，专门为Google Veo 3.1优化{duration}秒视频的提示词。
 
-【任务目标】
-为{duration}秒的短视频生成优化的中文提示词，确保生成高质量、有吸引力的视频内容。
+【核心任务】
+将用户的简单描述转换为专业的视频生成提示词，直接可用于视频生成。
 
-【技术规格】
-- 视频时长：{duration}秒
-- 宽高比：{aspect_ratio}
-- 目标模型：Google Veo 3.1
-
-【优化原则】
-1. **智能风格判断**：根据用户输入的内容自动判断最适合的视觉风格（电影、纪录片、艺术、商业、生活等）
-2. **动作设计**：为{duration}秒时长设计合适的动作序列，确保动作流畅自然
-3. **镜头语言**：使用专业的镜头术语（如特写、中景、远景、推拉摇移等）
-4. **视觉细节**：增加光线、色彩、质感等视觉描述
-5. **情感氛围**：营造符合内容的情感氛围和故事感
-6. **中文表达**：使用优美的中文描述，便于用户理解和使用
+【输出要求】
+1. 主要输出：一段完整的、可直接使用的中文视频描述
+2. 描述要包含：主体、动作、场景、镜头、光线、氛围
+3. 适合{duration}秒视频的动作节奏
+4. 语言简洁专业，避免冗余
 
 【输出格式】
-请按以下格式输出：
-
 【分析】
-- 对原始提示词的理解和分析
-- 识别的关键元素（主体、动作、场景等）
-- 自动判断的最适合风格类型及原因
-- 为{duration}秒视频设计的改进建议
+简要分析用户输入的核心元素和适合的风格
 
 【优化提示词】
-[在这里输出优化后的完整中文提示词，一段连续的中文描述]
+[输出一段完整的中文视频描述，可直接复制使用]
 
 【优化说明】
-- 解释主要的优化点
-- 说明选择的风格和镜头语言
-- 说明为什么这样的描述更适合视频生成
+简要说明优化的关键点
 
-记住：你需要根据用户输入的内容智能判断最适合的风格，不要询问用户偏好，直接给出最佳的优化方案。
+【重要】优化提示词部分必须是完整的、可直接使用的视频描述，不要包含任何解释性文字或标记符号。
 """
     
     def _extract_enhanced_prompt(self, response_text: str, fallback: str) -> str:
@@ -211,22 +204,44 @@ class VideoPromptEnhancer:
                 end_idx = response_text.find("【优化说明】", start_idx)
                 
                 if end_idx == -1:
-                    # 如果没有找到结束标签，取到文本末尾
-                    enhanced = response_text[start_idx:].strip()
+                    # 如果没有找到结束标签，查找下一个【标签或文本末尾
+                    next_section = response_text.find("【", start_idx)
+                    if next_section != -1:
+                        enhanced = response_text[start_idx:next_section].strip()
+                    else:
+                        enhanced = response_text[start_idx:].strip()
                 else:
                     enhanced = response_text[start_idx:end_idx].strip()
                 
-                # 清理格式
-                enhanced = enhanced.replace("\n", " ").strip()
-                if enhanced:
+                # 清理格式 - 移除多余的换行和空格，但保持基本结构
+                enhanced = enhanced.replace("\n\n", " ").replace("\n", " ").strip()
+                
+                # 移除可能的标记符号
+                enhanced = enhanced.lstrip("- ").lstrip("• ").lstrip("* ")
+                
+                if enhanced and len(enhanced) > 10:
                     return enhanced
             
-            # 如果没有找到标签，尝试提取第一段连续的英文描述
+            # 如果没有找到标签，尝试提取最长的连续描述段落
             lines = response_text.split('\n')
+            best_line = ""
             for line in lines:
                 line = line.strip()
-                if len(line) > 20 and not line.startswith('【') and not line.startswith('-'):
-                    return line
+                # 寻找不是标题、不是分析内容的描述性文字
+                if (len(line) > len(best_line) and 
+                    len(line) > 20 and 
+                    not line.startswith('【') and 
+                    not line.startswith('-') and
+                    not line.startswith('•') and
+                    not line.startswith('*') and
+                    not line.startswith('以下是') and
+                    not line.startswith('你好') and
+                    '分析' not in line and
+                    '建议' not in line):
+                    best_line = line
+            
+            if best_line:
+                return best_line
             
             return fallback
             
