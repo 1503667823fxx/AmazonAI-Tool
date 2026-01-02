@@ -138,37 +138,20 @@ with col_input:
         
         # AI润色功能
         st.markdown("**🤖 AI智能润色**")
-        st.info("💡 AI会分析你的描述和参考图片，生成专业的中文提示词供你参考")
+        st.info("💡 AI会分析你的描述和参考图片，自动生成专业的中文提示词")
         
-        col_enhance1, col_enhance2 = st.columns([2, 1])
+        # 润色按钮
+        enhancer = get_prompt_enhancer()
+        enhance_button = st.button(
+            "✨ AI润色提示词",
+            type="secondary",
+            help="使用AI优化你的提示词，生成专业的中文描述",
+            disabled=not prompt.strip() or not enhancer,
+            use_container_width=True
+        )
         
-        with col_enhance1:
-            # 风格选择
-            enhancer = get_prompt_enhancer()
-            if enhancer:
-                style_suggestions = enhancer.get_style_suggestions()
-                style_options = [s["display"] for s in style_suggestions]
-                style_names = [s["name"] for s in style_suggestions]
-                
-                selected_style_idx = st.selectbox(
-                    "润色风格",
-                    range(len(style_options)),
-                    format_func=lambda x: style_options[x],
-                    help="选择AI润色的风格方向"
-                )
-                selected_style = style_names[selected_style_idx]
-            else:
-                selected_style = "cinematic"
-                st.info("💡 AI润色服务未配置，需要Google API密钥")
-        
-        with col_enhance2:
-            # 润色按钮
-            enhance_button = st.button(
-                "✨ AI润色提示词",
-                type="secondary",
-                help="使用AI优化你的提示词，生成专业的中文描述",
-                disabled=not prompt.strip() or not enhancer
-            )
+        if not enhancer:
+            st.info("💡 AI润色服务未配置，需要Google API密钥")
         
         # 执行AI润色
         if enhance_button and prompt.strip():
@@ -183,13 +166,13 @@ with col_input:
                         # 再次重置文件指针，以便后续使用
                         reference_image.seek(0)
                     
-                    # 调用AI润色（使用默认参数，因为润色主要关注内容而非技术参数）
+                    # 调用AI润色（让AI自动判断风格，不需要用户选择）
                     enhancement_result = enhance_video_prompt(
                         user_prompt=prompt,
                         reference_image=reference_image_for_enhance,
                         duration=8,  # 默认8秒，适合大多数场景
                         aspect_ratio="16:9",  # 默认16:9宽高比，最常用
-                        style_preference=selected_style
+                        style_preference="auto"  # 让AI自动判断最适合的风格
                     )
                     
                     if enhancement_result["success"]:
@@ -197,25 +180,26 @@ with col_input:
                         
                         # 显示AI润色结果
                         st.markdown("**🎨 AI优化的提示词**")
-                        enhanced_prompt_display = st.text_area(
-                            "AI生成的专业提示词（中文版）",
-                            value=enhancement_result["enhanced_prompt"],
-                            height=120,
-                            help="这是AI生成的专业提示词，你可以复制到上面的输入框中使用"
-                        )
+                        enhanced_prompt_display = enhancement_result["enhanced_prompt"]
                         
-                        # 复制按钮和说明
-                        col_copy, col_info = st.columns([1, 2])
+                        # 使用代码块显示，方便复制
+                        st.code(enhanced_prompt_display, language=None)
                         
-                        with col_copy:
-                            if st.button("📋 复制到输入框", type="primary"):
-                                # 将AI润色结果保存到session state，用于更新输入框
-                                st.session_state.enhanced_prompt_to_copy = enhanced_prompt_display
-                                st.success("✅ 已复制！请刷新页面查看")
-                                st.rerun()
+                        # 便捷复制按钮
+                        col_copy1, col_copy2 = st.columns(2)
                         
-                        with col_info:
-                            st.info("💡 点击复制按钮将AI优化的提示词复制到上面的输入框中")
+                        with col_copy1:
+                            # 使用streamlit的复制功能
+                            st.text_input(
+                                "点击选中全部文本，然后Ctrl+C复制：",
+                                value=enhanced_prompt_display,
+                                key="enhanced_prompt_copy",
+                                help="选中文本后使用Ctrl+C复制到剪贴板"
+                            )
+                        
+                        with col_copy2:
+                            st.markdown("**💡 使用提示**")
+                            st.info("选中上方文本框中的内容，使用 Ctrl+C 复制，然后粘贴到需要的地方")
                         
                         # 显示AI分析（可选展开）
                         with st.expander("🤖 查看AI分析详情"):
@@ -226,13 +210,7 @@ with col_input:
             else:
                 st.error("❌ AI润色服务未配置")
         
-        # 检查是否有需要复制的增强提示词
-        if 'enhanced_prompt_to_copy' in st.session_state:
-            prompt = st.session_state.enhanced_prompt_to_copy
-            st.success("✅ 已应用AI优化的提示词")
-            # 清除session state
-            del st.session_state.enhanced_prompt_to_copy
-        
+        # 检查是否有需要复制的增强提示词（移除这个功能，因为现在使用直接复制）
         # 显示当前提示词状态
         if prompt and prompt.strip():
             st.markdown("**📋 当前提示词**")
@@ -928,20 +906,19 @@ with st.expander("💡 使用提示"):
     **🤖 AI智能润色功能：**
     
     **✨ 简化的润色流程：**
-    - **智能分析**: AI分析你的提示词和参考图片
-    - **中文优化**: 生成专业的中文提示词，便于理解
-    - **风格适配**: 支持5种专业风格（电影、纪录片、艺术、商业、生活）
-    - **独立展示**: AI结果显示在专门的文本框中
-    - **手动复制**: 你可以选择是否复制AI优化的结果到输入框
+    - **智能分析**: AI自动分析你的提示词和参考图片
+    - **自动风格**: AI根据内容自动选择最适合的风格，无需手动选择
+    - **中文优化**: 生成专业的中文提示词，便于理解和使用
+    - **便捷复制**: 优化后的提示词显示在可选择的文本框中，方便复制
     - **完全可选**: 不影响原有的视频生成流程
     
     **🎯 使用流程：**
     1. 在"视频描述"中输入你的基本想法
     2. 如果有参考图片，先上传图片
-    3. 选择合适的润色风格
-    4. 点击"AI润色提示词"
-    5. 查看AI生成的中文优化版本
-    6. 如果满意，点击"复制到输入框"
+    3. 点击"AI润色提示词"按钮
+    4. 查看AI生成的中文优化版本
+    5. 选中文本框中的内容，使用Ctrl+C复制
+    6. 粘贴到需要使用的地方（如其他应用或文档）
     7. 继续设置其他参数并生成视频
     
     **🎬 专业提示词构建器使用说明：**
