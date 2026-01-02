@@ -29,7 +29,10 @@ class SmartEditGenerator:
     def generate(self, prompt, model_name, ref_image=None, ratio_suffix="", negative_prompt="", 
                  seed=None, creativity=0.5, safety_level="Standard"):
         """
-        执行生图任务
+        执行生图任务 - 支持单图或多图参考
+        
+        Args:
+            ref_image: 可以是单个PIL.Image对象或PIL.Image对象列表
         """
         # 1. 强制模型白名单检查
         allowed_models = [
@@ -46,10 +49,20 @@ class SmartEditGenerator:
         if negative_prompt:
             final_prompt += f" --no {negative_prompt}"
 
-        # 3. 准备输入
+        # 3. 准备输入 - 支持多图
         inputs = [final_prompt]
+        
         if ref_image:
-            inputs.append(ref_image)
+            if isinstance(ref_image, list):
+                # 多图模式：添加所有参考图片
+                for img in ref_image:
+                    if img is not None:
+                        inputs.append(img)
+                print(f"Multi-image mode: Using {len([img for img in ref_image if img is not None])} reference images")
+            else:
+                # 单图模式：添加单个参考图片
+                inputs.append(ref_image)
+                print("Single-image mode: Using 1 reference image")
 
         # 4. 配置
         gen_config = genai.types.GenerationConfig(
