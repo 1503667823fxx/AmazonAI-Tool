@@ -6,7 +6,7 @@ def render_upscale_sidebar():
     st.sidebar.header("⚙️ Crystal Upscaler 高清放大")
     
     # 显示模型信息
-    st.sidebar.info("⚠请默认使用2倍放大，8倍一次11元，6倍一次6元，4倍一次1.5元，2倍3毛钱")
+    st.sidebar.info("⚠非特殊情况请默认使用2倍放大，8倍一次11元，6倍一次6元，4倍一次1.5元，2倍3毛钱")
     
     # 放大倍数选择
     scale_factor = st.sidebar.selectbox(
