@@ -50,7 +50,7 @@ class SmartEditPrompter:
     def _get_model(self, model_type="reasoning"):
         """内部路由"""
         if model_type == "reasoning":
-            return genai.GenerativeModel("models/gemini-3-pro-preview")
+            return genai.GenerativeModel("models/gemini-3-flash-preview")
         elif model_type == "fast":
             return genai.GenerativeModel("models/gemini-flash-latest")
         return genai.GenerativeModel("models/gemini-flash-lite-latest")
